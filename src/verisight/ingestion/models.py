@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from verisight.ingestion.exceptions import TableValidationError
+
 
 @dataclass(frozen=True, slots=True)
 class SourceMetadata:
@@ -27,9 +29,25 @@ class LoadedTable:
     relation_name: str = field(init=False)
 
     def __post_init__(self) -> None:
-        """Initialize the table's machine-facing relation identity."""
+        """Validate the table and initialize its relation identity."""
 
+        self._validate_unique_columns()
         self.relation_name = self.name
+
+    def _validate_unique_columns(self) -> None:
+        """Reject tables containing duplicate column names."""
+
+        duplicated = self.data.columns.duplicated(keep=False)
+
+        if not duplicated.any():
+            return
+
+        duplicate_columns = self.data.columns[duplicated].unique().tolist()
+        formatted_columns = ", ".join(repr(column) for column in duplicate_columns)
+
+        raise TableValidationError(
+            f"Table '{self.name}' contains duplicate column names: {formatted_columns}."
+        )
 
     @property
     def row_count(self) -> int:

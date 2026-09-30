@@ -1,7 +1,9 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
+from verisight.ingestion.exceptions import TableValidationError
 from verisight.ingestion.models import (
     LoadedDataset,
     LoadedTable,
@@ -169,17 +171,96 @@ def test_loaded_dataset_counts_workbook_sheets_as_one_source() -> None:
 
 def test_loaded_table_initializes_relation_name_from_name() -> None:
     metadata = SourceMetadata(
-        path=Path("Sales Data.csv"),
-        file_name="Sales Data.csv",
+        path=Path("customers.csv"),
+        file_name="customers.csv",
         file_extension=".csv",
         file_size_bytes=100,
     )
 
     table = LoadedTable(
-        name="Sales Data",
+        name="Customers 2026",
         data=pd.DataFrame({"id": [1]}),
         source=metadata,
     )
 
-    assert table.name == "Sales Data"
-    assert table.relation_name == "Sales Data"
+    assert table.name == "Customers 2026"
+    assert table.relation_name == "Customers 2026"
+
+
+def test_loaded_table_rejects_duplicate_column_names() -> None:
+    metadata = SourceMetadata(
+        path=Path("customers.csv"),
+        file_name="customers.csv",
+        file_extension=".csv",
+        file_size_bytes=100,
+    )
+
+    data = pd.DataFrame(
+        [
+            [1, "Alice"],
+            [2, "Bob"],
+        ],
+        columns=["customer_id", "customer_id"],
+    )
+
+    with pytest.raises(
+        TableValidationError,
+        match="contains duplicate column names",
+    ):
+        LoadedTable(
+            name="customers",
+            data=data,
+            source=metadata,
+        )
+
+
+def test_duplicate_column_error_identifies_table_and_column() -> None:
+    metadata = SourceMetadata(
+        path=Path("customers.csv"),
+        file_name="customers.csv",
+        file_extension=".csv",
+        file_size_bytes=100,
+    )
+
+    data = pd.DataFrame(
+        [[1, 2, 3]],
+        columns=["id", "value", "id"],
+    )
+
+    with pytest.raises(TableValidationError) as exc_info:
+        LoadedTable(
+            name="customers",
+            data=data,
+            source=metadata,
+        )
+
+    message = str(exc_info.value)
+
+    assert "customers" in message
+    assert "'id'" in message
+
+
+def test_loaded_table_reports_each_duplicate_column_once() -> None:
+    metadata = SourceMetadata(
+        path=Path("customers.csv"),
+        file_name="customers.csv",
+        file_extension=".csv",
+        file_size_bytes=100,
+    )
+
+    data = pd.DataFrame(
+        [[1, 2, 3, 4]],
+        columns=["id", "id", "name", "name"],
+    )
+
+    with pytest.raises(TableValidationError) as exc_info:
+        LoadedTable(
+            name="customers",
+            data=data,
+            source=metadata,
+        )
+
+    message = str(exc_info.value)
+
+    assert message.count("'id'") == 1
+    assert message.count("'name'") == 1

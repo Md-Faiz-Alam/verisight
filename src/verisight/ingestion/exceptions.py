@@ -17,3 +17,7 @@ class FileValidationError(IngestionError):
 
 class DataLoadError(IngestionError):
     """Raised when a validated file cannot be loaded successfully."""
+
+
+class TableValidationError(IngestionError):
+    """Raised when a loaded table violates ingestion invariants."""
