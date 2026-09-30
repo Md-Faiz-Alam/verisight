@@ -211,6 +211,156 @@ def test_all_missing_column_is_not_flagged_as_constant() -> None:
     assert issues[0].issue_type is QualityIssueType.MISSING_VALUES
 
 
+def test_high_cardinality_string_column_produces_info_issue() -> None:
+    profile = TableProfile(
+        name="customers",
+        row_count=20,
+        column_count=1,
+        duplicate_row_count=0,
+        duplicate_row_ratio=0.0,
+        columns=(
+            ColumnProfile(
+                name="email",
+                logical_type=LogicalType.STRING,
+                row_count=20,
+                non_missing_count=20,
+                missing_count=0,
+                missing_ratio=0.0,
+                distinct_count=18,
+                distinct_ratio=0.9,
+            ),
+        ),
+    )
+
+    issues = QualityRuleEngine().evaluate(profile)
+
+    assert len(issues) == 1
+
+    issue = issues[0]
+
+    assert issue.issue_type is QualityIssueType.HIGH_CARDINALITY
+    assert issue.severity is QualitySeverity.INFO
+    assert issue.scope is QualityScope.COLUMN
+    assert issue.table_name == "customers"
+    assert issue.column_name == "email"
+    assert issue.affected_count == 18
+    assert issue.affected_ratio == 0.9
+    assert issue.evidence == {
+        "distinct_count": 18,
+        "non_missing_count": 20,
+        "distinct_ratio": 0.9,
+        "minimum_non_missing_count": 20,
+        "distinct_ratio_threshold": 0.9,
+    }
+
+
+def test_high_cardinality_requires_minimum_observed_values() -> None:
+    profile = TableProfile(
+        name="customers",
+        row_count=19,
+        column_count=1,
+        duplicate_row_count=0,
+        duplicate_row_ratio=0.0,
+        columns=(
+            ColumnProfile(
+                name="email",
+                logical_type=LogicalType.STRING,
+                row_count=19,
+                non_missing_count=19,
+                missing_count=0,
+                missing_ratio=0.0,
+                distinct_count=19,
+                distinct_ratio=1.0,
+            ),
+        ),
+    )
+
+    issues = QualityRuleEngine().evaluate(profile)
+
+    assert issues == ()
+
+
+def test_high_cardinality_requires_threshold_ratio() -> None:
+    profile = TableProfile(
+        name="customers",
+        row_count=20,
+        column_count=1,
+        duplicate_row_count=0,
+        duplicate_row_ratio=0.0,
+        columns=(
+            ColumnProfile(
+                name="city",
+                logical_type=LogicalType.STRING,
+                row_count=20,
+                non_missing_count=20,
+                missing_count=0,
+                missing_ratio=0.0,
+                distinct_count=17,
+                distinct_ratio=0.85,
+            ),
+        ),
+    )
+
+    issues = QualityRuleEngine().evaluate(profile)
+
+    assert issues == ()
+
+
+def test_high_cardinality_does_not_flag_numeric_column() -> None:
+    profile = TableProfile(
+        name="orders",
+        row_count=20,
+        column_count=1,
+        duplicate_row_count=0,
+        duplicate_row_ratio=0.0,
+        columns=(
+            ColumnProfile(
+                name="order_id",
+                logical_type=LogicalType.INTEGER,
+                row_count=20,
+                non_missing_count=20,
+                missing_count=0,
+                missing_ratio=0.0,
+                distinct_count=20,
+                distinct_ratio=1.0,
+            ),
+        ),
+    )
+
+    issues = QualityRuleEngine().evaluate(profile)
+
+    assert issues == ()
+
+
+def test_high_cardinality_uses_non_missing_observations() -> None:
+    profile = TableProfile(
+        name="customers",
+        row_count=25,
+        column_count=1,
+        duplicate_row_count=0,
+        duplicate_row_ratio=0.0,
+        columns=(
+            ColumnProfile(
+                name="email",
+                logical_type=LogicalType.STRING,
+                row_count=25,
+                non_missing_count=20,
+                missing_count=5,
+                missing_ratio=0.2,
+                distinct_count=18,
+                distinct_ratio=0.9,
+            ),
+        ),
+    )
+
+    issues = QualityRuleEngine().evaluate(profile)
+
+    assert tuple(issue.issue_type for issue in issues) == (
+        QualityIssueType.MISSING_VALUES,
+        QualityIssueType.HIGH_CARDINALITY,
+    )
+
+
 def test_fully_missing_rows_produce_table_warning() -> None:
     profile = TableProfile(
         name="orders",

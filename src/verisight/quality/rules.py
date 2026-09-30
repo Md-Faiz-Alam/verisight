@@ -1,5 +1,6 @@
 """Deterministic data-quality rules for VeriSight."""
 
+from verisight.ingestion.schema import LogicalType
 from verisight.profiling.models import TableProfile
 from verisight.quality.models import (
     QualityIssue,
@@ -7,6 +8,9 @@ from verisight.quality.models import (
     QualityScope,
     QualitySeverity,
 )
+
+_HIGH_CARDINALITY_MIN_NON_MISSING_COUNT = 20
+_HIGH_CARDINALITY_DISTINCT_RATIO = 0.90
 
 
 class QualityRuleEngine:
@@ -87,6 +91,35 @@ class QualityRuleEngine:
                             "distinct_count": column.distinct_count,
                             "non_missing_count": column.non_missing_count,
                             "row_count": column.row_count,
+                        },
+                    )
+                )
+
+            if (
+                column.logical_type is LogicalType.STRING
+                and column.non_missing_count >= _HIGH_CARDINALITY_MIN_NON_MISSING_COUNT
+                and column.distinct_ratio >= _HIGH_CARDINALITY_DISTINCT_RATIO
+            ):
+                issues.append(
+                    QualityIssue(
+                        issue_type=QualityIssueType.HIGH_CARDINALITY,
+                        severity=QualitySeverity.INFO,
+                        scope=QualityScope.COLUMN,
+                        table_name=profile.name,
+                        column_name=column.name,
+                        message="Column has high cardinality.",
+                        affected_count=column.distinct_count,
+                        affected_ratio=column.distinct_ratio,
+                        evidence={
+                            "distinct_count": column.distinct_count,
+                            "non_missing_count": column.non_missing_count,
+                            "distinct_ratio": column.distinct_ratio,
+                            "minimum_non_missing_count": (
+                                _HIGH_CARDINALITY_MIN_NON_MISSING_COUNT
+                            ),
+                            "distinct_ratio_threshold": (
+                                _HIGH_CARDINALITY_DISTINCT_RATIO
+                            ),
                         },
                     )
                 )
