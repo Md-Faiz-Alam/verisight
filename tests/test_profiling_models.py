@@ -231,7 +231,8 @@ def test_column_profile_has_no_datetime_statistics_by_default() -> None:
 
 def test_table_profile_stores_table_metrics() -> None:
     profile = TableProfile(
-        name="orders",
+        name="Orders 2026",
+        relation_name="orders_2026",
         row_count=10,
         column_count=3,
         duplicate_row_count=2,
@@ -239,7 +240,8 @@ def test_table_profile_stores_table_metrics() -> None:
         columns=(),
     )
 
-    assert profile.name == "orders"
+    assert profile.name == "Orders 2026"
+    assert profile.relation_name == "orders_2026"
     assert profile.row_count == 10
     assert profile.column_count == 3
     assert profile.duplicate_row_count == 2
@@ -250,6 +252,7 @@ def test_table_profile_stores_table_metrics() -> None:
 def test_table_profile_has_no_missing_statistics_by_default() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=0,
         column_count=0,
         duplicate_row_count=0,
@@ -263,6 +266,7 @@ def test_table_profile_has_no_missing_statistics_by_default() -> None:
 def test_table_profile_has_no_duplicate_statistics_by_default() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=0,
         column_count=0,
         duplicate_row_count=0,
@@ -276,6 +280,7 @@ def test_table_profile_has_no_duplicate_statistics_by_default() -> None:
 def test_dataset_profile_reports_table_count() -> None:
     table = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=10,
         column_count=3,
         duplicate_row_count=0,

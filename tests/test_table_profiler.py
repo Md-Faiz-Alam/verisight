@@ -168,6 +168,7 @@ def test_profiles_complete_table() -> None:
     )
 
     assert profile.name == "orders"
+    assert profile.relation_name == "orders"
     assert profile.row_count == 4
     assert profile.column_count == 2
     assert len(profile.columns) == 2
@@ -301,3 +302,25 @@ def test_complete_profiling_does_not_mutate_source_table() -> None:
     )
 
     pd.testing.assert_frame_equal(data, original)
+
+
+def test_complete_profile_preserves_relation_name() -> None:
+    table = make_table(
+        name="Sales Data",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2, 3],
+            }
+        ),
+    )
+    table.relation_name = "sales_data"
+
+    schema = infer_schema(table)
+
+    profile = TableProfiler().profile(
+        table=table,
+        schema=schema,
+    )
+
+    assert profile.name == "Sales Data"
+    assert profile.relation_name == "sales_data"

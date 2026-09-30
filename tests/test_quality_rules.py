@@ -17,6 +17,7 @@ from verisight.quality.rules import QualityRuleEngine
 def test_clean_table_produces_no_quality_issues() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=3,
         column_count=1,
         duplicate_row_count=0,
@@ -43,6 +44,7 @@ def test_clean_table_produces_no_quality_issues() -> None:
 def test_missing_values_produce_column_warning() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=4,
         column_count=1,
         duplicate_row_count=0,
@@ -84,6 +86,7 @@ def test_missing_values_produce_column_warning() -> None:
 def test_empty_strings_produce_column_warning() -> None:
     profile = TableProfile(
         name="customers",
+        relation_name="customers",
         row_count=4,
         column_count=1,
         duplicate_row_count=0,
@@ -126,6 +129,7 @@ def test_empty_strings_produce_column_warning() -> None:
 def test_constant_column_produces_info_issue() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=4,
         column_count=1,
         duplicate_row_count=0,
@@ -161,6 +165,7 @@ def test_constant_column_produces_info_issue() -> None:
 def test_single_observed_value_is_not_flagged_as_constant() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=1,
         column_count=1,
         duplicate_row_count=0,
@@ -187,6 +192,7 @@ def test_single_observed_value_is_not_flagged_as_constant() -> None:
 def test_all_missing_column_is_not_flagged_as_constant() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=3,
         column_count=1,
         duplicate_row_count=0,
@@ -214,6 +220,7 @@ def test_all_missing_column_is_not_flagged_as_constant() -> None:
 def test_high_cardinality_string_column_produces_info_issue() -> None:
     profile = TableProfile(
         name="customers",
+        relation_name="customers",
         row_count=20,
         column_count=1,
         duplicate_row_count=0,
@@ -257,6 +264,7 @@ def test_high_cardinality_string_column_produces_info_issue() -> None:
 def test_high_cardinality_requires_minimum_observed_values() -> None:
     profile = TableProfile(
         name="customers",
+        relation_name="customers",
         row_count=19,
         column_count=1,
         duplicate_row_count=0,
@@ -283,6 +291,7 @@ def test_high_cardinality_requires_minimum_observed_values() -> None:
 def test_high_cardinality_requires_threshold_ratio() -> None:
     profile = TableProfile(
         name="customers",
+        relation_name="customers",
         row_count=20,
         column_count=1,
         duplicate_row_count=0,
@@ -309,6 +318,7 @@ def test_high_cardinality_requires_threshold_ratio() -> None:
 def test_high_cardinality_does_not_flag_numeric_column() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=20,
         column_count=1,
         duplicate_row_count=0,
@@ -335,6 +345,7 @@ def test_high_cardinality_does_not_flag_numeric_column() -> None:
 def test_high_cardinality_uses_non_missing_observations() -> None:
     profile = TableProfile(
         name="customers",
+        relation_name="customers",
         row_count=25,
         column_count=1,
         duplicate_row_count=0,
@@ -364,6 +375,7 @@ def test_high_cardinality_uses_non_missing_observations() -> None:
 def test_fully_missing_rows_produce_table_warning() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=4,
         column_count=2,
         duplicate_row_count=0,
@@ -399,6 +411,7 @@ def test_fully_missing_rows_produce_table_warning() -> None:
 def test_duplicate_rows_produce_table_warning() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=4,
         column_count=2,
         duplicate_row_count=2,
@@ -434,6 +447,7 @@ def test_duplicate_rows_produce_table_warning() -> None:
 def test_zero_duplicate_statistics_produce_no_issue() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=3,
         column_count=1,
         duplicate_row_count=0,
@@ -455,6 +469,7 @@ def test_zero_duplicate_statistics_produce_no_issue() -> None:
 def test_multiple_findings_are_returned_deterministically() -> None:
     profile = TableProfile(
         name="orders",
+        relation_name="orders",
         row_count=4,
         column_count=1,
         duplicate_row_count=1,

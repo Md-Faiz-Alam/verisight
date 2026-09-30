@@ -92,6 +92,7 @@ class TableProfile:
     """Profiling information for one table."""
 
     name: str
+    relation_name: str
     row_count: int
     column_count: int
     duplicate_row_count: int
@@ -110,4 +111,5 @@ class DatasetProfile:
     @property
     def table_count(self) -> int:
         """Return the number of profiled tables."""
+
         return len(self.tables)

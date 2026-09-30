@@ -383,3 +383,48 @@ def test_dataset_profiling_does_not_mutate_source_tables() -> None:
         customers_data,
         original_customers,
     )
+
+
+def test_dataset_profile_preserves_relation_names() -> None:
+    first = make_table(
+        name="sales",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2],
+            }
+        ),
+    )
+    first.relation_name = "sales"
+
+    second = make_table(
+        name="sales",
+        data=pd.DataFrame(
+            {
+                "order_id": [3, 4],
+            }
+        ),
+    )
+    second.relation_name = "sales_2"
+
+    dataset = LoadedDataset(
+        tables=[
+            first,
+            second,
+        ]
+    )
+
+    schema = SchemaInferer().infer_dataset(dataset)
+
+    profile = DatasetProfiler().profile(
+        dataset=dataset,
+        schema=schema,
+    )
+
+    assert tuple(table.name for table in profile.tables) == (
+        "sales",
+        "sales",
+    )
+    assert tuple(table.relation_name for table in profile.tables) == (
+        "sales",
+        "sales_2",
+    )
