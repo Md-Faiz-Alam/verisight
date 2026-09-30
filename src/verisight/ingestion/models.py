@@ -1,6 +1,6 @@
 """Domain models for the VeriSight ingestion subsystem."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pandas as pd
@@ -24,6 +24,12 @@ class LoadedTable:
     name: str
     data: pd.DataFrame
     source: SourceMetadata
+    relation_name: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Initialize the table's machine-facing relation identity."""
+
+        self.relation_name = self.name
 
     @property
     def row_count(self) -> int:

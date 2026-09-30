@@ -165,3 +165,21 @@ def test_loaded_dataset_counts_workbook_sheets_as_one_source() -> None:
 
     assert dataset.table_count == 2
     assert dataset.source_count == 1
+
+
+def test_loaded_table_initializes_relation_name_from_name() -> None:
+    metadata = SourceMetadata(
+        path=Path("Sales Data.csv"),
+        file_name="Sales Data.csv",
+        file_extension=".csv",
+        file_size_bytes=100,
+    )
+
+    table = LoadedTable(
+        name="Sales Data",
+        data=pd.DataFrame({"id": [1]}),
+        source=metadata,
+    )
+
+    assert table.name == "Sales Data"
+    assert table.relation_name == "Sales Data"

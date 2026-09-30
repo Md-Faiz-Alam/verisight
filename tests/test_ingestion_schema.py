@@ -45,6 +45,7 @@ def test_schema_inferer_reports_table_structure() -> None:
     schema = SchemaInferer().infer_table(table)
 
     assert schema.name == "customers"
+    assert schema.relation_name == "customers"
     assert schema.row_count == 2
     assert schema.column_count == 2
     assert len(schema.columns) == 2
@@ -53,6 +54,23 @@ def test_schema_inferer_reports_table_structure() -> None:
         "customer_id",
         "name",
     ]
+
+
+def test_schema_inferer_preserves_display_name_and_relation_name() -> None:
+    table = make_table(
+        pd.DataFrame(
+            {
+                "order_id": [1, 2],
+            }
+        ),
+        name="Sales Data",
+    )
+    table.relation_name = "sales_data"
+
+    schema = SchemaInferer().infer_table(table)
+
+    assert schema.name == "Sales Data"
+    assert schema.relation_name == "sales_data"
 
 
 def test_schema_inferer_detects_integer() -> None:
@@ -254,6 +272,53 @@ def test_schema_inferer_infers_entire_dataset() -> None:
     assert [table.name for table in schema.tables] == [
         "customers",
         "orders",
+    ]
+    assert [table.relation_name for table in schema.tables] == [
+        "customers",
+        "orders",
+    ]
+
+
+def test_schema_inferer_supports_duplicate_display_names_with_unique_relations() -> (
+    None
+):
+    first = make_table(
+        pd.DataFrame(
+            {
+                "first_id": [1, 2],
+            }
+        ),
+        name="Sales",
+    )
+    first.relation_name = "sales"
+
+    second = make_table(
+        pd.DataFrame(
+            {
+                "second_id": [10, 20],
+            }
+        ),
+        name="Sales",
+    )
+    second.relation_name = "sales_2"
+
+    dataset = LoadedDataset(
+        tables=[
+            first,
+            second,
+        ]
+    )
+
+    schema = SchemaInferer().infer_dataset(dataset)
+
+    assert schema.table_count == 2
+    assert [table.name for table in schema.tables] == [
+        "Sales",
+        "Sales",
+    ]
+    assert [table.relation_name for table in schema.tables] == [
+        "sales",
+        "sales_2",
     ]
 
 

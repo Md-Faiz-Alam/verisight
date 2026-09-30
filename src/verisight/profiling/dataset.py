@@ -21,17 +21,18 @@ class DatasetProfiler:
         """Build a complete profile for a loaded dataset."""
 
         schema_tables = {
-            table_schema.name: table_schema for table_schema in schema.tables
+            table_schema.relation_name: table_schema for table_schema in schema.tables
         }
 
         profiles: list[TableProfile] = []
 
         for table in dataset.tables:
             try:
-                table_schema = schema_tables[table.name]
+                table_schema = schema_tables[table.relation_name]
             except KeyError as exc:
                 raise ValueError(
-                    f"Schema does not contain table '{table.name}'."
+                    f"Schema does not contain table '{table.name}' "
+                    f"with relation name '{table.relation_name}'."
                 ) from exc
 
             profiles.append(

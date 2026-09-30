@@ -160,7 +160,7 @@ def test_preserves_dataset_table_order() -> None:
     )
 
 
-def test_matches_schema_by_table_name_not_position() -> None:
+def test_matches_schema_by_relation_name_not_position() -> None:
     orders = make_table(
         name="orders",
         data=pd.DataFrame(
@@ -202,6 +202,56 @@ def test_matches_schema_by_table_name_not_position() -> None:
 
     assert profile.tables[1].name == "customers"
     assert profile.tables[1].column_count == 2
+
+
+def test_profiles_duplicate_display_names_using_relation_identity() -> None:
+    first = make_table(
+        name="Sales",
+        data=pd.DataFrame(
+            {
+                "first_id": [1, 2],
+            }
+        ),
+    )
+    first.relation_name = "sales"
+
+    second = make_table(
+        name="Sales",
+        data=pd.DataFrame(
+            {
+                "second_id": [10, 20],
+                "amount": [100.0, 200.0],
+            }
+        ),
+    )
+    second.relation_name = "sales_2"
+
+    dataset = LoadedDataset(
+        tables=[
+            first,
+            second,
+        ]
+    )
+
+    schema = SchemaInferer().infer_dataset(dataset)
+
+    profile = DatasetProfiler().profile(
+        dataset=dataset,
+        schema=schema,
+    )
+
+    assert profile.table_count == 2
+
+    assert profile.tables[0].name == "Sales"
+    assert profile.tables[0].column_count == 1
+    assert profile.tables[0].columns[0].name == "first_id"
+
+    assert profile.tables[1].name == "Sales"
+    assert profile.tables[1].column_count == 2
+    assert [column.name for column in profile.tables[1].columns] == [
+        "second_id",
+        "amount",
+    ]
 
 
 def test_profiles_empty_dataset() -> None:

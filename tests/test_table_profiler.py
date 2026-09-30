@@ -79,6 +79,7 @@ def test_preserves_source_column_order() -> None:
 
     schema = TableSchema(
         name=inferred_schema.name,
+        relation_name=inferred_schema.relation_name,
         row_count=inferred_schema.row_count,
         column_count=inferred_schema.column_count,
         columns=tuple(reversed(inferred_schema.columns)),
@@ -132,6 +133,7 @@ def test_rejects_schema_missing_table_column() -> None:
 
     schema = TableSchema(
         name=inferred_schema.name,
+        relation_name=inferred_schema.relation_name,
         row_count=inferred_schema.row_count,
         column_count=1,
         columns=(inferred_schema.columns[0],),

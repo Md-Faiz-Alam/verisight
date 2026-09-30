@@ -43,6 +43,7 @@ class TableSchema:
     """Inferred schema information for one table."""
 
     name: str
+    relation_name: str
     row_count: int
     column_count: int
     columns: tuple[ColumnSchema, ...]
@@ -77,6 +78,7 @@ class SchemaInferer:
 
         return TableSchema(
             name=table.name,
+            relation_name=table.relation_name,
             row_count=table.row_count,
             column_count=table.column_count,
             columns=columns,
