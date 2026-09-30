@@ -31,7 +31,8 @@ def test_quality_issue_stores_table_level_finding() -> None:
         issue_type=QualityIssueType.DUPLICATE_ROWS,
         severity=QualitySeverity.WARNING,
         scope=QualityScope.TABLE,
-        table_name="orders",
+        table_name="Orders 2026",
+        relation_name="orders_2026",
         message="Table contains duplicate rows.",
         affected_count=5,
         affected_ratio=0.25,
@@ -44,7 +45,8 @@ def test_quality_issue_stores_table_level_finding() -> None:
     assert issue.issue_type is QualityIssueType.DUPLICATE_ROWS
     assert issue.severity is QualitySeverity.WARNING
     assert issue.scope is QualityScope.TABLE
-    assert issue.table_name == "orders"
+    assert issue.table_name == "Orders 2026"
+    assert issue.relation_name == "orders_2026"
     assert issue.column_name is None
     assert issue.message == "Table contains duplicate rows."
     assert issue.affected_count == 5
@@ -60,7 +62,8 @@ def test_quality_issue_stores_column_level_finding() -> None:
         issue_type=QualityIssueType.MISSING_VALUES,
         severity=QualitySeverity.WARNING,
         scope=QualityScope.COLUMN,
-        table_name="orders",
+        table_name="Orders 2026",
+        relation_name="orders_2026",
         column_name="amount",
         message="Column contains missing values.",
         affected_count=3,
@@ -73,7 +76,8 @@ def test_quality_issue_stores_column_level_finding() -> None:
     )
 
     assert issue.scope is QualityScope.COLUMN
-    assert issue.table_name == "orders"
+    assert issue.table_name == "Orders 2026"
+    assert issue.relation_name == "orders_2026"
     assert issue.column_name == "amount"
     assert issue.affected_count == 3
     assert issue.affected_ratio == 0.15
@@ -85,6 +89,7 @@ def test_quality_issue_allows_no_affected_measurement() -> None:
         severity=QualitySeverity.INFO,
         scope=QualityScope.COLUMN,
         table_name="orders",
+        relation_name="orders",
         column_name="status",
         message="Column contains only one distinct non-missing value.",
     )
@@ -99,6 +104,7 @@ def test_quality_issue_has_independent_evidence_dictionary() -> None:
         severity=QualitySeverity.INFO,
         scope=QualityScope.COLUMN,
         table_name="orders",
+        relation_name="orders",
         column_name="status",
         message="Constant column.",
     )
@@ -108,6 +114,7 @@ def test_quality_issue_has_independent_evidence_dictionary() -> None:
         severity=QualitySeverity.INFO,
         scope=QualityScope.COLUMN,
         table_name="orders",
+        relation_name="orders",
         column_name="country",
         message="Constant column.",
     )
@@ -123,7 +130,9 @@ def test_quality_issue_is_immutable() -> None:
         severity=QualitySeverity.WARNING,
         scope=QualityScope.TABLE,
         table_name="orders",
+        relation_name="orders",
         message="Table contains duplicate rows.",
     )
 
     assert issue.table_name == "orders"
+    assert issue.relation_name == "orders"

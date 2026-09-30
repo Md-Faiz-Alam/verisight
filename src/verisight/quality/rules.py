@@ -42,6 +42,7 @@ class QualityRuleEngine:
                         severity=QualitySeverity.WARNING,
                         scope=QualityScope.COLUMN,
                         table_name=profile.name,
+                        relation_name=profile.relation_name,
                         column_name=column.name,
                         message="Column contains missing values.",
                         affected_count=column.missing_count,
@@ -63,6 +64,7 @@ class QualityRuleEngine:
                         severity=QualitySeverity.WARNING,
                         scope=QualityScope.COLUMN,
                         table_name=profile.name,
+                        relation_name=profile.relation_name,
                         column_name=column.name,
                         message="Column contains empty strings.",
                         affected_count=text_statistics.empty_count,
@@ -81,6 +83,7 @@ class QualityRuleEngine:
                         severity=QualitySeverity.INFO,
                         scope=QualityScope.COLUMN,
                         table_name=profile.name,
+                        relation_name=profile.relation_name,
                         column_name=column.name,
                         message=(
                             "Column contains only one distinct non-missing value."
@@ -106,6 +109,7 @@ class QualityRuleEngine:
                         severity=QualitySeverity.INFO,
                         scope=QualityScope.COLUMN,
                         table_name=profile.name,
+                        relation_name=profile.relation_name,
                         column_name=column.name,
                         message="Column has high cardinality.",
                         affected_count=column.distinct_count,
@@ -146,9 +150,10 @@ class QualityRuleEngine:
                     severity=QualitySeverity.WARNING,
                     scope=QualityScope.TABLE,
                     table_name=profile.name,
+                    relation_name=profile.relation_name,
                     message="Table contains fully missing rows.",
-                    affected_count=(missing_statistics.fully_missing_row_count),
-                    affected_ratio=(missing_statistics.fully_missing_row_ratio),
+                    affected_count=missing_statistics.fully_missing_row_count,
+                    affected_ratio=missing_statistics.fully_missing_row_ratio,
                     evidence={
                         "fully_missing_row_count": (
                             missing_statistics.fully_missing_row_count
@@ -170,9 +175,10 @@ class QualityRuleEngine:
                     severity=QualitySeverity.WARNING,
                     scope=QualityScope.TABLE,
                     table_name=profile.name,
+                    relation_name=profile.relation_name,
                     message="Table contains duplicate rows.",
-                    affected_count=(duplicate_statistics.duplicate_row_count),
-                    affected_ratio=(duplicate_statistics.duplicate_row_ratio),
+                    affected_count=duplicate_statistics.duplicate_row_count,
+                    affected_ratio=duplicate_statistics.duplicate_row_ratio,
                     evidence={
                         "duplicate_row_count": (
                             duplicate_statistics.duplicate_row_count

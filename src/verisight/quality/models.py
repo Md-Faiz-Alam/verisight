@@ -39,6 +39,7 @@ class QualityIssue:
     severity: QualitySeverity
     scope: QualityScope
     table_name: str
+    relation_name: str
     message: str
     column_name: str | None = None
     affected_count: int | None = None
