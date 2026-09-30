@@ -113,3 +113,150 @@ def test_csv_loader_wraps_parser_failure(
 
     with pytest.raises(DataLoadError, match="Could not load CSV file"):
         loader.load(file_path)
+
+
+def test_csv_loader_preserves_significant_leading_zeros(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "identifiers.csv"
+    file_path.write_text(
+        "zip_code,phone\n02134,0091234\n10001,0012345\n",
+        encoding="utf-8",
+    )
+
+    loader = CsvLoader(Settings())
+    table = loader.load(file_path)
+
+    assert table.data["zip_code"].tolist() == ["02134", "10001"]
+    assert table.data["phone"].tolist() == ["0091234", "0012345"]
+
+
+def test_csv_loader_preserves_long_integer_identifiers_with_missing_values(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "identifiers.csv"
+    file_path.write_text(
+        "account_id,name\n12345678901234567,Alice\n,Bob\n12345678901234569,Charlie\n",
+        encoding="utf-8",
+    )
+
+    loader = CsvLoader(Settings())
+    table = loader.load(file_path)
+
+    assert table.data.loc[0, "account_id"] == "12345678901234567"
+    assert pd.isna(table.data.loc[1, "account_id"])
+    assert table.data.loc[2, "account_id"] == "12345678901234569"
+
+
+def test_csv_loader_keeps_ordinary_numeric_columns_numeric(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "measurements.csv"
+    file_path.write_text(
+        "quantity,price\n10,19.95\n20,25.50\n",
+        encoding="utf-8",
+    )
+
+    loader = CsvLoader(Settings())
+    table = loader.load(file_path)
+
+    assert table.data["quantity"].tolist() == [10, 20]
+    assert table.data["price"].tolist() == [19.95, 25.50]
+    assert pd.api.types.is_integer_dtype(table.data["quantity"])
+    assert pd.api.types.is_float_dtype(table.data["price"])
+
+
+def test_csv_loader_infers_boolean_columns(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "flags.csv"
+    file_path.write_text(
+        "active\ntrue\nfalse\nTRUE\n",
+        encoding="utf-8",
+    )
+
+    loader = CsvLoader(Settings())
+    table = loader.load(file_path)
+
+    assert table.data["active"].tolist() == [True, False, True]
+    assert pd.api.types.is_bool_dtype(table.data["active"])
+
+
+def test_csv_loader_preserves_ambiguous_boolean_like_values_as_strings(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "flags.csv"
+    file_path.write_text(
+        "flag\nyes\nno\n",
+        encoding="utf-8",
+    )
+
+    loader = CsvLoader(Settings())
+    table = loader.load(file_path)
+
+    assert table.data["flag"].tolist() == ["yes", "no"]
+    assert pd.api.types.is_object_dtype(table.data["flag"])
+
+
+def test_csv_loader_infers_nullable_boolean_columns(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "flags.csv"
+    file_path.write_text(
+        "active,name\ntrue,Alice\n,Bob\nfalse,Charlie\n",
+        encoding="utf-8",
+    )
+
+    loader = CsvLoader(Settings())
+    table = loader.load(file_path)
+
+    assert bool(table.data.loc[0, "active"]) is True
+    assert pd.isna(table.data.loc[1, "active"])
+    assert bool(table.data.loc[2, "active"]) is False
+    assert str(table.data["active"].dtype) == "boolean"
+
+
+def test_csv_loader_preserves_entirely_missing_column(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "missing.csv"
+    file_path.write_text(
+        "id,notes\n1,\n2,\n",
+        encoding="utf-8",
+    )
+
+    loader = CsvLoader(Settings())
+    table = loader.load(file_path)
+
+    assert table.data["notes"].isna().all()
+
+
+def test_csv_loader_converts_signed_integer_columns(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "measurements.csv"
+    file_path.write_text(
+        "change\n-10\n+20\n30\n",
+        encoding="utf-8",
+    )
+
+    loader = CsvLoader(Settings())
+    table = loader.load(file_path)
+
+    assert table.data["change"].tolist() == [-10, 20, 30]
+    assert pd.api.types.is_integer_dtype(table.data["change"])
+
+
+def test_csv_loader_preserves_signed_integers_with_leading_zeros(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "identifiers.csv"
+    file_path.write_text(
+        "code\n-0012\n+0034\n",
+        encoding="utf-8",
+    )
+
+    loader = CsvLoader(Settings())
+    table = loader.load(file_path)
+
+    assert table.data["code"].tolist() == ["-0012", "+0034"]
