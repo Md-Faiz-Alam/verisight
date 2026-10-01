@@ -9,6 +9,7 @@ from verisight.analysis.insights import (
     InsightType,
 )
 from verisight.analysis.models import DatasetAnalysis
+from verisight.evidence import EvidenceInput
 from verisight.ingestion.schema import DatasetSchema
 from verisight.profiling.models import (
     DatasetProfile,
@@ -66,7 +67,7 @@ def make_quality_issue(
     scope: QualityScope,
     column_name: str | None = None,
     message: str = "Test quality issue.",
-    evidence: dict[str, object] | None = None,
+    evidence: EvidenceInput | None = None,
 ) -> QualityIssue:
     """Create a quality issue for insight tests."""
 
@@ -483,7 +484,7 @@ def test_analysis_insight_evidence_is_immutable() -> None:
 
 
 def test_analysis_insight_copies_evidence_on_construction() -> None:
-    evidence: dict[str, object] = {"missing_count": 3}
+    evidence: dict[str, int] = {"missing_count": 3}
 
     insight = AnalysisInsight(
         insight_type=InsightType.DATA_QUALITY,

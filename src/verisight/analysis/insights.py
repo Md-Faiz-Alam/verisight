@@ -1,11 +1,10 @@
 """Deterministic analytical insight models for VeriSight."""
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from types import MappingProxyType
 
 from verisight.analysis.models import DatasetAnalysis
+from verisight.evidence import Evidence, EvidenceInput, freeze_evidence
 from verisight.quality.models import QualityScope
 
 
@@ -35,15 +34,17 @@ class AnalysisInsight:
     table_name: str | None = None
     relation_name: str | None = None
     column_name: str | None = None
-    evidence: Mapping[str, object] = field(default_factory=dict)
+    evidence: EvidenceInput = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Store evidence as an immutable snapshot."""
+        """Store evidence as an immutable recursive snapshot."""
+
+        frozen_evidence: Evidence = freeze_evidence(self.evidence)
 
         object.__setattr__(
             self,
             "evidence",
-            MappingProxyType(dict(self.evidence)),
+            frozen_evidence,
         )
 
 
@@ -107,7 +108,7 @@ class InsightGenerator:
                     table_name=issue.table_name,
                     relation_name=issue.relation_name,
                     column_name=issue.column_name,
-                    evidence=dict(issue.evidence),
+                    evidence=issue.evidence,
                 )
             )
 

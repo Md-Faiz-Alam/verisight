@@ -1,9 +1,9 @@
 """Domain models for VeriSight data-quality findings."""
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from types import MappingProxyType
+
+from verisight.evidence import Evidence, EvidenceInput, freeze_evidence
 
 
 class QualityIssueType(StrEnum):
@@ -46,13 +46,15 @@ class QualityIssue:
     column_name: str | None = None
     affected_count: int | None = None
     affected_ratio: float | None = None
-    evidence: Mapping[str, object] = field(default_factory=dict)
+    evidence: EvidenceInput = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Store evidence as an immutable snapshot."""
+        """Store evidence as an immutable recursive snapshot."""
+
+        frozen_evidence: Evidence = freeze_evidence(self.evidence)
 
         object.__setattr__(
             self,
             "evidence",
-            MappingProxyType(dict(self.evidence)),
+            frozen_evidence,
         )

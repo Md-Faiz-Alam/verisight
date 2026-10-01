@@ -1,7 +1,6 @@
 """Deterministic data-quality rules for VeriSight."""
 
-from collections.abc import Mapping
-
+from verisight.evidence import EvidenceInput
 from verisight.ingestion.schema import LogicalType
 from verisight.profiling.models import TableProfile
 from verisight.quality.models import (
@@ -38,7 +37,7 @@ class QualityRuleEngine:
         message: str,
         affected_count: int | None = None,
         affected_ratio: float | None = None,
-        evidence: Mapping[str, object] | None = None,
+        evidence: EvidenceInput | None = None,
     ) -> QualityIssue:
         """Build a column-level quality issue."""
 
@@ -64,7 +63,7 @@ class QualityRuleEngine:
         message: str,
         affected_count: int | None = None,
         affected_ratio: float | None = None,
-        evidence: Mapping[str, object] | None = None,
+        evidence: EvidenceInput | None = None,
     ) -> QualityIssue:
         """Build a table-level quality issue."""
 

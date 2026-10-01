@@ -158,7 +158,7 @@ def test_quality_issue_evidence_is_immutable() -> None:
 
 
 def test_quality_issue_copies_evidence_on_construction() -> None:
-    evidence: dict[str, object] = {"missing_count": 3}
+    evidence = {"missing_count": 3}
 
     issue = QualityIssue(
         issue_type=QualityIssueType.MISSING_VALUES,
@@ -174,3 +174,33 @@ def test_quality_issue_copies_evidence_on_construction() -> None:
     evidence["missing_count"] = 999
 
     assert issue.evidence["missing_count"] == 3
+
+
+def test_quality_issue_recursively_freezes_evidence() -> None:
+    nested = {
+        "missing_count": 3,
+    }
+
+    issue = QualityIssue(
+        issue_type=QualityIssueType.MISSING_VALUES,
+        severity=QualitySeverity.WARNING,
+        scope=QualityScope.COLUMN,
+        table_name="orders",
+        relation_name="orders",
+        column_name="amount",
+        message="Column contains missing values.",
+        evidence={
+            "statistics": nested,
+            "columns": ["amount", "status"],
+        },
+    )
+
+    nested["missing_count"] = 999
+
+    assert issue.evidence["statistics"] == {
+        "missing_count": 3,
+    }
+    assert issue.evidence["columns"] == (
+        "amount",
+        "status",
+    )
