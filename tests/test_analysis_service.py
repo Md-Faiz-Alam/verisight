@@ -248,7 +248,7 @@ def test_quality_issues_preserve_table_and_rule_order() -> None:
     ) == (
         (
             "first",
-            QualityIssueType.MISSING_VALUES,
+            QualityIssueType.ENTIRELY_MISSING_COLUMN,
         ),
         (
             "first",

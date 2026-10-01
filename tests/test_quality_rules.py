@@ -189,7 +189,7 @@ def test_single_observed_value_is_not_flagged_as_constant() -> None:
     assert issues == ()
 
 
-def test_all_missing_column_is_not_flagged_as_constant() -> None:
+def test_all_missing_column_produces_entirely_missing_warning() -> None:
     profile = TableProfile(
         name="orders",
         relation_name="orders",
@@ -214,7 +214,50 @@ def test_all_missing_column_is_not_flagged_as_constant() -> None:
     issues = QualityRuleEngine().evaluate(profile)
 
     assert len(issues) == 1
-    assert issues[0].issue_type is QualityIssueType.MISSING_VALUES
+
+    issue = issues[0]
+
+    assert issue.issue_type is QualityIssueType.ENTIRELY_MISSING_COLUMN
+    assert issue.severity is QualitySeverity.WARNING
+    assert issue.scope is QualityScope.COLUMN
+    assert issue.table_name == "orders"
+    assert issue.relation_name == "orders"
+    assert issue.column_name == "status"
+    assert issue.message == "Column is entirely missing."
+    assert issue.affected_count == 3
+    assert issue.affected_ratio == 1.0
+    assert issue.evidence == {
+        "missing_count": 3,
+        "non_missing_count": 0,
+        "row_count": 3,
+    }
+
+
+def test_empty_column_in_zero_row_table_is_not_entirely_missing() -> None:
+    profile = TableProfile(
+        name="orders",
+        relation_name="orders",
+        row_count=0,
+        column_count=1,
+        duplicate_row_count=0,
+        duplicate_row_ratio=0.0,
+        columns=(
+            ColumnProfile(
+                name="status",
+                logical_type=LogicalType.STRING,
+                row_count=0,
+                non_missing_count=0,
+                missing_count=0,
+                missing_ratio=0.0,
+                distinct_count=0,
+                distinct_ratio=0.0,
+            ),
+        ),
+    )
+
+    issues = QualityRuleEngine().evaluate(profile)
+
+    assert issues == ()
 
 
 def test_high_cardinality_string_column_produces_info_issue() -> None:

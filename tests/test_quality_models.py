@@ -15,6 +15,7 @@ def test_quality_issue_type_values_are_stable() -> None:
     assert QualityIssueType.EMPTY_STRINGS.value == "empty_strings"
     assert QualityIssueType.CONSTANT_COLUMN.value == "constant_column"
     assert QualityIssueType.HIGH_CARDINALITY.value == "high_cardinality"
+    assert QualityIssueType.ENTIRELY_MISSING_COLUMN.value == "entirely_missing_column"
 
 
 def test_quality_severity_values_are_stable() -> None:
