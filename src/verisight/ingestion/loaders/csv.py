@@ -1,5 +1,6 @@
 """CSV loader for the VeriSight ingestion subsystem."""
 
+import csv
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +21,10 @@ _NUMERIC_PATTERN = (
     r"|(?:\.[0-9]+)"
     r")(?:[eE][+-]?[0-9]+)?"
 )
+
+_CSV_DELIMITERS = ",;\t|"
+_CSV_SAMPLE_SIZE = 8192
+_DEFAULT_CSV_DELIMITER = ","
 
 
 class CsvLoader(BaseTableLoader):
@@ -42,8 +47,11 @@ class CsvLoader(BaseTableLoader):
             )
 
         try:
+            delimiter = self._detect_delimiter(metadata.path)
+
             data = pd.read_csv(
                 metadata.path,
+                sep=delimiter,
                 dtype=str,
                 keep_default_na=False,
                 na_values=[""],
@@ -57,6 +65,27 @@ class CsvLoader(BaseTableLoader):
             data=data,
             source=metadata,
         )
+
+    @staticmethod
+    def _detect_delimiter(path: Path) -> str:
+        """Detect a supported delimiter, defaulting to comma when ambiguous."""
+
+        with path.open(
+            "r",
+            encoding="utf-8",
+            newline="",
+        ) as file:
+            sample = file.read(_CSV_SAMPLE_SIZE)
+
+        try:
+            dialect = csv.Sniffer().sniff(
+                sample,
+                delimiters=_CSV_DELIMITERS,
+            )
+        except csv.Error:
+            return _DEFAULT_CSV_DELIMITER
+
+        return dialect.delimiter
 
     @classmethod
     def _infer_safe_column_types(

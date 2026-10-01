@@ -357,3 +357,23 @@ def test_csv_loader_preserves_mixed_numeric_and_numeric_like_values(
         "2000",
     ]
     assert pd.api.types.is_object_dtype(table.data["value"])
+
+
+def test_csv_loader_supports_semicolon_delimiter(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "customers.csv"
+    file_path.write_text(
+        "customer_id;name\n1;Alice\n2;Bob\n",
+        encoding="utf-8",
+    )
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.column_count == 2
+    assert table.data.columns.tolist() == [
+        "customer_id",
+        "name",
+    ]
+    assert table.data["customer_id"].tolist() == [1, 2]
+    assert table.data["name"].tolist() == ["Alice", "Bob"]
