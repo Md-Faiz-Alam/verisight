@@ -216,7 +216,9 @@ All commands must pass.
 The current deterministic foundation has been validated with:
 
 ```text
-343 passed
+360 tests passed
+894 statements
+170 branches
 100% test coverage
 ```
 
@@ -431,7 +433,13 @@ src/verisight/evidence.py
 
 Evidence can contain supported scalar values, nested mappings, and nested sequences.
 
+NumPy scalar inputs are normalized to supported Python scalar values before evidence is stored.
+
+Evidence rejects binary values, non-string mapping keys, non-finite floating-point values, and unsupported object types.
+
 Evidence attached to analytical domain models is recursively frozen.
+
+Immutable evidence and serialization output are separate contracts. When evidence must cross a JSON boundary, use `evidence_to_jsonable()` to produce independent dictionaries, lists, and supported scalar values.
 
 Do not introduce separate ad hoc evidence types in individual subsystems unless a future requirement demonstrates that a genuinely different contract is needed.
 
@@ -454,6 +462,10 @@ Be particularly careful with:
 - reserved relation names
 
 Silent corruption is more dangerous than an explicit loading failure.
+
+CSV ingestion rejects unsupported binary-like input containing NUL bytes when no supported Unicode BOM identifies the encoding. UTF-32 input is rejected explicitly because it is not currently supported.
+
+Supported CSV decoding currently includes UTF-8, UTF-8 with BOM, UTF-16 with a recognized BOM, Windows-1252 fallback, and Latin-1 fallback when Windows-1252 cannot decode the source.
 
 When ingestion behavior changes, add regression tests demonstrating the source representation and the expected normalized result.
 

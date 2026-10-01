@@ -4,7 +4,7 @@ VeriSight is an autonomous, evidence-backed AI data analyst.
 
 The project is being built as a layered data-analysis system that can ingest structured data, infer schemas, profile datasets, detect deterministic data-quality issues, and produce structured analytical summaries and insights.
 
-The current implementation focuses on a reliable deterministic analysis foundation. Higher-level querying, verification, reporting, and AI-assisted analysis will build on top of this foundation.
+The current implementation focuses on a reliable deterministic analysis foundation. Higher-level analytical execution, verification, reporting, APIs, and AI-assisted analysis will build on top of this foundation.
 
 ## Current Status
 
@@ -20,6 +20,7 @@ VeriSight currently provides the core deterministic data-analysis pipeline:
 - deterministic analytical summaries
 - deterministic analytical insights
 - immutable structured evidence
+- JSON-safe evidence conversion
 - unified analysis results
 
 The project is under active development and does not yet expose a public CLI, HTTP API, or user interface.
@@ -41,6 +42,15 @@ python -m pip install --upgrade pip
 pip install -e ".[dev]"
 ```
 
+### macOS / Linux
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -e ".[dev]"
+```
+
 The development dependencies include:
 
 - pytest
@@ -48,6 +58,49 @@ The development dependencies include:
 - Ruff
 - mypy
 - pandas type stubs
+
+## Quick Start
+
+VeriSight currently exposes its deterministic analysis pipeline through Python APIs.
+
+```python
+from verisight.analysis.result import AnalysisResultBuilder
+from verisight.analysis.service import DatasetAnalyzer
+from verisight.config import Settings
+from verisight.ingestion.service import DatasetLoader
+
+settings = Settings()
+
+dataset = DatasetLoader(settings).load(["data/customers.csv"])
+analysis = DatasetAnalyzer().analyze(dataset)
+result = AnalysisResultBuilder().build(analysis)
+
+print(result.summary)
+print(result.insights)
+```
+
+The pipeline is intentionally explicit:
+
+```text
+DatasetLoader
+    |
+    v
+LoadedDataset
+    |
+    v
+DatasetAnalyzer
+    |
+    v
+DatasetAnalysis
+    |
+    v
+AnalysisResultBuilder
+    |
+    v
+DatasetAnalysisResult
+```
+
+This keeps ingestion, deterministic analysis, and result construction as separate contracts.
 
 ## Supported Data Sources
 
@@ -62,10 +115,17 @@ VeriSight supports CSV ingestion with:
 - UTF-16 with little-endian BOM
 - UTF-16 with big-endian BOM
 - Windows-1252 fallback
+- Latin-1 fallback when Windows-1252 cannot decode the source
 - preservation of empty fields as missing values
 - preservation of significant leading zeros
 - protection against unsafe conversion of long integer identifiers
 - deterministic inference of numeric and boolean values
+
+UTF-16 input is supported when a recognized UTF-16 BOM is present.
+
+BOM-less input containing NUL bytes is rejected instead of being silently interpreted as ordinary CSV text. UTF-32 input with a recognized BOM is also rejected because UTF-32 is not currently a supported CSV encoding.
+
+These checks prefer an explicit load failure over silently returning corrupted columns or values.
 
 ### Excel
 
@@ -98,7 +158,9 @@ sales_2
 sales_3
 ```
 
-Reserved relation names and names that cannot safely be used as identifiers are normalized automatically.
+Relation-name normalization currently handles unsafe identifier characters, names beginning with digits, empty normalized names, duplicate relation identities, and the reserved names explicitly defined by the ingestion subsystem.
+
+The reserved-name set is intentionally explicit rather than a claim to cover every keyword used by every possible downstream SQL engine.
 
 ## Schema Inference
 
@@ -212,15 +274,46 @@ Evidence supports:
 
 - strings
 - integers
-- floating-point values
+- finite floating-point values
 - booleans
 - `None`
-- nested mappings
+- nested mappings with string keys
 - nested sequences
+- NumPy scalar inputs that can be normalized to supported Python scalar values
 
-Evidence is recursively snapshotted into immutable structures.
+Evidence is validated and recursively snapshotted into immutable structures.
 
-This prevents downstream consumers from accidentally modifying evidence after an issue or insight has been created and provides a stable contract for future verification, reporting, API, and AI layers.
+Nested mappings become immutable mappings, while nested sequences become tuples. NumPy scalar values are normalized to their corresponding Python scalar values.
+
+The evidence contract rejects unsupported values that could make downstream behavior ambiguous, including:
+
+- binary `bytes` and `bytearray` values
+- non-string mapping keys
+- non-finite floating-point values such as `NaN` and positive or negative infinity
+- unsupported object types
+
+This prevents downstream consumers from accidentally modifying evidence after an issue or insight has been created.
+
+### JSON-Safe Evidence
+
+Immutable evidence is deliberately separate from its serialization representation.
+
+Use `evidence_to_jsonable()` when evidence must cross a JSON serialization boundary:
+
+```python
+import json
+
+from verisight.evidence import evidence_to_jsonable
+
+jsonable_evidence = evidence_to_jsonable(issue.evidence)
+payload = json.dumps(jsonable_evidence)
+```
+
+The conversion recursively creates ordinary dictionaries and lists while preserving supported scalar values.
+
+The returned representation is independent from the frozen evidence, so modifying the serialization representation does not mutate the analytical evidence stored by VeriSight.
+
+This provides an explicit boundary between immutable internal analytical state and mutable JSON-compatible output.
 
 ## Analysis Pipeline
 
@@ -313,6 +406,14 @@ src/verisight/
 └── logging.py
 ```
 
+Additional architecture and development documentation is available under `docs/`.
+
+```text
+docs/
+├── architecture.md
+└── development.md
+```
+
 ## Development Quality Gates
 
 The project uses Ruff for formatting and linting, mypy in strict mode for static type checking, and pytest for testing.
@@ -329,18 +430,20 @@ mypy src tests
 pytest --cov=verisight --cov-report=term-missing --cov-fail-under=100
 ```
 
-The current Phase 3 baseline passes:
+The current verified deterministic-foundation baseline passes:
 
 ```text
-343 passed
+360 tests passed
+894 statements
+170 branches
 100% test coverage
 ```
 
-The coverage configuration includes branch coverage.
+The coverage configuration enables branch coverage.
 
 ## Design Principles
 
-VeriSight is being developed around several core principles:
+VeriSight is being developed around several core principles.
 
 ### Deterministic Before Generative
 
@@ -352,13 +455,17 @@ Future AI capabilities should consume these verified structures rather than repl
 
 Analytical findings should carry structured evidence that downstream systems can inspect, verify, serialize, and present.
 
+Immutable internal evidence and JSON-safe serialization representations are intentionally separate contracts.
+
 ### Stable Domain Contracts
 
-Core models such as dataset profiles, quality findings, and evidence are designed as explicit contracts between system layers.
+Core models such as loaded datasets, schemas, profiles, quality findings, summaries, insights, and evidence are designed as explicit contracts between system layers.
 
 ### Preserve Source Meaning
 
 Ingestion avoids unsafe type conversion when doing so could change the meaning of source data, including significant leading zeros and large identifier-like integers.
+
+When an unsupported encoding pattern could otherwise result in silent corruption, ingestion prefers a clear failure.
 
 ### Immutable Analytical Results
 
@@ -374,7 +481,7 @@ The test suite covers the ingestion, schema, profiling, quality, evidence, and a
 
 It includes robustness and integration tests for areas such as:
 
-- CSV parsing and encoding
+- CSV parsing, delimiters, and encodings
 - schema inference
 - ingestion normalization
 - numeric profiling
@@ -384,20 +491,70 @@ It includes robustness and integration tests for areas such as:
 - duplicate rows
 - messy datasets
 - data-quality rules
-- immutable evidence
+- immutable and serializable evidence
 - deterministic analysis
 - analytical summaries and insights
 
-The project currently maintains a 100% coverage requirement for both statements and configured branches.
+The project currently maintains a 100% coverage requirement for statements and configured branches.
+
+## Known Limitations
+
+VeriSight is still under active development. Several behaviors are intentionally deferred rather than being handled through aggressive inference.
+
+### Datetime Strings
+
+String columns containing datetime-like values are not automatically treated as datetime columns in every ingestion path.
+
+Datetime profiling currently operates on data that has already been represented with an appropriate datetime type.
+
+More aggressive datetime-string inference is deferred because ambiguous date formats can change source meaning.
+
+### Currency and Percentage Columns
+
+Text values such as currency amounts or percentages are not automatically normalized into numeric values.
+
+Examples include values such as:
+
+```text
+$1,250.00
+€99.50
+42%
+```
+
+Automatic normalization of these formats requires explicit parsing rules for symbols, locale conventions, separators, and scaling semantics.
+
+### Nullable Booleans in JSON and Excel
+
+Boolean inference behavior is not yet fully normalized across CSV, JSON, and Excel ingestion.
+
+In particular, nullable boolean columns originating from JSON or Excel may not receive the same inferred representation as equivalent CSV input.
+
+### CSV Performance
+
+CSV ingestion currently prioritizes source fidelity, defensive encoding handling, and deterministic type inference over maximum throughput.
+
+The loader may perform multiple passes or full-content checks during encoding detection and type inference. This is acceptable for the current development stage but is not intended to represent the final large-file performance architecture.
+
+These limitations are documented explicitly so future improvements can address them without weakening the current deterministic contracts.
 
 ## Roadmap
 
 The deterministic analysis foundation is complete through the current Phase 3 milestone.
 
-Future development will build additional capabilities on top of these contracts, including analytical execution, verification, reporting, and AI-assisted workflows.
+The next development phase is expected to build higher-level capabilities on top of these contracts, including:
 
-Features described as future work are not part of the current public implementation.
+- a public analysis facade
+- analytical execution
+- DuckDB-backed querying
+- verification
+- reporting
+- future API integration
+- AI-assisted analytical workflows
+
+These capabilities are future work and are not part of the current public implementation.
+
+The existing deterministic contracts are intended to remain the foundation beneath these higher-level layers rather than being replaced by them.
 
 ## License
 
-VeriSight is licensed under the MIT License.
+VeriSight is licensed under the MIT License. See `LICENSE` for the full license text.
