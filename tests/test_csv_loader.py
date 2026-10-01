@@ -377,3 +377,48 @@ def test_csv_loader_supports_semicolon_delimiter(
     ]
     assert table.data["customer_id"].tolist() == [1, 2]
     assert table.data["name"].tolist() == ["Alice", "Bob"]
+
+
+def test_csv_loader_supports_cp1252_encoding(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "customers.csv"
+    file_path.write_bytes(
+        "customer_id,name,city\n1,André,Montréal\n2,José,São Paulo\n".encode("cp1252")
+    )
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.column_count == 3
+    assert table.row_count == 2
+
+    assert table.data["customer_id"].tolist() == [1, 2]
+    assert table.data["name"].tolist() == [
+        "André",
+        "José",
+    ]
+    assert table.data["city"].tolist() == [
+        "Montréal",
+        "São Paulo",
+    ]
+
+
+def test_csv_loader_supports_utf8_bom(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "customers.csv"
+    file_path.write_bytes("customer_id,name\n1,Alice\n2,Bob\n".encode("utf-8-sig"))
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.column_count == 2
+    assert table.row_count == 2
+    assert table.data.columns.tolist() == [
+        "customer_id",
+        "name",
+    ]
+    assert table.data["customer_id"].tolist() == [1, 2]
+    assert table.data["name"].tolist() == [
+        "Alice",
+        "Bob",
+    ]

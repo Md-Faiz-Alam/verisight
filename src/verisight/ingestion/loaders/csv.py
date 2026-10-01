@@ -47,16 +47,24 @@ class CsvLoader(BaseTableLoader):
             )
 
         try:
-            delimiter = self._detect_delimiter(metadata.path)
+            encoding = self._detect_encoding(metadata.path)
+
+            delimiter = self._detect_delimiter(
+                metadata.path,
+                encoding=encoding,
+            )
 
             data = pd.read_csv(
                 metadata.path,
                 sep=delimiter,
+                encoding=encoding,
                 dtype=str,
                 keep_default_na=False,
                 na_values=[""],
             )
+
             data = self._infer_safe_column_types(data)
+
         except Exception as exc:
             raise DataLoadError(f"Could not load CSV file: {metadata.path}") from exc
 
@@ -67,12 +75,32 @@ class CsvLoader(BaseTableLoader):
         )
 
     @staticmethod
-    def _detect_delimiter(path: Path) -> str:
+    def _detect_encoding(path: Path) -> str:
+        """Return UTF-8 when valid, otherwise fall back to Windows-1252."""
+
+        try:
+            with path.open(
+                "r",
+                encoding="utf-8-sig",
+                newline="",
+            ) as file:
+                file.read()
+        except UnicodeDecodeError:
+            return "cp1252"
+
+        return "utf-8-sig"
+
+    @staticmethod
+    def _detect_delimiter(
+        path: Path,
+        *,
+        encoding: str,
+    ) -> str:
         """Detect a supported delimiter, defaulting to comma when ambiguous."""
 
         with path.open(
             "r",
-            encoding="utf-8",
+            encoding=encoding,
             newline="",
         ) as file:
             sample = file.read(_CSV_SAMPLE_SIZE)
