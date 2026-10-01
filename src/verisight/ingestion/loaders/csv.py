@@ -31,6 +31,8 @@ _ENCODING_BOM_SAMPLE_SIZE = max(
     len(codecs.BOM_UTF8),
     len(codecs.BOM_UTF16_LE),
     len(codecs.BOM_UTF16_BE),
+    len(codecs.BOM_UTF32_LE),
+    len(codecs.BOM_UTF32_BE),
 )
 
 
@@ -72,6 +74,8 @@ class CsvLoader(BaseTableLoader):
 
             data = self._infer_safe_column_types(data)
 
+        except DataLoadError:
+            raise
         except Exception as exc:
             raise DataLoadError(f"Could not load CSV file: {metadata.path}") from exc
 
@@ -83,28 +87,41 @@ class CsvLoader(BaseTableLoader):
 
     @staticmethod
     def _detect_encoding(path: Path) -> str:
-        """Detect supported Unicode BOMs, then UTF-8 or Windows-1252."""
+        """Detect supported Unicode BOMs and reject unsupported binary-like input."""
 
         with path.open("rb") as file:
-            prefix = file.read(_ENCODING_BOM_SAMPLE_SIZE)
+            content = file.read()
+
+        prefix = content[:_ENCODING_BOM_SAMPLE_SIZE]
 
         if prefix.startswith(codecs.BOM_UTF8):
             return "utf-8-sig"
 
+        if prefix.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+            raise DataLoadError(
+                "CSV file uses UTF-32 encoding, which is not supported."
+            )
+
         if prefix.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
             return "utf-16"
 
+        if b"\x00" in content:
+            raise DataLoadError(
+                "CSV file contains NUL bytes and may use an unsupported "
+                "Unicode encoding without a BOM."
+            )
+
         try:
-            with path.open(
-                "r",
-                encoding="utf-8",
-                newline="",
-            ) as file:
-                file.read()
+            content.decode("utf-8")
         except UnicodeDecodeError:
+            try:
+                content.decode("cp1252")
+            except UnicodeDecodeError:
+                return "latin-1"
+
             return "cp1252"
 
-        return "utf-8-sig"
+        return "utf-8"
 
     @staticmethod
     def _detect_delimiter(

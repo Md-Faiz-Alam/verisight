@@ -1,3 +1,4 @@
+import codecs
 from pathlib import Path
 
 import pandas as pd
@@ -485,5 +486,67 @@ def test_csv_loader_detects_delimiter_in_utf16_csv(
     assert table.data["customer_id"].tolist() == [1, 2]
     assert table.data["name"].tolist() == [
         "Alice",
+        "Bob",
+    ]
+
+
+def test_csv_loader_rejects_bomless_utf16(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "customers.csv"
+
+    content = "customer_id,name\n1,Alice\n2,Bob\n"
+    file_path.write_bytes(content.encode("utf-16-le"))
+
+    with pytest.raises(
+        DataLoadError,
+        match="CSV file contains NUL bytes",
+    ):
+        CsvLoader(Settings()).load(file_path)
+
+
+@pytest.mark.parametrize(
+    "encoding",
+    [
+        "utf-32-le",
+        "utf-32-be",
+    ],
+)
+def test_csv_loader_rejects_utf32(
+    tmp_path: Path,
+    encoding: str,
+) -> None:
+    file_path = tmp_path / "customers.csv"
+
+    content = "customer_id,name\n1,Alice\n2,Bob\n"
+
+    if encoding == "utf-32-le":
+        encoded = codecs.BOM_UTF32_LE + content.encode(encoding)
+    else:
+        encoded = codecs.BOM_UTF32_BE + content.encode(encoding)
+
+    file_path.write_bytes(encoded)
+
+    with pytest.raises(
+        DataLoadError,
+        match="CSV file uses UTF-32 encoding, which is not supported.",
+    ):
+        CsvLoader(Settings()).load(file_path)
+
+
+def test_csv_loader_falls_back_to_latin1(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "customers.csv"
+
+    file_path.write_bytes(b"customer_id,name\n1,Alice\x81\n2,Bob\n")
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.column_count == 2
+    assert table.row_count == 2
+    assert table.data["customer_id"].tolist() == [1, 2]
+    assert table.data["name"].tolist() == [
+        "Alice\x81",
         "Bob",
     ]
