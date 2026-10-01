@@ -529,6 +529,12 @@ Boolean inference behavior is not yet fully normalized across CSV, JSON, and Exc
 
 In particular, nullable boolean columns originating from JSON or Excel may not receive the same inferred representation as equivalent CSV input.
 
+### Quantiles and Top-N Statistics
+
+Quantile summaries and top-N value-frequency analysis are not yet part of the current deterministic profiling contract.
+
+These statistics are intentionally deferred to Phase 5, where richer analytical execution can introduce them with explicit semantics, stable result models, and appropriate evidence.
+
 ### CSV Performance
 
 CSV ingestion currently prioritizes source fidelity, defensive encoding handling, and deterministic type inference over maximum throughput.
