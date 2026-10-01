@@ -1,6 +1,13 @@
+import json
+
+import numpy as np
 import pytest
 
-from verisight.evidence import EvidenceInput, freeze_evidence
+from verisight.evidence import (
+    EvidenceInput,
+    evidence_to_jsonable,
+    freeze_evidence,
+)
 
 
 def test_freezes_scalar_evidence_values() -> None:
@@ -129,6 +136,77 @@ def test_freezing_copies_nested_source_values() -> None:
     )
 
 
+def test_freezing_normalizes_numpy_scalars() -> None:
+    evidence = freeze_evidence(
+        {
+            "count": np.int64(3),
+            "ratio": np.float64(0.25),
+            "valid": np.bool_(True),
+        }
+    )
+
+    assert evidence == {
+        "count": 3,
+        "ratio": 0.25,
+        "valid": True,
+    }
+    assert type(evidence["count"]) is int
+    assert type(evidence["ratio"]) is float
+    assert type(evidence["valid"]) is bool
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        float("nan"),
+        float("inf"),
+        float("-inf"),
+        np.float64("nan"),
+        np.float64("inf"),
+        np.float64("-inf"),
+    ],
+)
+def test_rejects_non_finite_floating_point_values(
+    value: float | np.float64,
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match="Evidence floating-point values must be finite.",
+    ):
+        freeze_evidence({"value": value})
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        b"binary",
+        bytearray(b"binary"),
+    ],
+)
+def test_rejects_binary_evidence_values(
+    value: bytes | bytearray,
+) -> None:
+    with pytest.raises(
+        TypeError,
+        match="Evidence values cannot contain bytes.",
+    ):
+        freeze_evidence({"value": value})
+
+
+def test_rejects_non_string_mapping_keys() -> None:
+    invalid_evidence = {
+        "statistics": {
+            1: "invalid",
+        }
+    }
+
+    with pytest.raises(
+        TypeError,
+        match="Evidence mapping keys must be strings.",
+    ):
+        freeze_evidence(invalid_evidence)  # type: ignore[arg-type]
+
+
 def test_rejects_unsupported_evidence_value_at_runtime() -> None:
     invalid_evidence = {
         "unsupported": object(),
@@ -151,3 +229,84 @@ def test_each_freeze_produces_independent_mapping() -> None:
     assert first == {}
     assert second == {}
     assert first is not second
+
+
+def test_evidence_to_jsonable_converts_recursive_containers() -> None:
+    evidence = freeze_evidence(
+        {
+            "statistics": {
+                "missing_count": 3,
+            },
+            "columns": [
+                "amount",
+                "status",
+            ],
+        }
+    )
+
+    jsonable = evidence_to_jsonable(evidence)
+
+    assert jsonable == {
+        "statistics": {
+            "missing_count": 3,
+        },
+        "columns": [
+            "amount",
+            "status",
+        ],
+    }
+    assert isinstance(jsonable["statistics"], dict)
+    assert isinstance(jsonable["columns"], list)
+
+
+def test_jsonable_evidence_is_independent_from_frozen_evidence() -> None:
+    evidence = freeze_evidence(
+        {
+            "columns": [
+                "amount",
+                "status",
+            ],
+        }
+    )
+
+    jsonable = evidence_to_jsonable(evidence)
+    columns = jsonable["columns"]
+
+    assert isinstance(columns, list)
+
+    columns.append("country")
+
+    assert evidence["columns"] == (
+        "amount",
+        "status",
+    )
+
+
+def test_jsonable_evidence_can_be_serialized_by_json() -> None:
+    evidence = freeze_evidence(
+        {
+            "name": "orders",
+            "count": np.int64(3),
+            "statistics": {
+                "missing_ratio": np.float64(0.25),
+            },
+            "columns": [
+                "amount",
+                "status",
+            ],
+        }
+    )
+
+    serialized = json.dumps(evidence_to_jsonable(evidence))
+
+    assert json.loads(serialized) == {
+        "name": "orders",
+        "count": 3,
+        "statistics": {
+            "missing_ratio": 0.25,
+        },
+        "columns": [
+            "amount",
+            "status",
+        ],
+    }
