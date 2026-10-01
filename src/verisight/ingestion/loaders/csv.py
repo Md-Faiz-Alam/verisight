@@ -1,5 +1,6 @@
 """CSV loader for the VeriSight ingestion subsystem."""
 
+import codecs
 import csv
 from pathlib import Path
 
@@ -25,6 +26,12 @@ _NUMERIC_PATTERN = (
 _CSV_DELIMITERS = ",;\t|"
 _CSV_SAMPLE_SIZE = 8192
 _DEFAULT_CSV_DELIMITER = ","
+
+_ENCODING_BOM_SAMPLE_SIZE = max(
+    len(codecs.BOM_UTF8),
+    len(codecs.BOM_UTF16_LE),
+    len(codecs.BOM_UTF16_BE),
+)
 
 
 class CsvLoader(BaseTableLoader):
@@ -76,12 +83,21 @@ class CsvLoader(BaseTableLoader):
 
     @staticmethod
     def _detect_encoding(path: Path) -> str:
-        """Return UTF-8 when valid, otherwise fall back to Windows-1252."""
+        """Detect supported Unicode BOMs, then UTF-8 or Windows-1252."""
+
+        with path.open("rb") as file:
+            prefix = file.read(_ENCODING_BOM_SAMPLE_SIZE)
+
+        if prefix.startswith(codecs.BOM_UTF8):
+            return "utf-8-sig"
+
+        if prefix.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+            return "utf-16"
 
         try:
             with path.open(
                 "r",
-                encoding="utf-8-sig",
+                encoding="utf-8",
                 newline="",
             ) as file:
                 file.read()

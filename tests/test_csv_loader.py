@@ -422,3 +422,68 @@ def test_csv_loader_supports_utf8_bom(
         "Alice",
         "Bob",
     ]
+
+
+def test_csv_loader_supports_utf16_little_endian_bom(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "customers.csv"
+    file_path.write_bytes("customer_id,name\n1,Alice\n2,Bob\n".encode("utf-16"))
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.column_count == 2
+    assert table.row_count == 2
+    assert table.data.columns.tolist() == [
+        "customer_id",
+        "name",
+    ]
+    assert table.data["customer_id"].tolist() == [1, 2]
+    assert table.data["name"].tolist() == [
+        "Alice",
+        "Bob",
+    ]
+
+
+def test_csv_loader_supports_utf16_big_endian_bom(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "customers.csv"
+
+    content = "customer_id,name\n1,Alice\n2,Bob\n"
+    file_path.write_bytes(b"\xfe\xff" + content.encode("utf-16-be"))
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.column_count == 2
+    assert table.row_count == 2
+    assert table.data.columns.tolist() == [
+        "customer_id",
+        "name",
+    ]
+    assert table.data["customer_id"].tolist() == [1, 2]
+    assert table.data["name"].tolist() == [
+        "Alice",
+        "Bob",
+    ]
+
+
+def test_csv_loader_detects_delimiter_in_utf16_csv(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "customers.csv"
+    file_path.write_bytes("customer_id;name\n1;Alice\n2;Bob\n".encode("utf-16"))
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.column_count == 2
+    assert table.row_count == 2
+    assert table.data.columns.tolist() == [
+        "customer_id",
+        "name",
+    ]
+    assert table.data["customer_id"].tolist() == [1, 2]
+    assert table.data["name"].tolist() == [
+        "Alice",
+        "Bob",
+    ]
