@@ -125,3 +125,246 @@ Dataset Analysis
   |
   v
 Unified Analysis Result
+```
+
+---
+
+## Layer Responsibilities
+
+### Ingestion
+
+The ingestion layer converts supported source files into normalized VeriSight dataset structures.
+
+Its responsibilities include:
+
+- validating source files
+- dispatching files to format-specific loaders
+- loading CSV, Excel, and JSON data
+- preserving source meaning where safe inference is ambiguous
+- assigning deterministic relation identities
+- rejecting duplicate table columns
+- constructing normalized loaded datasets
+
+The ingestion layer should not perform analytical interpretation. Its responsibility is to produce reliable dataset structures for downstream components.
+
+### Schema Inference
+
+Schema inference describes the structural shape of normalized tables.
+
+Its responsibilities include:
+
+- identifying columns
+- recording physical and logical types
+- identifying nullable columns
+- preserving table and relation identity
+- constructing dataset-level schema models
+
+Schema inference provides structural metadata without replacing profiling or quality analysis.
+
+### Profiling
+
+The profiling layer computes deterministic descriptive statistics from normalized data.
+
+Its responsibilities include:
+
+- column profiling
+- numeric statistics
+- text statistics
+- datetime statistics for supported datetime-typed data
+- missing-value statistics
+- duplicate-row statistics
+- table-level statistics
+- dataset-level profile aggregation
+
+Profiles describe observed data. They do not themselves determine whether an observation constitutes a quality problem.
+
+### Data-Quality Analysis
+
+The quality layer evaluates deterministic rules against profiles and dataset structure.
+
+Its responsibilities include detecting supported conditions such as:
+
+- missing values
+- entirely missing columns
+- fully missing rows
+- duplicate rows
+- empty strings
+- constant columns
+- high-cardinality string columns
+
+Quality findings are represented as structured `QualityIssue` objects containing scope, severity, identity, human-readable context, and machine-readable evidence.
+
+### Dataset Analysis
+
+Dataset analysis orchestrates schema inference, profiling, and quality evaluation into a single deterministic analytical model.
+
+`DatasetAnalysis` is the central deterministic analysis contract containing:
+
+- the inferred dataset schema
+- the dataset profile
+- generated quality issues
+
+Higher-level deterministic components consume this contract rather than independently recomputing lower-level analysis.
+
+### Summary Generation
+
+The summary layer derives compact aggregate information from `DatasetAnalysis`.
+
+`AnalysisSummary` includes information such as:
+
+- table count
+- total row count
+- total column count
+- issue counts by severity
+- issue counts by scope
+- affected relation identities
+
+Summaries are derived views of an existing analysis and do not mutate or reinterpret the source analysis.
+
+### Insight Generation
+
+The insight layer converts supported deterministic findings into structured analytical insights.
+
+`AnalysisInsight` preserves relevant dataset identity and evidence so downstream consumers can work with structured findings rather than parsing prose.
+
+Insight generation is deterministic. Generative AI is not required to create the current insight models.
+
+### Unified Analysis Result
+
+`DatasetAnalysisResult` combines:
+
+- the complete `DatasetAnalysis`
+- its deterministic `AnalysisSummary`
+- generated `AnalysisInsight` objects
+
+`AnalysisResultBuilder` constructs this result from an existing dataset analysis.
+
+This unified result is intended to become the boundary consumed by future facades, reporting systems, APIs, analytical execution, and AI-assisted components.
+
+---
+
+## Key Contracts
+
+### Loaded Data
+
+Loaded data models represent normalized source data before analytical processing.
+
+A loaded table maintains both:
+
+- a human-readable display name
+- a deterministic analytical relation name
+
+These identities serve different purposes and should not be conflated.
+
+### Schema
+
+Schema models describe dataset structure independently from observed statistical profiles.
+
+This separation allows structural metadata and statistical observations to evolve without forcing them into a single model.
+
+### Profiles
+
+Profile models contain deterministic measurements derived from loaded data.
+
+Table-level statistics are canonical within table profiles, while dataset profiles aggregate table profiles without maintaining competing copies of the same measurements.
+
+### Quality Issues
+
+A `QualityIssue` represents one deterministic data-quality finding.
+
+It records:
+
+- issue type
+- severity
+- scope
+- table identity
+- relation identity
+- optional column identity
+- affected counts or ratios when applicable
+- a human-readable message
+- structured evidence
+
+### Evidence
+
+Evidence is a shared cross-layer contract.
+
+Evidence values are recursively validated and frozen when attached to analytical findings. Nested mappings become immutable mappings and nested sequences become tuples.
+
+Supported evidence is restricted to JSON-compatible scalar meaning plus recursively nested mappings and sequences. NumPy scalar values are normalized to their corresponding Python scalar values before freezing.
+
+Evidence rejects unsupported binary values, non-string mapping keys, and non-finite floating-point values.
+
+Frozen evidence can be converted into an independent JSON-safe mutable representation for serialization boundaries.
+
+### Analysis Results
+
+Analysis results compose existing deterministic contracts instead of duplicating them.
+
+This keeps schema, profile, issue, summary, insight, and evidence semantics explicit and independently testable.
+
+---
+
+## Dependency Direction
+
+The intended dependency direction is:
+
+```text
+Ingestion
+   |
+   v
+Schema / Profiling
+   |
+   v
+Quality
+   |
+   v
+Dataset Analysis
+   |
+   +--> Summary
+   |
+   +--> Insights
+   |
+   v
+Unified Result
+   |
+   v
+Future Facade / Reporting / APIs / AI
+```
+
+Higher-level layers may depend on lower-level contracts.
+
+Lower-level deterministic layers should not depend on future presentation, API, database-query, or generative-AI layers.
+
+This keeps the deterministic analytical core independently testable and reusable.
+
+---
+
+## Current Boundary
+
+The current architecture ends at the unified deterministic analysis result.
+
+The repository does not yet provide the planned public analysis facade, DuckDB analytical execution layer, reporting interface, external API, or generative-AI orchestration layer.
+
+Those capabilities should be introduced above the existing deterministic contracts rather than embedded into ingestion, profiling, or quality-rule implementations.
+
+This boundary is intentional: VeriSight first establishes reproducible analytical facts and structured evidence, then allows higher-level systems to consume them.
+
+---
+
+## Testing and Contract Stability
+
+The deterministic core is protected by automated tests covering ingestion, schema inference, profiling, quality rules, evidence, summaries, insights, and unified results.
+
+Changes to shared models should be treated as contract changes.
+
+In particular:
+
+- source fidelity should not be weakened silently
+- relation identities should remain deterministic
+- canonical statistics should not be duplicated across competing models
+- evidence should remain immutable after construction
+- serialization boundaries should use explicit JSON-safe conversion
+- summaries and insights should remain derived from deterministic analysis
+- higher-level capabilities should reuse existing contracts rather than bypass them
+
+This structure allows future analytical and AI capabilities to evolve while keeping the underlying measurements reproducible and testable.
