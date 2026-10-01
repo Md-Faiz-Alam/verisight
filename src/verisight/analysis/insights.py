@@ -1,8 +1,9 @@
 """Deterministic analytical insight models for VeriSight."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from types import MappingProxyType
 
 from verisight.analysis.models import DatasetAnalysis
 from verisight.quality.models import QualityScope
@@ -34,7 +35,16 @@ class AnalysisInsight:
     table_name: str | None = None
     relation_name: str | None = None
     column_name: str | None = None
-    evidence: dict[str, Any] = field(default_factory=dict)
+    evidence: Mapping[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Store evidence as an immutable snapshot."""
+
+        object.__setattr__(
+            self,
+            "evidence",
+            MappingProxyType(dict(self.evidence)),
+        )
 
 
 class InsightGenerator:

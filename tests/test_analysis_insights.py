@@ -445,3 +445,36 @@ def test_generator_copies_quality_issue_evidence() -> None:
 
     assert quality_insight.evidence == issue.evidence
     assert quality_insight.evidence is not issue.evidence
+
+
+def test_analysis_insight_evidence_is_immutable() -> None:
+    insight = AnalysisInsight(
+        insight_type=InsightType.DATA_QUALITY,
+        scope=InsightScope.COLUMN,
+        message="Column contains missing values.",
+        table_name="orders",
+        relation_name="orders",
+        column_name="amount",
+        evidence={"missing_count": 3},
+    )
+
+    with pytest.raises(TypeError):
+        insight.evidence["missing_count"] = 999  # type: ignore[index]
+
+
+def test_analysis_insight_copies_evidence_on_construction() -> None:
+    evidence: dict[str, object] = {"missing_count": 3}
+
+    insight = AnalysisInsight(
+        insight_type=InsightType.DATA_QUALITY,
+        scope=InsightScope.COLUMN,
+        message="Column contains missing values.",
+        table_name="orders",
+        relation_name="orders",
+        column_name="amount",
+        evidence=evidence,
+    )
+
+    evidence["missing_count"] = 999
+
+    assert insight.evidence["missing_count"] == 3

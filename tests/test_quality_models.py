@@ -1,3 +1,5 @@
+import pytest
+
 from verisight.quality.models import (
     QualityIssue,
     QualityIssueType,
@@ -136,3 +138,38 @@ def test_quality_issue_is_immutable() -> None:
 
     assert issue.table_name == "orders"
     assert issue.relation_name == "orders"
+
+
+def test_quality_issue_evidence_is_immutable() -> None:
+    issue = QualityIssue(
+        issue_type=QualityIssueType.MISSING_VALUES,
+        severity=QualitySeverity.WARNING,
+        scope=QualityScope.COLUMN,
+        table_name="orders",
+        relation_name="orders",
+        column_name="amount",
+        message="Column contains missing values.",
+        evidence={"missing_count": 3},
+    )
+
+    with pytest.raises(TypeError):
+        issue.evidence["missing_count"] = 999  # type: ignore[index]
+
+
+def test_quality_issue_copies_evidence_on_construction() -> None:
+    evidence: dict[str, object] = {"missing_count": 3}
+
+    issue = QualityIssue(
+        issue_type=QualityIssueType.MISSING_VALUES,
+        severity=QualitySeverity.WARNING,
+        scope=QualityScope.COLUMN,
+        table_name="orders",
+        relation_name="orders",
+        column_name="amount",
+        message="Column contains missing values.",
+        evidence=evidence,
+    )
+
+    evidence["missing_count"] = 999
+
+    assert issue.evidence["missing_count"] == 3
