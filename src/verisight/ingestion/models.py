@@ -82,6 +82,34 @@ class LoadedDataset:
 
     tables: list[LoadedTable]
 
+    def __post_init__(self) -> None:
+        """Validate dataset-level table invariants."""
+
+        self._validate_unique_relation_names()
+
+    def _validate_unique_relation_names(self) -> None:
+        """Reject tables containing duplicate relation identities."""
+
+        seen: set[str] = set()
+        duplicates: list[str] = []
+
+        for table in self.tables:
+            relation_name = table.relation_name
+
+            if relation_name in seen and relation_name not in duplicates:
+                duplicates.append(relation_name)
+
+            seen.add(relation_name)
+
+        if not duplicates:
+            return
+
+        formatted_names = ", ".join(repr(name) for name in duplicates)
+
+        raise TableValidationError(
+            f"Dataset contains duplicate relation names: {formatted_names}."
+        )
+
     @property
     def table_count(self) -> int:
         """Return the total number of loaded tables."""

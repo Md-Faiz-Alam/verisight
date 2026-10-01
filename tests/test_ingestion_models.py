@@ -264,3 +264,142 @@ def test_loaded_table_reports_each_duplicate_column_once() -> None:
 
     assert message.count("'id'") == 1
     assert message.count("'name'") == 1
+
+
+def test_loaded_dataset_rejects_duplicate_relation_names() -> None:
+    first = LoadedTable(
+        name="Sales",
+        data=pd.DataFrame({"id": [1]}),
+        source=SourceMetadata(
+            path=Path("first.csv"),
+            file_name="first.csv",
+            file_extension=".csv",
+            file_size_bytes=100,
+        ),
+    )
+    first.relation_name = "sales"
+
+    second = LoadedTable(
+        name="Sales",
+        data=pd.DataFrame({"id": [2]}),
+        source=SourceMetadata(
+            path=Path("second.csv"),
+            file_name="second.csv",
+            file_extension=".csv",
+            file_size_bytes=100,
+        ),
+    )
+    second.relation_name = "sales"
+
+    with pytest.raises(
+        TableValidationError,
+        match="duplicate relation names",
+    ):
+        LoadedDataset(
+            tables=[
+                first,
+                second,
+            ]
+        )
+
+
+def test_loaded_dataset_duplicate_relation_error_identifies_relation() -> None:
+    first = LoadedTable(
+        name="First",
+        data=pd.DataFrame({"id": [1]}),
+        source=SourceMetadata(
+            path=Path("first.csv"),
+            file_name="first.csv",
+            file_extension=".csv",
+            file_size_bytes=100,
+        ),
+    )
+    first.relation_name = "shared_relation"
+
+    second = LoadedTable(
+        name="Second",
+        data=pd.DataFrame({"id": [2]}),
+        source=SourceMetadata(
+            path=Path("second.csv"),
+            file_name="second.csv",
+            file_extension=".csv",
+            file_size_bytes=100,
+        ),
+    )
+    second.relation_name = "shared_relation"
+
+    with pytest.raises(TableValidationError) as exc_info:
+        LoadedDataset(
+            tables=[
+                first,
+                second,
+            ]
+        )
+
+    assert "'shared_relation'" in str(exc_info.value)
+
+
+def test_loaded_dataset_allows_duplicate_display_names_with_unique_relations() -> None:
+    first = LoadedTable(
+        name="Sales",
+        data=pd.DataFrame({"id": [1]}),
+        source=SourceMetadata(
+            path=Path("first.csv"),
+            file_name="first.csv",
+            file_extension=".csv",
+            file_size_bytes=100,
+        ),
+    )
+    first.relation_name = "sales"
+
+    second = LoadedTable(
+        name="Sales",
+        data=pd.DataFrame({"id": [2]}),
+        source=SourceMetadata(
+            path=Path("second.csv"),
+            file_name="second.csv",
+            file_extension=".csv",
+            file_size_bytes=100,
+        ),
+    )
+    second.relation_name = "sales_2"
+
+    dataset = LoadedDataset(
+        tables=[
+            first,
+            second,
+        ]
+    )
+
+    assert dataset.table_count == 2
+    assert [table.name for table in dataset.tables] == [
+        "Sales",
+        "Sales",
+    ]
+    assert [table.relation_name for table in dataset.tables] == [
+        "sales",
+        "sales_2",
+    ]
+
+
+def test_loaded_dataset_reports_each_duplicate_relation_once() -> None:
+    tables: list[LoadedTable] = []
+
+    for index in range(3):
+        table = LoadedTable(
+            name=f"Sales {index}",
+            data=pd.DataFrame({"id": [index]}),
+            source=SourceMetadata(
+                path=Path(f"sales_{index}.csv"),
+                file_name=f"sales_{index}.csv",
+                file_extension=".csv",
+                file_size_bytes=100,
+            ),
+        )
+        table.relation_name = "sales"
+        tables.append(table)
+
+    with pytest.raises(TableValidationError) as exc_info:
+        LoadedDataset(tables=tables)
+
+    assert str(exc_info.value).count("'sales'") == 1
