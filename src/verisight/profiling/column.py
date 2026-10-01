@@ -1,7 +1,5 @@
 """Column-level profiling for VeriSight."""
 
-import math
-
 import numpy as np
 import pandas as pd
 
@@ -85,26 +83,41 @@ class ColumnProfiler:
         if series.empty:
             return None
 
-        minimum = series.min()
-        maximum = series.max()
-
         numeric_values = np.asarray(series, dtype=float)
 
-        contains_positive_infinity = bool(np.isposinf(numeric_values).any())
-        contains_negative_infinity = bool(np.isneginf(numeric_values).any())
-        contains_non_finite = bool((~np.isfinite(numeric_values)).any())
+        finite_mask = np.isfinite(numeric_values)
+        finite_series = series.iloc[np.flatnonzero(finite_mask)]
+        finite_values = numeric_values[finite_mask]
 
-        if contains_positive_infinity and contains_negative_infinity:
-            mean = math.nan
-            median = math.nan
-        else:
-            mean = float(np.mean(numeric_values))
-            median = float(np.median(numeric_values))
+        non_finite_count = int((~finite_mask).sum())
+        non_finite_ratio = non_finite_count / len(numeric_values)
 
-        if len(series) <= 1 or contains_non_finite:
+        if finite_values.size == 0:
+            return NumericStatistics(
+                minimum=None,
+                maximum=None,
+                mean=None,
+                median=None,
+                standard_deviation=None,
+                non_finite_count=non_finite_count,
+                non_finite_ratio=non_finite_ratio,
+            )
+
+        minimum = finite_series.min()
+        maximum = finite_series.max()
+
+        mean = float(np.mean(finite_values))
+        median = float(np.median(finite_values))
+
+        if finite_values.size <= 1:
             standard_deviation = None
         else:
-            standard_deviation = float(np.std(numeric_values, ddof=1))
+            standard_deviation = float(
+                np.std(
+                    finite_values,
+                    ddof=1,
+                )
+            )
 
         return NumericStatistics(
             minimum=minimum,
@@ -112,6 +125,8 @@ class ColumnProfiler:
             mean=mean,
             median=median,
             standard_deviation=standard_deviation,
+            non_finite_count=non_finite_count,
+            non_finite_ratio=non_finite_ratio,
         )
 
     @staticmethod

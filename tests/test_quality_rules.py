@@ -3,6 +3,7 @@ from verisight.profiling.models import (
     ColumnProfile,
     DuplicateStatistics,
     MissingValueStatistics,
+    NumericStatistics,
     TableProfile,
     TextStatistics,
 )
@@ -618,3 +619,91 @@ def test_multiple_findings_are_returned_deterministically() -> None:
         QualityIssueType.FULLY_MISSING_ROWS,
         QualityIssueType.DUPLICATE_ROWS,
     )
+
+
+def test_non_finite_numeric_values_produce_column_warning() -> None:
+    profile = make_table_profile(
+        name="measurements",
+        relation_name="measurements",
+        row_count=4,
+        column_count=1,
+        columns=(
+            ColumnProfile(
+                name="temperature",
+                logical_type=LogicalType.FLOAT,
+                row_count=4,
+                non_missing_count=4,
+                missing_count=0,
+                missing_ratio=0.0,
+                distinct_count=4,
+                distinct_ratio=1.0,
+                minimum=1.0,
+                maximum=2.0,
+                numeric_statistics=NumericStatistics(
+                    minimum=1.0,
+                    maximum=2.0,
+                    mean=1.5,
+                    median=1.5,
+                    standard_deviation=0.5,
+                    non_finite_count=2,
+                    non_finite_ratio=0.5,
+                ),
+            ),
+        ),
+    )
+
+    issues = QualityRuleEngine().evaluate(profile)
+
+    assert len(issues) == 1
+
+    issue = issues[0]
+
+    assert issue.issue_type is QualityIssueType.NON_FINITE_VALUES
+    assert issue.severity is QualitySeverity.WARNING
+    assert issue.scope is QualityScope.COLUMN
+    assert issue.table_name == "measurements"
+    assert issue.relation_name == "measurements"
+    assert issue.column_name == "temperature"
+    assert issue.affected_count == 2
+    assert issue.affected_ratio == 0.5
+    assert issue.evidence == {
+        "non_finite_count": 2,
+        "non_missing_count": 4,
+        "non_finite_ratio": 0.5,
+    }
+
+
+def test_finite_numeric_values_produce_no_non_finite_issue() -> None:
+    profile = make_table_profile(
+        name="measurements",
+        relation_name="measurements",
+        row_count=3,
+        column_count=1,
+        columns=(
+            ColumnProfile(
+                name="temperature",
+                logical_type=LogicalType.FLOAT,
+                row_count=3,
+                non_missing_count=3,
+                missing_count=0,
+                missing_ratio=0.0,
+                distinct_count=3,
+                distinct_ratio=1.0,
+                minimum=1.0,
+                maximum=3.0,
+                numeric_statistics=NumericStatistics(
+                    minimum=1.0,
+                    maximum=3.0,
+                    mean=2.0,
+                    median=2.0,
+                    standard_deviation=1.0,
+                    non_finite_count=0,
+                    non_finite_ratio=0.0,
+                ),
+            ),
+        ),
+    )
+
+    issues = QualityRuleEngine().evaluate(profile)
+
+    assert issues == ()

@@ -294,26 +294,38 @@ The evidence contract rejects unsupported values that could make downstream beha
 
 This prevents downstream consumers from accidentally modifying evidence after an issue or insight has been created.
 
-### JSON-Safe Evidence
+### JSON-Safe Serialization
 
-Immutable evidence is deliberately separate from its serialization representation.
+VeriSight provides an explicit JSON-safe serialization boundary for deterministic domain results.
 
-Use `evidence_to_jsonable()` when evidence must cross a JSON serialization boundary:
+Use `to_jsonable()` to convert supported VeriSight values, including complete analysis results, into ordinary JSON-compatible Python values:
 
 ```python
 import json
 
+from verisight.serialization import to_jsonable
+
+jsonable_result = to_jsonable(result)
+payload = json.dumps(jsonable_result, allow_nan=False)
+```
+
+The serializer recursively handles dataclasses, enums, paths, mappings, sequences, NumPy scalar values, temporal values, decimal values, and supported missing-value representations.
+
+Datetime and date values are represented using ISO 8601 strings. Timedeltas are represented using ISO 8601 duration strings. Finite `Decimal` values are serialized as strings so their exact decimal representation is preserved.
+
+Pandas missing values such as `pd.NA` and `pd.NaT`, along with non-finite floating-point or decimal values that reach the serialization boundary, are represented as JSON `null`.
+
+Binary values and mappings with non-string keys remain unsupported and raise an explicit error.
+
+Immutable analytical evidence remains a separate internal contract. `evidence_to_jsonable()` delegates JSON conversion to the shared serializer while preserving the evidence-specific API:
+
+```python
 from verisight.evidence import evidence_to_jsonable
 
 jsonable_evidence = evidence_to_jsonable(issue.evidence)
-payload = json.dumps(jsonable_evidence)
 ```
 
-The conversion recursively creates ordinary dictionaries and lists while preserving supported scalar values.
-
-The returned representation is independent from the frozen evidence, so modifying the serialization representation does not mutate the analytical evidence stored by VeriSight.
-
-This provides an explicit boundary between immutable internal analytical state and mutable JSON-compatible output.
+The returned structures are independent mutable JSON-compatible representations. Modifying them does not mutate the immutable analytical evidence or result objects stored by VeriSight.
 
 ## Analysis Pipeline
 
@@ -403,7 +415,8 @@ src/verisight/
 ├── config.py
 ├── evidence.py
 ├── exceptions.py
-└── logging.py
+├── logging.py
+└── serialization.py
 ```
 
 Additional architecture and development documentation is available under `docs/`.

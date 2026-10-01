@@ -12,11 +12,13 @@ from verisight.ingestion.schema import LogicalType
 class NumericStatistics:
     """Descriptive statistics for a numeric column."""
 
-    minimum: float | int
-    maximum: float | int
-    mean: float
-    median: float
+    minimum: float | int | None
+    maximum: float | int | None
+    mean: float | None
+    median: float | None
     standard_deviation: float | None
+    non_finite_count: int
+    non_finite_ratio: float
 
 
 @dataclass(frozen=True, slots=True)

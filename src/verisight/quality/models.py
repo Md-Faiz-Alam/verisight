@@ -10,6 +10,7 @@ class QualityIssueType(StrEnum):
     """Supported deterministic data-quality issue types."""
 
     MISSING_VALUES = "missing_values"
+    NON_FINITE_VALUES = "non_finite_values"
     ENTIRELY_MISSING_COLUMN = "entirely_missing_column"
     FULLY_MISSING_ROWS = "fully_missing_rows"
     DUPLICATE_ROWS = "duplicate_rows"

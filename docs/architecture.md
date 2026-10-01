@@ -294,7 +294,21 @@ Supported evidence is restricted to JSON-compatible scalar meaning plus recursiv
 
 Evidence rejects unsupported binary values, non-string mapping keys, and non-finite floating-point values.
 
-Frozen evidence can be converted into an independent JSON-safe mutable representation for serialization boundaries.
+Frozen evidence can be converted into an independent JSON-safe mutable representation through `evidence_to_jsonable()`. Evidence serialization delegates to the shared domain serializer so JSON conversion behavior is defined in one place.
+
+### Serialization
+
+`verisight.serialization` defines the shared JSON serialization boundary for VeriSight domain objects.
+
+`to_jsonable()` recursively converts supported domain values into ordinary JSON-compatible Python values. It supports dataclasses, enums, paths, mappings, sequences, NumPy scalar values, temporal values, decimal values, and supported missing-value representations.
+
+Datetime and date values are serialized using ISO 8601 strings. Timedeltas use ISO 8601 duration strings. Finite `Decimal` values are serialized as strings to preserve their exact decimal representation.
+
+Pandas missing values and non-finite numeric values that reach the serialization boundary are represented as `None`, allowing the resulting structure to be serialized with strict JSON settings such as `json.dumps(..., allow_nan=False)`.
+
+Mappings must use string keys, and binary or otherwise unsupported values are rejected explicitly.
+
+This serializer is intentionally separate from the analytical models themselves. Domain models preserve deterministic analytical meaning, while `to_jsonable()` defines how those models cross JSON, API, reporting, or persistence boundaries.
 
 ### Analysis Results
 

@@ -158,3 +158,99 @@ def test_non_numeric_profile_does_not_compute_numeric_statistics() -> None:
     assert profile.minimum is None
     assert profile.maximum is None
     assert profile.numeric_statistics is None
+
+
+def test_numeric_profile_excludes_non_finite_values_from_statistics() -> None:
+    series = pd.Series(
+        [
+            1.0,
+            2.0,
+            float("inf"),
+            float("-inf"),
+        ]
+    )
+
+    profile = ColumnProfiler().profile(
+        name="measurement",
+        series=series,
+        logical_type=LogicalType.FLOAT,
+    )
+
+    statistics = profile.numeric_statistics
+
+    assert statistics is not None
+
+    assert statistics.minimum == 1.0
+    assert statistics.maximum == 2.0
+    assert statistics.mean == pytest.approx(1.5)
+    assert statistics.median == pytest.approx(1.5)
+    assert statistics.standard_deviation == pytest.approx(np.sqrt(0.5))
+    assert statistics.non_finite_count == 2
+    assert statistics.non_finite_ratio == pytest.approx(0.5)
+
+    assert profile.minimum == 1.0
+    assert profile.maximum == 2.0
+
+
+def test_numeric_profile_handles_only_non_finite_values() -> None:
+    series = pd.Series(
+        [
+            float("inf"),
+            float("-inf"),
+        ]
+    )
+
+    profile = ColumnProfiler().profile(
+        name="measurement",
+        series=series,
+        logical_type=LogicalType.FLOAT,
+    )
+
+    statistics = profile.numeric_statistics
+
+    assert statistics is not None
+
+    assert statistics.minimum is None
+    assert statistics.maximum is None
+    assert statistics.mean is None
+    assert statistics.median is None
+    assert statistics.standard_deviation is None
+    assert statistics.non_finite_count == 2
+    assert statistics.non_finite_ratio == pytest.approx(1.0)
+
+    assert profile.minimum is None
+    assert profile.maximum is None
+
+
+def test_numeric_profile_distinguishes_missing_and_non_finite_values() -> None:
+    series = pd.Series(
+        [
+            1.0,
+            float("inf"),
+            None,
+            np.nan,
+        ]
+    )
+
+    profile = ColumnProfiler().profile(
+        name="measurement",
+        series=series,
+        logical_type=LogicalType.FLOAT,
+    )
+
+    statistics = profile.numeric_statistics
+
+    assert statistics is not None
+
+    assert profile.row_count == 4
+    assert profile.non_missing_count == 2
+    assert profile.missing_count == 2
+    assert profile.missing_ratio == pytest.approx(0.5)
+
+    assert statistics.minimum == 1.0
+    assert statistics.maximum == 1.0
+    assert statistics.mean == 1.0
+    assert statistics.median == 1.0
+    assert statistics.standard_deviation is None
+    assert statistics.non_finite_count == 1
+    assert statistics.non_finite_ratio == pytest.approx(0.5)

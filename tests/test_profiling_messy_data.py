@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from verisight.ingestion.models import (
     LoadedDataset,
@@ -111,7 +112,12 @@ def test_profiles_realistically_messy_table() -> None:
 
     assert amount.missing_count == 1
     assert amount.numeric_statistics is not None
-    assert amount.numeric_statistics.maximum == np.inf
+    assert amount.numeric_statistics.minimum == -5.0
+    assert amount.numeric_statistics.maximum == 10.5
+    assert amount.numeric_statistics.mean == pytest.approx(16.0 / 3.0)
+    assert amount.numeric_statistics.median == 10.5
+    assert amount.numeric_statistics.non_finite_count == 1
+    assert amount.numeric_statistics.non_finite_ratio == pytest.approx(0.25)
 
     name = profile.columns[2]
 

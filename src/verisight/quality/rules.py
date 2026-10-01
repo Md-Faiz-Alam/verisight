@@ -124,6 +124,29 @@ class QualityRuleEngine:
                     )
                 )
 
+            numeric_statistics = column.numeric_statistics
+
+            if (
+                numeric_statistics is not None
+                and numeric_statistics.non_finite_count > 0
+            ):
+                issues.append(
+                    cls._column_issue(
+                        profile=profile,
+                        column_name=column.name,
+                        issue_type=QualityIssueType.NON_FINITE_VALUES,
+                        severity=QualitySeverity.WARNING,
+                        message="Column contains non-finite numeric values.",
+                        affected_count=numeric_statistics.non_finite_count,
+                        affected_ratio=numeric_statistics.non_finite_ratio,
+                        evidence={
+                            "non_finite_count": (numeric_statistics.non_finite_count),
+                            "non_missing_count": column.non_missing_count,
+                            "non_finite_ratio": (numeric_statistics.non_finite_ratio),
+                        },
+                    )
+                )
+
             text_statistics = column.text_statistics
 
             if text_statistics is not None and text_statistics.empty_count > 0:

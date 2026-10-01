@@ -3,11 +3,14 @@
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import fields, is_dataclass
+from datetime import date, datetime
+from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import TypeAlias
 
 import numpy as np
+import pandas as pd
 
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
@@ -16,12 +19,15 @@ JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 def to_jsonable(value: object) -> JsonValue:
     """Convert a supported VeriSight value into a JSON-safe representation."""
 
-    if value is None or isinstance(value, (str, bool, int)):
+    if value is None or value is pd.NA or value is pd.NaT:
+        return None
+
+    if isinstance(value, (str, bool, int)):
         return value
 
     if isinstance(value, float):
         if not math.isfinite(value):
-            raise ValueError("JSON floating-point values must be finite.")
+            return None
 
         return value
 
@@ -30,6 +36,24 @@ def to_jsonable(value: object) -> JsonValue:
 
     if isinstance(value, Enum):
         return to_jsonable(value.value)
+
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+
+    if isinstance(value, pd.Timedelta):
+        return value.isoformat()
+
+    if isinstance(value, datetime):
+        return value.isoformat()
+
+    if isinstance(value, date):
+        return value.isoformat()
+
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            return None
+
+        return str(value)
 
     if isinstance(value, Path):
         return str(value)

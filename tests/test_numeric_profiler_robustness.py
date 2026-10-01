@@ -1,5 +1,3 @@
-import math
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -29,6 +27,8 @@ def test_profiles_nullable_integer_dtype() -> None:
     assert statistics.mean == pytest.approx(20.0)
     assert statistics.median == pytest.approx(20.0)
     assert statistics.standard_deviation == pytest.approx(14.1421356)
+    assert statistics.non_finite_count == 0
+    assert statistics.non_finite_ratio == pytest.approx(0.0)
 
 
 def test_profiles_nullable_float_dtype() -> None:
@@ -49,6 +49,8 @@ def test_profiles_nullable_float_dtype() -> None:
     assert statistics.mean == pytest.approx(2.5)
     assert statistics.median == pytest.approx(2.5)
     assert statistics.standard_deviation == pytest.approx(1.41421356)
+    assert statistics.non_finite_count == 0
+    assert statistics.non_finite_ratio == pytest.approx(0.0)
 
 
 def test_profiles_negative_numeric_values() -> None:
@@ -67,6 +69,8 @@ def test_profiles_negative_numeric_values() -> None:
     assert statistics.maximum == 10
     assert statistics.mean == pytest.approx(-5.0)
     assert statistics.median == pytest.approx(-5.0)
+    assert statistics.non_finite_count == 0
+    assert statistics.non_finite_ratio == pytest.approx(0.0)
 
 
 def test_profiles_constant_numeric_column() -> None:
@@ -88,9 +92,11 @@ def test_profiles_constant_numeric_column() -> None:
     assert statistics.mean == pytest.approx(7.0)
     assert statistics.median == pytest.approx(7.0)
     assert statistics.standard_deviation == pytest.approx(0.0)
+    assert statistics.non_finite_count == 0
+    assert statistics.non_finite_ratio == pytest.approx(0.0)
 
 
-def test_numeric_profile_preserves_negative_infinity() -> None:
+def test_numeric_profile_excludes_negative_infinity() -> None:
     series = pd.Series([float("-inf"), 1.0, 2.0])
 
     profile = ColumnProfiler().profile(
@@ -102,11 +108,16 @@ def test_numeric_profile_preserves_negative_infinity() -> None:
     statistics = profile.numeric_statistics
     assert statistics is not None
 
-    assert math.isinf(statistics.minimum)
-    assert statistics.minimum < 0
-    assert math.isinf(statistics.mean)
-    assert statistics.mean < 0
-    assert statistics.standard_deviation is None
+    assert profile.minimum == pytest.approx(1.0)
+    assert profile.maximum == pytest.approx(2.0)
+
+    assert statistics.minimum == pytest.approx(1.0)
+    assert statistics.maximum == pytest.approx(2.0)
+    assert statistics.mean == pytest.approx(1.5)
+    assert statistics.median == pytest.approx(1.5)
+    assert statistics.standard_deviation == pytest.approx(0.70710678)
+    assert statistics.non_finite_count == 1
+    assert statistics.non_finite_ratio == pytest.approx(1 / 3)
 
 
 def test_numeric_profile_handles_missing_values_with_infinity() -> None:
@@ -125,11 +136,20 @@ def test_numeric_profile_handles_missing_values_with_infinity() -> None:
     assert profile.non_missing_count == 3
     assert profile.missing_count == 1
     assert profile.missing_ratio == pytest.approx(0.25)
-    assert math.isinf(statistics.maximum)
-    assert statistics.standard_deviation is None
+
+    assert profile.minimum == pytest.approx(1.0)
+    assert profile.maximum == pytest.approx(3.0)
+
+    assert statistics.minimum == pytest.approx(1.0)
+    assert statistics.maximum == pytest.approx(3.0)
+    assert statistics.mean == pytest.approx(2.0)
+    assert statistics.median == pytest.approx(2.0)
+    assert statistics.standard_deviation == pytest.approx(1.41421356)
+    assert statistics.non_finite_count == 1
+    assert statistics.non_finite_ratio == pytest.approx(1 / 3)
 
 
-def test_numeric_profile_with_both_infinities_has_undefined_mean() -> None:
+def test_numeric_profile_excludes_both_infinities() -> None:
     series = pd.Series(
         [
             float("-inf"),
@@ -147,12 +167,16 @@ def test_numeric_profile_with_both_infinities_has_undefined_mean() -> None:
     statistics = profile.numeric_statistics
     assert statistics is not None
 
-    assert math.isinf(statistics.minimum)
-    assert statistics.minimum < 0
-    assert math.isinf(statistics.maximum)
-    assert statistics.maximum > 0
-    assert math.isnan(statistics.mean)
+    assert profile.minimum == pytest.approx(1.0)
+    assert profile.maximum == pytest.approx(1.0)
+
+    assert statistics.minimum == pytest.approx(1.0)
+    assert statistics.maximum == pytest.approx(1.0)
+    assert statistics.mean == pytest.approx(1.0)
+    assert statistics.median == pytest.approx(1.0)
     assert statistics.standard_deviation is None
+    assert statistics.non_finite_count == 2
+    assert statistics.non_finite_ratio == pytest.approx(2 / 3)
 
 
 def test_numeric_profiling_does_not_mutate_source_series() -> None:
@@ -171,7 +195,7 @@ def test_numeric_profiling_does_not_mutate_source_series() -> None:
     assert_series_equal(series, original)
 
 
-def test_nullable_float_with_both_infinities_is_profileable() -> None:
+def test_nullable_float_with_only_infinities_is_profileable() -> None:
     series = pd.Series(
         [np.inf, -np.inf, pd.NA],
         dtype="Float64",
@@ -184,10 +208,19 @@ def test_nullable_float_with_both_infinities_is_profileable() -> None:
     )
 
     statistics = profile.numeric_statistics
-
     assert statistics is not None
-    assert statistics.minimum == -np.inf
-    assert statistics.maximum == np.inf
-    assert np.isnan(statistics.mean)
-    assert np.isnan(statistics.median)
+
+    assert profile.row_count == 3
+    assert profile.non_missing_count == 2
+    assert profile.missing_count == 1
+
+    assert profile.minimum is None
+    assert profile.maximum is None
+
+    assert statistics.minimum is None
+    assert statistics.maximum is None
+    assert statistics.mean is None
+    assert statistics.median is None
     assert statistics.standard_deviation is None
+    assert statistics.non_finite_count == 2
+    assert statistics.non_finite_ratio == pytest.approx(1.0)

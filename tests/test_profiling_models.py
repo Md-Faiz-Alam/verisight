@@ -87,22 +87,6 @@ def make_table_profile(
     )
 
 
-def test_numeric_statistics_store_descriptive_values() -> None:
-    statistics = NumericStatistics(
-        minimum=10,
-        maximum=50,
-        mean=30.0,
-        median=30.0,
-        standard_deviation=15.81,
-    )
-
-    assert statistics.minimum == 10
-    assert statistics.maximum == 50
-    assert statistics.mean == 30.0
-    assert statistics.median == 30.0
-    assert statistics.standard_deviation == 15.81
-
-
 def test_numeric_statistics_allow_missing_standard_deviation() -> None:
     statistics = NumericStatistics(
         minimum=10,
@@ -110,9 +94,33 @@ def test_numeric_statistics_allow_missing_standard_deviation() -> None:
         mean=10.0,
         median=10.0,
         standard_deviation=None,
+        non_finite_count=0,
+        non_finite_ratio=0.0,
     )
 
     assert statistics.standard_deviation is None
+    assert statistics.non_finite_count == 0
+    assert statistics.non_finite_ratio == 0.0
+
+
+def test_numeric_statistics_store_descriptive_values() -> None:
+    statistics = NumericStatistics(
+        minimum=10,
+        maximum=50,
+        mean=30.0,
+        median=30.0,
+        standard_deviation=15.81,
+        non_finite_count=2,
+        non_finite_ratio=0.25,
+    )
+
+    assert statistics.minimum == 10
+    assert statistics.maximum == 50
+    assert statistics.mean == 30.0
+    assert statistics.median == 30.0
+    assert statistics.standard_deviation == 15.81
+    assert statistics.non_finite_count == 2
+    assert statistics.non_finite_ratio == 0.25
 
 
 def test_text_statistics_store_descriptive_values() -> None:
@@ -228,6 +236,8 @@ def test_column_profile_can_store_numeric_statistics() -> None:
         mean=20.0,
         median=20.0,
         standard_deviation=10.0,
+        non_finite_count=0,
+        non_finite_ratio=0.0,
     )
 
     profile = ColumnProfile(

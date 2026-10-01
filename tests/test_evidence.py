@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -310,3 +311,19 @@ def test_jsonable_evidence_can_be_serialized_by_json() -> None:
             "status",
         ],
     }
+
+
+def test_evidence_to_jsonable_rejects_non_mapping_serialization() -> None:
+    evidence = freeze_evidence({"count": 1})
+
+    with (
+        patch(
+            "verisight.evidence.to_jsonable",
+            return_value=["unexpected"],
+        ),
+        pytest.raises(
+            TypeError,
+            match="Serialized evidence must be a mapping.",
+        ),
+    ):
+        evidence_to_jsonable(evidence)

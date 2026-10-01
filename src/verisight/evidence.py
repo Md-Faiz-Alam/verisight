@@ -7,6 +7,8 @@ from typing import TypeAlias
 
 import numpy as np
 
+from verisight.serialization import to_jsonable
+
 EvidenceScalar: TypeAlias = str | int | float | bool | None
 EvidenceInputScalar: TypeAlias = EvidenceScalar | np.generic
 
@@ -40,7 +42,12 @@ def freeze_evidence(evidence: EvidenceInput) -> Evidence:
 def evidence_to_jsonable(evidence: Evidence) -> JsonEvidence:
     """Convert immutable evidence into a JSON-safe mutable representation."""
 
-    return {key: _evidence_value_to_jsonable(value) for key, value in evidence.items()}
+    serialized = to_jsonable(evidence)
+
+    if not isinstance(serialized, dict):
+        raise TypeError("Serialized evidence must be a mapping.")
+
+    return serialized
 
 
 def _freeze_evidence_mapping(
@@ -88,20 +95,3 @@ def _freeze_evidence_value(value: EvidenceInputValue) -> EvidenceValue:
         "Evidence values must contain only strings, numbers, booleans, "
         "None, mappings, or sequences."
     )
-
-
-def _evidence_value_to_jsonable(
-    value: EvidenceValue,
-) -> JsonEvidenceValue:
-    """Convert one frozen evidence value into a JSON-safe value."""
-
-    if isinstance(value, Mapping):
-        return {
-            key: _evidence_value_to_jsonable(nested_value)
-            for key, nested_value in value.items()
-        }
-
-    if isinstance(value, tuple):
-        return [_evidence_value_to_jsonable(item) for item in value]
-
-    return value
