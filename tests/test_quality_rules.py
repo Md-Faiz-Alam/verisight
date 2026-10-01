@@ -14,14 +14,98 @@ from verisight.quality.models import (
 from verisight.quality.rules import QualityRuleEngine
 
 
+def make_missing_statistics(
+    *,
+    row_count: int,
+    column_count: int,
+    missing_cell_count: int = 0,
+    rows_with_missing_count: int = 0,
+    fully_missing_row_count: int = 0,
+    columns_with_missing_count: int = 0,
+) -> MissingValueStatistics:
+    """Create deterministic table-level missing-value statistics."""
+
+    total_cell_count = row_count * column_count
+
+    return MissingValueStatistics(
+        total_cell_count=total_cell_count,
+        missing_cell_count=missing_cell_count,
+        missing_cell_ratio=(
+            missing_cell_count / total_cell_count if total_cell_count > 0 else 0.0
+        ),
+        rows_with_missing_count=rows_with_missing_count,
+        rows_with_missing_ratio=(
+            rows_with_missing_count / row_count if row_count > 0 else 0.0
+        ),
+        fully_missing_row_count=fully_missing_row_count,
+        fully_missing_row_ratio=(
+            fully_missing_row_count / row_count if row_count > 0 else 0.0
+        ),
+        columns_with_missing_count=columns_with_missing_count,
+        columns_with_missing_ratio=(
+            columns_with_missing_count / column_count if column_count > 0 else 0.0
+        ),
+    )
+
+
+def make_duplicate_statistics(
+    *,
+    row_count: int,
+    duplicate_row_count: int = 0,
+    duplicate_group_row_count: int = 0,
+) -> DuplicateStatistics:
+    """Create deterministic table-level duplicate statistics."""
+
+    return DuplicateStatistics(
+        duplicate_row_count=duplicate_row_count,
+        duplicate_row_ratio=(duplicate_row_count / row_count if row_count > 0 else 0.0),
+        duplicate_group_row_count=duplicate_group_row_count,
+        duplicate_group_row_ratio=(
+            duplicate_group_row_count / row_count if row_count > 0 else 0.0
+        ),
+    )
+
+
+def make_table_profile(
+    *,
+    name: str,
+    relation_name: str,
+    row_count: int,
+    column_count: int,
+    columns: tuple[ColumnProfile, ...] = (),
+    missing_value_statistics: MissingValueStatistics | None = None,
+    duplicate_statistics: DuplicateStatistics | None = None,
+) -> TableProfile:
+    """Create a table profile with canonical table-level statistics."""
+
+    return TableProfile(
+        name=name,
+        relation_name=relation_name,
+        row_count=row_count,
+        column_count=column_count,
+        columns=columns,
+        missing_value_statistics=(
+            missing_value_statistics
+            if missing_value_statistics is not None
+            else make_missing_statistics(
+                row_count=row_count,
+                column_count=column_count,
+            )
+        ),
+        duplicate_statistics=(
+            duplicate_statistics
+            if duplicate_statistics is not None
+            else make_duplicate_statistics(row_count=row_count)
+        ),
+    )
+
+
 def test_clean_table_produces_no_quality_issues() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=3,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="amount",
@@ -42,13 +126,11 @@ def test_clean_table_produces_no_quality_issues() -> None:
 
 
 def test_missing_values_produce_column_warning() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=4,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="amount",
@@ -84,13 +166,11 @@ def test_missing_values_produce_column_warning() -> None:
 
 
 def test_empty_strings_produce_column_warning() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="customers",
         relation_name="customers",
         row_count=4,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="name",
@@ -127,13 +207,11 @@ def test_empty_strings_produce_column_warning() -> None:
 
 
 def test_constant_column_produces_info_issue() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=4,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="status",
@@ -163,13 +241,11 @@ def test_constant_column_produces_info_issue() -> None:
 
 
 def test_single_observed_value_is_not_flagged_as_constant() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=1,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="status",
@@ -190,13 +266,11 @@ def test_single_observed_value_is_not_flagged_as_constant() -> None:
 
 
 def test_all_missing_column_produces_entirely_missing_warning() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=3,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="status",
@@ -234,13 +308,11 @@ def test_all_missing_column_produces_entirely_missing_warning() -> None:
 
 
 def test_empty_column_in_zero_row_table_is_not_entirely_missing() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=0,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="status",
@@ -261,13 +333,11 @@ def test_empty_column_in_zero_row_table_is_not_entirely_missing() -> None:
 
 
 def test_high_cardinality_string_column_produces_info_issue() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="customers",
         relation_name="customers",
         row_count=20,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="email",
@@ -305,13 +375,11 @@ def test_high_cardinality_string_column_produces_info_issue() -> None:
 
 
 def test_high_cardinality_requires_minimum_observed_values() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="customers",
         relation_name="customers",
         row_count=19,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="email",
@@ -332,13 +400,11 @@ def test_high_cardinality_requires_minimum_observed_values() -> None:
 
 
 def test_high_cardinality_requires_threshold_ratio() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="customers",
         relation_name="customers",
         row_count=20,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="city",
@@ -359,13 +425,11 @@ def test_high_cardinality_requires_threshold_ratio() -> None:
 
 
 def test_high_cardinality_does_not_flag_numeric_column() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=20,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="order_id",
@@ -386,13 +450,11 @@ def test_high_cardinality_does_not_flag_numeric_column() -> None:
 
 
 def test_high_cardinality_uses_non_missing_observations() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="customers",
         relation_name="customers",
         row_count=25,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(
             ColumnProfile(
                 name="email",
@@ -416,13 +478,11 @@ def test_high_cardinality_uses_non_missing_observations() -> None:
 
 
 def test_fully_missing_rows_produce_table_warning() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=4,
         column_count=2,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(),
         missing_value_statistics=MissingValueStatistics(
             total_cell_count=8,
@@ -452,13 +512,11 @@ def test_fully_missing_rows_produce_table_warning() -> None:
 
 
 def test_duplicate_rows_produce_table_warning() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=4,
         column_count=2,
-        duplicate_row_count=2,
-        duplicate_row_ratio=0.5,
         columns=(),
         duplicate_statistics=DuplicateStatistics(
             duplicate_row_count=2,
@@ -488,13 +546,11 @@ def test_duplicate_rows_produce_table_warning() -> None:
 
 
 def test_zero_duplicate_statistics_produce_no_issue() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=3,
         column_count=1,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(),
         duplicate_statistics=DuplicateStatistics(
             duplicate_row_count=0,
@@ -510,13 +566,11 @@ def test_zero_duplicate_statistics_produce_no_issue() -> None:
 
 
 def test_multiple_findings_are_returned_deterministically() -> None:
-    profile = TableProfile(
+    profile = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=4,
         column_count=1,
-        duplicate_row_count=1,
-        duplicate_row_ratio=0.25,
         columns=(
             ColumnProfile(
                 name="status",

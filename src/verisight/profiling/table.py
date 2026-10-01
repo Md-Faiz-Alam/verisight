@@ -37,8 +37,6 @@ class TableProfiler:
             relation_name=table.relation_name,
             row_count=len(table.data),
             column_count=len(table.data.columns),
-            duplicate_row_count=duplicate_statistics.duplicate_row_count,
-            duplicate_row_ratio=duplicate_statistics.duplicate_row_ratio,
             columns=columns,
             missing_value_statistics=missing_value_statistics,
             duplicate_statistics=duplicate_statistics,

@@ -5,7 +5,12 @@ import pytest
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.summary import AnalysisSummarizer, AnalysisSummary
 from verisight.ingestion.schema import DatasetSchema
-from verisight.profiling.models import DatasetProfile, TableProfile
+from verisight.profiling.models import (
+    DatasetProfile,
+    DuplicateStatistics,
+    MissingValueStatistics,
+    TableProfile,
+)
 from verisight.quality.models import (
     QualityIssue,
     QualityIssueType,
@@ -28,9 +33,24 @@ def make_table_profile(
         relation_name=relation_name,
         row_count=row_count,
         column_count=column_count,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
         columns=(),
+        missing_value_statistics=MissingValueStatistics(
+            total_cell_count=row_count * column_count,
+            missing_cell_count=0,
+            missing_cell_ratio=0.0,
+            rows_with_missing_count=0,
+            rows_with_missing_ratio=0.0,
+            fully_missing_row_count=0,
+            fully_missing_row_ratio=0.0,
+            columns_with_missing_count=0,
+            columns_with_missing_ratio=0.0,
+        ),
+        duplicate_statistics=DuplicateStatistics(
+            duplicate_row_count=0,
+            duplicate_row_ratio=0.0,
+            duplicate_group_row_count=0,
+            duplicate_group_row_ratio=0.0,
+        ),
     )
 
 

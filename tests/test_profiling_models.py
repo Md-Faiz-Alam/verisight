@@ -13,6 +13,80 @@ from verisight.profiling.models import (
 )
 
 
+def make_missing_value_statistics(
+    *,
+    total_cell_count: int = 0,
+    missing_cell_count: int = 0,
+    missing_cell_ratio: float = 0.0,
+    rows_with_missing_count: int = 0,
+    rows_with_missing_ratio: float = 0.0,
+    fully_missing_row_count: int = 0,
+    fully_missing_row_ratio: float = 0.0,
+    columns_with_missing_count: int = 0,
+    columns_with_missing_ratio: float = 0.0,
+) -> MissingValueStatistics:
+    """Create missing-value statistics for profiling model tests."""
+
+    return MissingValueStatistics(
+        total_cell_count=total_cell_count,
+        missing_cell_count=missing_cell_count,
+        missing_cell_ratio=missing_cell_ratio,
+        rows_with_missing_count=rows_with_missing_count,
+        rows_with_missing_ratio=rows_with_missing_ratio,
+        fully_missing_row_count=fully_missing_row_count,
+        fully_missing_row_ratio=fully_missing_row_ratio,
+        columns_with_missing_count=columns_with_missing_count,
+        columns_with_missing_ratio=columns_with_missing_ratio,
+    )
+
+
+def make_duplicate_statistics(
+    *,
+    duplicate_row_count: int = 0,
+    duplicate_row_ratio: float = 0.0,
+    duplicate_group_row_count: int = 0,
+    duplicate_group_row_ratio: float = 0.0,
+) -> DuplicateStatistics:
+    """Create duplicate statistics for profiling model tests."""
+
+    return DuplicateStatistics(
+        duplicate_row_count=duplicate_row_count,
+        duplicate_row_ratio=duplicate_row_ratio,
+        duplicate_group_row_count=duplicate_group_row_count,
+        duplicate_group_row_ratio=duplicate_group_row_ratio,
+    )
+
+
+def make_table_profile(
+    *,
+    name: str = "orders",
+    relation_name: str = "orders",
+    row_count: int = 0,
+    column_count: int = 0,
+    missing_value_statistics: MissingValueStatistics | None = None,
+    duplicate_statistics: DuplicateStatistics | None = None,
+) -> TableProfile:
+    """Create a table profile with required table-level statistics."""
+
+    return TableProfile(
+        name=name,
+        relation_name=relation_name,
+        row_count=row_count,
+        column_count=column_count,
+        columns=(),
+        missing_value_statistics=(
+            missing_value_statistics
+            if missing_value_statistics is not None
+            else make_missing_value_statistics()
+        ),
+        duplicate_statistics=(
+            duplicate_statistics
+            if duplicate_statistics is not None
+            else make_duplicate_statistics()
+        ),
+    )
+
+
 def test_numeric_statistics_store_descriptive_values() -> None:
     statistics = NumericStatistics(
         minimum=10,
@@ -230,62 +304,88 @@ def test_column_profile_has_no_datetime_statistics_by_default() -> None:
 
 
 def test_table_profile_stores_table_metrics() -> None:
-    profile = TableProfile(
+    missing_statistics = make_missing_value_statistics(
+        total_cell_count=30,
+        missing_cell_count=3,
+        missing_cell_ratio=0.1,
+        rows_with_missing_count=2,
+        rows_with_missing_ratio=0.2,
+        columns_with_missing_count=1,
+        columns_with_missing_ratio=1 / 3,
+    )
+
+    duplicate_statistics = make_duplicate_statistics(
+        duplicate_row_count=2,
+        duplicate_row_ratio=0.2,
+        duplicate_group_row_count=4,
+        duplicate_group_row_ratio=0.4,
+    )
+
+    profile = make_table_profile(
         name="Orders 2026",
         relation_name="orders_2026",
         row_count=10,
         column_count=3,
-        duplicate_row_count=2,
-        duplicate_row_ratio=0.2,
-        columns=(),
+        missing_value_statistics=missing_statistics,
+        duplicate_statistics=duplicate_statistics,
     )
 
     assert profile.name == "Orders 2026"
     assert profile.relation_name == "orders_2026"
     assert profile.row_count == 10
     assert profile.column_count == 3
-    assert profile.duplicate_row_count == 2
-    assert profile.duplicate_row_ratio == 0.2
     assert profile.columns == ()
+    assert profile.missing_value_statistics is missing_statistics
+    assert profile.duplicate_statistics is duplicate_statistics
 
 
-def test_table_profile_has_no_missing_statistics_by_default() -> None:
-    profile = TableProfile(
-        name="orders",
-        relation_name="orders",
-        row_count=0,
-        column_count=0,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
-        columns=(),
+def test_table_profile_stores_required_missing_statistics() -> None:
+    statistics = make_missing_value_statistics(
+        total_cell_count=4,
+        missing_cell_count=1,
+        missing_cell_ratio=0.25,
+        rows_with_missing_count=1,
+        rows_with_missing_ratio=0.5,
+        columns_with_missing_count=1,
+        columns_with_missing_ratio=0.5,
     )
 
-    assert profile.missing_value_statistics is None
-
-
-def test_table_profile_has_no_duplicate_statistics_by_default() -> None:
-    profile = TableProfile(
-        name="orders",
-        relation_name="orders",
-        row_count=0,
-        column_count=0,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
-        columns=(),
+    profile = make_table_profile(
+        row_count=2,
+        column_count=2,
+        missing_value_statistics=statistics,
     )
 
-    assert profile.duplicate_statistics is None
+    assert profile.missing_value_statistics is statistics
+    assert profile.missing_value_statistics.missing_cell_count == 1
+    assert profile.missing_value_statistics.missing_cell_ratio == 0.25
+
+
+def test_table_profile_stores_required_duplicate_statistics() -> None:
+    statistics = make_duplicate_statistics(
+        duplicate_row_count=2,
+        duplicate_row_ratio=0.5,
+        duplicate_group_row_count=3,
+        duplicate_group_row_ratio=0.75,
+    )
+
+    profile = make_table_profile(
+        row_count=4,
+        column_count=2,
+        duplicate_statistics=statistics,
+    )
+
+    assert profile.duplicate_statistics is statistics
+    assert profile.duplicate_statistics.duplicate_row_count == 2
+    assert profile.duplicate_statistics.duplicate_row_ratio == 0.5
 
 
 def test_dataset_profile_reports_table_count() -> None:
-    table = TableProfile(
+    table = make_table_profile(
         name="orders",
         relation_name="orders",
         row_count=10,
         column_count=3,
-        duplicate_row_count=0,
-        duplicate_row_ratio=0.0,
-        columns=(),
     )
 
     profile = DatasetProfile(tables=(table,))

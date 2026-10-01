@@ -95,11 +95,9 @@ class TableProfile:
     relation_name: str
     row_count: int
     column_count: int
-    duplicate_row_count: int
-    duplicate_row_ratio: float
     columns: tuple[ColumnProfile, ...]
-    missing_value_statistics: MissingValueStatistics | None = None
-    duplicate_statistics: DuplicateStatistics | None = None
+    missing_value_statistics: MissingValueStatistics
+    duplicate_statistics: DuplicateStatistics
 
 
 @dataclass(frozen=True, slots=True)

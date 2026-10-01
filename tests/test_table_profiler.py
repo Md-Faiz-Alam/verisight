@@ -173,18 +173,13 @@ def test_profiles_complete_table() -> None:
     assert profile.column_count == 2
     assert len(profile.columns) == 2
 
-    assert profile.missing_value_statistics is not None
     assert profile.missing_value_statistics.missing_cell_count == 1
     assert profile.missing_value_statistics.missing_cell_ratio == 1 / 8
 
-    assert profile.duplicate_statistics is not None
     assert profile.duplicate_statistics.duplicate_row_count == 1
     assert profile.duplicate_statistics.duplicate_row_ratio == 0.25
     assert profile.duplicate_statistics.duplicate_group_row_count == 2
     assert profile.duplicate_statistics.duplicate_group_row_ratio == 0.5
-
-    assert profile.duplicate_row_count == 1
-    assert profile.duplicate_row_ratio == 0.25
 
 
 def test_complete_profile_contains_column_statistics() -> None:
@@ -239,16 +234,11 @@ def test_complete_profile_handles_empty_table() -> None:
     assert profile.column_count == 2
     assert len(profile.columns) == 2
 
-    assert profile.missing_value_statistics is not None
     assert profile.missing_value_statistics.total_cell_count == 0
     assert profile.missing_value_statistics.missing_cell_count == 0
 
-    assert profile.duplicate_statistics is not None
     assert profile.duplicate_statistics.duplicate_row_count == 0
     assert profile.duplicate_statistics.duplicate_group_row_count == 0
-
-    assert profile.duplicate_row_count == 0
-    assert profile.duplicate_row_ratio == 0.0
 
 
 def test_complete_profile_handles_zero_column_table() -> None:
@@ -268,13 +258,11 @@ def test_complete_profile_handles_zero_column_table() -> None:
     assert profile.column_count == 0
     assert profile.columns == ()
 
-    assert profile.missing_value_statistics is not None
     assert profile.missing_value_statistics.total_cell_count == 0
     assert profile.missing_value_statistics.missing_cell_count == 0
     assert profile.missing_value_statistics.rows_with_missing_count == 0
     assert profile.missing_value_statistics.fully_missing_row_count == 0
 
-    assert profile.duplicate_statistics is not None
     assert profile.duplicate_statistics.duplicate_row_count == 0
     assert profile.duplicate_statistics.duplicate_group_row_count == 0
 

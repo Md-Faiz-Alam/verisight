@@ -214,4 +214,4 @@ def test_dataset_analysis_result_is_immutable() -> None:
     )
 
     with pytest.raises(FrozenInstanceError):
-        result.insights = ()  # type: ignore[misc]
+        result.insights = ()  # type: ignore
