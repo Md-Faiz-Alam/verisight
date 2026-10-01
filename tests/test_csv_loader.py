@@ -260,3 +260,100 @@ def test_csv_loader_preserves_signed_integers_with_leading_zeros(
     table = loader.load(file_path)
 
     assert table.data["code"].tolist() == ["-0012", "+0034"]
+
+
+def test_csv_loader_preserves_default_na_literals_as_strings(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "literal_values.csv"
+    file_path.write_text(
+        "value\nNA\nN/A\nNone\nnull\n",
+        encoding="utf-8",
+    )
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.data["value"].tolist() == [
+        "NA",
+        "N/A",
+        "None",
+        "null",
+    ]
+    assert not table.data["value"].isna().any()
+
+
+def test_csv_loader_treats_only_empty_fields_as_missing(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "notes.csv"
+    file_path.write_text(
+        "id,note\n1,NA\n2,\n3,None\n4,null\n",
+        encoding="utf-8",
+    )
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.data.loc[0, "note"] == "NA"
+    assert pd.isna(table.data.loc[1, "note"])
+    assert table.data.loc[2, "note"] == "None"
+    assert table.data.loc[3, "note"] == "null"
+    assert table.data["note"].isna().sum() == 1
+
+
+@pytest.mark.parametrize(
+    "literal",
+    [
+        "1_000",
+        "١٢٣",
+    ],
+)
+def test_csv_loader_preserves_non_ascii_or_decorated_numeric_like_values(
+    tmp_path: Path,
+    literal: str,
+) -> None:
+    file_path = tmp_path / "values.csv"
+    file_path.write_text(
+        f"value\n{literal}\n",
+        encoding="utf-8",
+    )
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.data["value"].tolist() == [literal]
+    assert pd.api.types.is_object_dtype(table.data["value"])
+
+
+def test_csv_loader_infers_nullable_integer_columns(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "quantities.csv"
+    file_path.write_text(
+        "quantity,name\n5,Alice\n,Bob\n7,Charlie\n",
+        encoding="utf-8",
+    )
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.data.loc[0, "quantity"] == 5
+    assert pd.isna(table.data.loc[1, "quantity"])
+    assert table.data.loc[2, "quantity"] == 7
+    assert str(table.data["quantity"].dtype) == "Int64"
+
+
+def test_csv_loader_preserves_mixed_numeric_and_numeric_like_values(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "values.csv"
+    file_path.write_text(
+        "value\n1000\n1_000\n2000\n",
+        encoding="utf-8",
+    )
+
+    table = CsvLoader(Settings()).load(file_path)
+
+    assert table.data["value"].tolist() == [
+        "1000",
+        "1_000",
+        "2000",
+    ]
+    assert pd.api.types.is_object_dtype(table.data["value"])

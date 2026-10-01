@@ -13,6 +13,14 @@ from verisight.ingestion.validation import validate_file
 _MAX_SAFE_FLOAT_INTEGER = 2**53 - 1
 _BOOLEAN_LITERALS = frozenset({"true", "false"})
 
+_INTEGER_PATTERN = r"[+-]?[0-9]+"
+_NUMERIC_PATTERN = (
+    r"[+-]?(?:"
+    r"(?:[0-9]+(?:\.[0-9]*)?)"
+    r"|(?:\.[0-9]+)"
+    r")(?:[eE][+-]?[0-9]+)?"
+)
+
 
 class CsvLoader(BaseTableLoader):
     """Load CSV files into VeriSight."""
@@ -37,6 +45,8 @@ class CsvLoader(BaseTableLoader):
             data = pd.read_csv(
                 metadata.path,
                 dtype=str,
+                keep_default_na=False,
+                na_values=[""],
             )
             data = self._infer_safe_column_types(data)
         except Exception as exc:
@@ -65,22 +75,42 @@ class CsvLoader(BaseTableLoader):
                 continue
 
             values = non_missing.astype(str)
+            normalized = values.str.lower()
 
-            if cls._is_boolean_column(values):
+            if normalized.isin(_BOOLEAN_LITERALS).all():
                 converted[column] = cls._convert_boolean_series(series)
                 continue
 
-            if not values.map(cls._is_numeric_literal).all():
+            numeric_mask = values.str.fullmatch(_NUMERIC_PATTERN)
+
+            if not bool(numeric_mask.all()):
                 continue
 
-            integer_values = values.map(cls._is_integer_literal)
+            integer_mask = values.str.fullmatch(_INTEGER_PATTERN)
 
-            if integer_values.all():
-                if values.map(cls._has_significant_leading_zero).any():
+            if bool(integer_mask.all()):
+                unsigned = values.str.removeprefix("+").str.removeprefix("-")
+
+                has_leading_zero = (
+                    unsigned.str.len().gt(1) & unsigned.str.startswith("0")
+                ).any()
+
+                if bool(has_leading_zero):
                     continue
 
-                if values.map(cls._exceeds_safe_float_integer).any():
+                integers = pd.to_numeric(values, errors="raise")
+
+                if bool(integers.abs().gt(_MAX_SAFE_FLOAT_INTEGER).any()):
                     continue
+
+                numeric = pd.to_numeric(series, errors="raise")
+
+                if series.isna().any():
+                    converted[column] = numeric.astype("Int64")
+                else:
+                    converted[column] = numeric
+
+                continue
 
             converted[column] = pd.to_numeric(
                 series,
@@ -90,72 +120,19 @@ class CsvLoader(BaseTableLoader):
         return converted
 
     @staticmethod
-    def _is_boolean_column(values: pd.Series) -> bool:
-        """Return whether all values are unambiguous boolean literals."""
-
-        normalized = values.str.lower()
-
-        return bool(normalized.isin(_BOOLEAN_LITERALS).all())
-
-    @staticmethod
     def _convert_boolean_series(series: pd.Series) -> pd.Series:
         """Convert unambiguous boolean literals while preserving missing values."""
 
         normalized = series.str.lower()
 
-        if series.isna().any():
-            return normalized.map(
-                {
-                    "true": True,
-                    "false": False,
-                }
-            ).astype("boolean")
-
-        return normalized.map(
+        converted = normalized.map(
             {
                 "true": True,
                 "false": False,
             }
-        ).astype(bool)
+        )
 
-    @staticmethod
-    def _is_numeric_literal(value: str) -> bool:
-        """Return whether a value is a finite numeric literal."""
+        if series.isna().any():
+            return converted.astype("boolean")
 
-        try:
-            numeric_value = float(value)
-        except ValueError:
-            return False
-
-        return pd.notna(numeric_value) and numeric_value not in {
-            float("inf"),
-            float("-inf"),
-        }
-
-    @staticmethod
-    def _is_integer_literal(value: str) -> bool:
-        """Return whether a value is a base-10 integer literal."""
-
-        unsigned = value
-
-        if value.startswith(("+", "-")):
-            unsigned = value[1:]
-
-        return bool(unsigned) and unsigned.isdigit()
-
-    @staticmethod
-    def _has_significant_leading_zero(value: str) -> bool:
-        """Return whether an integer literal contains significant leading zeros."""
-
-        unsigned = value
-
-        if value.startswith(("+", "-")):
-            unsigned = value[1:]
-
-        return len(unsigned) > 1 and unsigned.startswith("0")
-
-    @staticmethod
-    def _exceeds_safe_float_integer(value: str) -> bool:
-        """Return whether an integer exceeds exact IEEE-754 float precision."""
-
-        return abs(int(value)) > _MAX_SAFE_FLOAT_INTEGER
+        return converted.astype(bool)
