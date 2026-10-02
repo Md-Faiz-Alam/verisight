@@ -6,6 +6,8 @@ from pathlib import Path
 from verisight.analysis.result import AnalysisResultBuilder, DatasetAnalysisResult
 from verisight.analysis.service import DatasetAnalyzer
 from verisight.config import Settings
+from verisight.execution.gemini import GeminiTextGenerationClient
+from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.models import QueryResult
 from verisight.execution.planning import QueryPlanner
 from verisight.execution.service import AnalyticalExecutionService
@@ -27,7 +29,31 @@ class VeriSight:
         self._dataset_loader = DatasetLoader(resolved_settings)
         self._dataset_analyzer = DatasetAnalyzer()
         self._result_builder = AnalysisResultBuilder()
-        self._planner = planner
+        self._planner = self._resolve_planner(
+            settings=resolved_settings,
+            planner=planner,
+        )
+
+    @staticmethod
+    def _resolve_planner(
+        *,
+        settings: Settings,
+        planner: QueryPlanner | None,
+    ) -> QueryPlanner | None:
+        """Resolve an explicitly configured or Gemini-backed query planner."""
+
+        if planner is not None:
+            return planner
+
+        if settings.gemini_api_key is None or not settings.gemini_api_key.strip():
+            return None
+
+        client = GeminiTextGenerationClient(
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model,
+        )
+
+        return GenerativeQueryPlanner(client)
 
     def analyze(
         self,

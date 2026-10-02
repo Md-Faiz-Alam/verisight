@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
@@ -6,6 +7,7 @@ import pytest
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.config import Settings
 from verisight.execution.exceptions import QueryExecutionError, QueryPlanningError
+from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.service import VeriSight
 
@@ -264,11 +266,13 @@ def test_ask_requires_configured_query_planner(
         }
     ).to_csv(path, index=False)
 
+    settings = Settings(gemini_api_key=None)
+
     with pytest.raises(
         QueryPlanningError,
         match="No query planner is configured.",
     ):
-        VeriSight().ask(
+        VeriSight(settings=settings).ask(
             [path],
             "How many orders are there?",
         )
@@ -300,3 +304,90 @@ def test_public_ask_preserves_safe_execution_validation(
             [path],
             "Delete the orders table.",
         )
+
+
+def test_verisight_builds_gemini_planner_from_settings() -> None:
+    settings = Settings(
+        gemini_api_key="test-api-key",
+        gemini_model="test-model",
+    )
+
+    with patch("verisight.service.GeminiTextGenerationClient") as client_class:
+        service = VeriSight(settings=settings)
+
+    client_class.assert_called_once_with(
+        api_key="test-api-key",
+        model="test-model",
+    )
+
+    assert isinstance(service._planner, GenerativeQueryPlanner)
+
+
+def test_explicit_planner_takes_precedence_over_gemini_settings() -> None:
+    planner = StubQueryPlanner()
+
+    settings = Settings(
+        gemini_api_key="test-api-key",
+        gemini_model="test-model",
+    )
+
+    with patch("verisight.service.GeminiTextGenerationClient") as client_class:
+        service = VeriSight(
+            settings=settings,
+            planner=planner,
+        )
+
+    client_class.assert_not_called()
+    assert service._planner is planner
+
+
+def test_verisight_does_not_build_gemini_planner_without_api_key() -> None:
+    settings = Settings(
+        gemini_api_key=None,
+    )
+
+    with patch("verisight.service.GeminiTextGenerationClient") as client_class:
+        service = VeriSight(settings=settings)
+
+    client_class.assert_not_called()
+    assert service._planner is None
+
+
+def test_default_gemini_planner_can_answer_question(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "orders.csv"
+
+    pd.DataFrame(
+        {
+            "order_id": [1, 2, 3],
+            "amount": [10.0, 20.0, 30.0],
+        }
+    ).to_csv(path, index=False)
+
+    generated_client = MagicMock()
+    generated_client.generate.return_value = (
+        "SELECT COUNT(*) AS order_count, SUM(amount) AS total_amount FROM orders"
+    )
+
+    settings = Settings(
+        gemini_api_key="test-api-key",
+        gemini_model="test-model",
+    )
+
+    with patch(
+        "verisight.service.GeminiTextGenerationClient",
+        return_value=generated_client,
+    ):
+        result = VeriSight(settings=settings).ask(
+            [path],
+            "How many orders are there and what is the total amount?",
+        )
+
+    assert result.columns == (
+        "order_count",
+        "total_amount",
+    )
+    assert result.rows == ((3, 60.0),)
+
+    generated_client.generate.assert_called_once()
