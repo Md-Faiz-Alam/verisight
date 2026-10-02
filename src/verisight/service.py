@@ -7,6 +7,7 @@ from verisight.analysis.result import AnalysisResultBuilder, DatasetAnalysisResu
 from verisight.analysis.service import DatasetAnalyzer
 from verisight.config import Settings
 from verisight.execution.models import QueryResult
+from verisight.execution.planning import QueryPlanner
 from verisight.execution.service import AnalyticalExecutionService
 from verisight.ingestion.service import DatasetLoader
 
@@ -14,7 +15,11 @@ from verisight.ingestion.service import DatasetLoader
 class VeriSight:
     """Provide the public VeriSight analysis and execution workflows."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        planner: QueryPlanner | None = None,
+    ) -> None:
         """Initialize the VeriSight facade."""
 
         resolved_settings = settings if settings is not None else Settings()
@@ -22,6 +27,7 @@ class VeriSight:
         self._dataset_loader = DatasetLoader(resolved_settings)
         self._dataset_analyzer = DatasetAnalyzer()
         self._result_builder = AnalysisResultBuilder()
+        self._planner = planner
 
     def analyze(
         self,
@@ -45,3 +51,18 @@ class VeriSight:
         execution_service = AnalyticalExecutionService(dataset)
 
         return execution_service.execute(query)
+
+    def ask(
+        self,
+        paths: Iterable[str | Path],
+        question: str,
+    ) -> QueryResult:
+        """Answer a natural-language analytical question against dataset files."""
+
+        dataset = self._dataset_loader.load(paths)
+        execution_service = AnalyticalExecutionService(
+            dataset,
+            planner=self._planner,
+        )
+
+        return execution_service.ask(question)

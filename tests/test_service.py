@@ -1,10 +1,28 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.config import Settings
+from verisight.execution.exceptions import QueryExecutionError, QueryPlanningError
+from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.service import VeriSight
+
+
+class StubQueryPlanner:
+    """Query planner used by public service integration tests."""
+
+    def plan(self, request: QueryRequest) -> QueryPlan:
+        return QueryPlan(
+            question=request.question,
+            sql="""
+            SELECT
+                COUNT(*) AS order_count,
+                SUM(amount) AS total_amount
+            FROM orders
+            """,
+        )
 
 
 def test_analyzes_single_csv_file(tmp_path: Path) -> None:
@@ -209,3 +227,76 @@ def test_executes_query_across_multiple_files(tmp_path: Path) -> None:
         ("Alice", 30.0),
         ("Bob", 50.0),
     )
+
+
+def test_asks_natural_language_question_against_csv_file(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "orders.csv"
+
+    pd.DataFrame(
+        {
+            "order_id": [1, 2, 3],
+            "amount": [10.0, 20.0, 30.0],
+        }
+    ).to_csv(path, index=False)
+
+    result = VeriSight(planner=StubQueryPlanner()).ask(
+        [path],
+        "How many orders are there and what is the total amount?",
+    )
+
+    assert result.columns == (
+        "order_count",
+        "total_amount",
+    )
+    assert result.rows == ((3, 60.0),)
+
+
+def test_ask_requires_configured_query_planner(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "orders.csv"
+
+    pd.DataFrame(
+        {
+            "order_id": [1, 2, 3],
+        }
+    ).to_csv(path, index=False)
+
+    with pytest.raises(
+        QueryPlanningError,
+        match="No query planner is configured.",
+    ):
+        VeriSight().ask(
+            [path],
+            "How many orders are there?",
+        )
+
+
+def test_public_ask_preserves_safe_execution_validation(
+    tmp_path: Path,
+) -> None:
+    class UnsafeQueryPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="DROP TABLE orders",
+            )
+
+    path = tmp_path / "orders.csv"
+
+    pd.DataFrame(
+        {
+            "order_id": [1, 2, 3],
+        }
+    ).to_csv(path, index=False)
+
+    with pytest.raises(
+        QueryExecutionError,
+        match="Only read-only analytical SELECT queries are allowed.",
+    ):
+        VeriSight(planner=UnsafeQueryPlanner()).ask(
+            [path],
+            "Delete the orders table.",
+        )
