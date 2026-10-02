@@ -133,3 +133,79 @@ def test_verisight_is_available_from_package_root() -> None:
     from verisight import VeriSight as PublicVeriSight
 
     assert PublicVeriSight is VeriSight
+
+
+def test_executes_query_against_single_csv_file(tmp_path: Path) -> None:
+    path = tmp_path / "orders.csv"
+
+    pd.DataFrame(
+        {
+            "order_id": [1, 2, 3],
+            "amount": [10.0, 20.0, 30.0],
+        }
+    ).to_csv(path, index=False)
+
+    result = VeriSight().execute(
+        [path],
+        """
+        SELECT order_id, amount
+        FROM orders
+        WHERE amount >= 20
+        ORDER BY order_id
+        """,
+    )
+
+    assert result.columns == (
+        "order_id",
+        "amount",
+    )
+    assert result.rows == (
+        (2, 20.0),
+        (3, 30.0),
+    )
+
+
+def test_executes_query_across_multiple_files(tmp_path: Path) -> None:
+    customers_path = tmp_path / "customers.csv"
+    orders_path = tmp_path / "orders.csv"
+
+    pd.DataFrame(
+        {
+            "customer_id": [1, 2],
+            "name": ["Alice", "Bob"],
+        }
+    ).to_csv(customers_path, index=False)
+
+    pd.DataFrame(
+        {
+            "order_id": [10, 20, 30],
+            "customer_id": [1, 1, 2],
+            "amount": [10.0, 20.0, 50.0],
+        }
+    ).to_csv(orders_path, index=False)
+
+    result = VeriSight().execute(
+        [
+            customers_path,
+            orders_path,
+        ],
+        """
+        SELECT
+            customers.name,
+            SUM(orders.amount) AS total_amount
+        FROM customers
+        JOIN orders
+            ON customers.customer_id = orders.customer_id
+        GROUP BY customers.name
+        ORDER BY customers.name
+        """,
+    )
+
+    assert result.columns == (
+        "name",
+        "total_amount",
+    )
+    assert result.rows == (
+        ("Alice", 30.0),
+        ("Bob", 50.0),
+    )
