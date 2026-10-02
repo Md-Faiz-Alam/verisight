@@ -239,7 +239,40 @@ Insight generation is deterministic. Generative AI is not required to create the
 
 `AnalysisResultBuilder` constructs this result from an existing dataset analysis.
 
-This unified result is intended to become the boundary consumed by future facades, reporting systems, APIs, analytical execution, and AI-assisted components.
+The unified result is the primary deterministic result boundary exposed by the high-level VeriSight facade and is designed for consumption by reporting systems, APIs, analytical execution, persistence layers, and AI-assisted components.
+
+### Public Analysis Facade
+
+`VeriSight` provides the high-level Python entry point for dataset analysis.
+
+```python
+from verisight import VeriSight
+
+result = VeriSight().analyze(["data/customers.csv"])
+```
+The facade coordinates existing deterministic components rather than duplicating their responsibilities:
+
+```text
+VeriSight
+   |
+   v
+DatasetLoader
+   |
+   v
+LoadedDataset
+   |
+   v
+DatasetAnalyzer
+   |
+   v
+DatasetAnalysis
+   |
+   v
+AnalysisResultBuilder
+   |
+   v
+DatasetAnalysisResult
+```
 
 ---
 
@@ -355,13 +388,13 @@ This keeps the deterministic analytical core independently testable and reusable
 
 ## Current Boundary
 
-The current architecture ends at the unified deterministic analysis result.
+The current architecture exposes the unified deterministic analysis result through the high-level `VeriSight` Python facade.
 
-The repository does not yet provide the planned public analysis facade, DuckDB analytical execution layer, reporting interface, external API, or generative-AI orchestration layer.
+The repository does not yet provide the planned DuckDB analytical execution layer, reporting interface, external API, or generative-AI orchestration layer.
 
-Those capabilities should be introduced above the existing deterministic contracts rather than embedded into ingestion, profiling, or quality-rule implementations.
+Those capabilities should be introduced above the existing deterministic contracts and public analysis facade rather than embedded into ingestion, profiling, or quality-rule implementations.
 
-This boundary is intentional: VeriSight first establishes reproducible analytical facts and structured evidence, then allows higher-level systems to consume them.
+This boundary is intentional: VeriSight first establishes reproducible analytical facts and structured evidence, exposes them through a stable high-level analysis entry point, and allows future higher-level systems to consume those results.
 
 ---
 

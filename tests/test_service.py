@@ -1,0 +1,135 @@
+from pathlib import Path
+
+import pandas as pd
+
+from verisight.analysis.result import DatasetAnalysisResult
+from verisight.config import Settings
+from verisight.service import VeriSight
+
+
+def test_analyzes_single_csv_file(tmp_path: Path) -> None:
+    path = tmp_path / "orders.csv"
+
+    pd.DataFrame(
+        {
+            "order_id": [1, 2, 3],
+            "amount": [10.0, 20.0, 30.0],
+        }
+    ).to_csv(path, index=False)
+
+    result = VeriSight().analyze([path])
+
+    assert isinstance(result, DatasetAnalysisResult)
+    assert result.analysis.schema.table_count == 1
+    assert result.analysis.profile.table_count == 1
+
+    table_schema = result.analysis.schema.tables[0]
+    table_profile = result.analysis.profile.tables[0]
+
+    assert table_schema.name == "orders"
+    assert table_profile.name == "orders"
+    assert table_schema.relation_name == "orders"
+    assert table_profile.relation_name == "orders"
+
+
+def test_analyzes_multiple_files(tmp_path: Path) -> None:
+    customers_path = tmp_path / "customers.csv"
+    orders_path = tmp_path / "orders.csv"
+
+    pd.DataFrame(
+        {
+            "customer_id": [1, 2],
+            "name": ["Alice", "Bob"],
+        }
+    ).to_csv(customers_path, index=False)
+
+    pd.DataFrame(
+        {
+            "order_id": [10, 20],
+            "customer_id": [1, 2],
+        }
+    ).to_csv(orders_path, index=False)
+
+    result = VeriSight().analyze(
+        [
+            customers_path,
+            orders_path,
+        ]
+    )
+
+    assert result.analysis.schema.table_count == 2
+    assert result.analysis.profile.table_count == 2
+
+    assert tuple(table.relation_name for table in result.analysis.schema.tables) == (
+        "customers",
+        "orders",
+    )
+
+    assert tuple(table.relation_name for table in result.analysis.profile.tables) == (
+        "customers",
+        "orders",
+    )
+
+
+def test_analyze_builds_summary_and_insights(tmp_path: Path) -> None:
+    path = tmp_path / "orders.csv"
+
+    pd.DataFrame(
+        {
+            "order_id": [1, 2, 3],
+            "status": ["open", "open", "closed"],
+        }
+    ).to_csv(path, index=False)
+
+    result = VeriSight().analyze([path])
+
+    assert result.summary.table_count == 1
+    assert result.insight_count == len(result.insights)
+
+
+def test_analyze_preserves_quality_issues(tmp_path: Path) -> None:
+    path = tmp_path / "orders.csv"
+
+    pd.DataFrame(
+        {
+            "order_id": [1, 2, 3],
+            "amount": [10.0, None, 30.0],
+        }
+    ).to_csv(path, index=False)
+
+    result = VeriSight().analyze([path])
+
+    assert result.issue_count > 0
+    assert result.issue_count == len(result.analysis.issues)
+
+
+def test_analyzes_with_explicit_settings(tmp_path: Path) -> None:
+    path = tmp_path / "orders.csv"
+
+    pd.DataFrame(
+        {
+            "order_id": [1, 2, 3],
+        }
+    ).to_csv(path, index=False)
+
+    service = VeriSight(Settings())
+
+    result = service.analyze([path])
+
+    assert result.analysis.schema.table_count == 1
+    assert result.analysis.profile.table_count == 1
+
+
+def test_empty_input_produces_empty_analysis_result() -> None:
+    result = VeriSight().analyze([])
+
+    assert result.analysis.schema.table_count == 0
+    assert result.analysis.profile.table_count == 0
+    assert result.issue_count == 0
+    assert result.insight_count == len(result.insights)
+
+
+def test_verisight_is_available_from_package_root() -> None:
+    from verisight import VeriSight as PublicVeriSight
+
+    assert PublicVeriSight is VeriSight

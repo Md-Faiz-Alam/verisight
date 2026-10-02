@@ -20,8 +20,9 @@ VeriSight currently provides the core deterministic data-analysis pipeline:
 - deterministic analytical summaries
 - deterministic analytical insights
 - immutable structured evidence
-- JSON-safe evidence conversion
+- JSON-safe domain serialization
 - unified analysis results
+- high-level Python analysis facade
 
 The project is under active development and does not yet expose a public CLI, HTTP API, or user interface.
 
@@ -61,46 +62,41 @@ The development dependencies include:
 
 ## Quick Start
 
-VeriSight currently exposes its deterministic analysis pipeline through Python APIs.
+VeriSight exposes a high-level Python API for deterministic dataset analysis.
 
 ```python
-from verisight.analysis.result import AnalysisResultBuilder
-from verisight.analysis.service import DatasetAnalyzer
-from verisight.config import Settings
-from verisight.ingestion.service import DatasetLoader
+from verisight import VeriSight
 
-settings = Settings()
-
-dataset = DatasetLoader(settings).load(["data/customers.csv"])
-analysis = DatasetAnalyzer().analyze(dataset)
-result = AnalysisResultBuilder().build(analysis)
+result = VeriSight().analyze(["data/customers.csv"])
 
 print(result.summary)
 print(result.insights)
 ```
 
-The pipeline is intentionally explicit:
+`VeriSight.analyze()` accepts one or more supported file paths and returns a complete `DatasetAnalysisResult`.
+
+The public facade coordinates the deterministic pipeline:
 
 ```text
-DatasetLoader
-    |
-    v
-LoadedDataset
-    |
-    v
-DatasetAnalyzer
-    |
-    v
-DatasetAnalysis
-    |
-    v
-AnalysisResultBuilder
-    |
-    v
+Files
+  |
+  v
+VeriSight
+  |
+  v
+Dataset Loading
+  |
+  v
+Dataset Analysis
+  |
+  v
+Result Construction
+  |
+  v
 DatasetAnalysisResult
 ```
 
-This keeps ingestion, deterministic analysis, and result construction as separate contracts.
+The lower-level ingestion, analysis, and result-building components remain separate internal contracts and can still be used directly when finer-grained control is required.
 
 ## Supported Data Sources
 
@@ -416,7 +412,8 @@ src/verisight/
 ├── evidence.py
 ├── exceptions.py
 ├── logging.py
-└── serialization.py
+├── serialization.py
+└── service.py
 ```
 
 Additional architecture and development documentation is available under `docs/`.
@@ -446,9 +443,9 @@ pytest --cov=verisight --cov-report=term-missing --cov-fail-under=100
 The current verified deterministic-foundation baseline passes:
 
 ```text
-360 tests passed
-894 statements
-170 branches
+406 tests passed
+969 statements
+208 branches
 100% test coverage
 ```
 
@@ -558,11 +555,10 @@ These limitations are documented explicitly so future improvements can address t
 
 ## Roadmap
 
-The deterministic analysis foundation is complete through the current Phase 3 milestone.
+The deterministic analysis foundation and high-level Python analysis facade are now implemented.
 
-The next development phase is expected to build higher-level capabilities on top of these contracts, including:
+The next development work is expected to build additional higher-level capabilities on top of these contracts, including:
 
-- a public analysis facade
 - analytical execution
 - DuckDB-backed querying
 - verification
@@ -570,9 +566,9 @@ The next development phase is expected to build higher-level capabilities on top
 - future API integration
 - AI-assisted analytical workflows
 
-These capabilities are future work and are not part of the current public implementation.
+These capabilities remain future work and are not part of the current implementation.
 
-The existing deterministic contracts are intended to remain the foundation beneath these higher-level layers rather than being replaced by them.
+The existing deterministic contracts and public analysis facade are intended to remain the foundation beneath these higher-level layers rather than being replaced by them.
 
 ## License
 

@@ -213,12 +213,12 @@ pytest --cov=verisight --cov-report=term-missing --cov-fail-under=100
 
 All commands must pass.
 
-The current deterministic foundation has been validated with:
+The current deterministic foundation and public analysis facade have been validated with:
 
 ```text
-360 tests passed
-894 statements
-170 branches
+406 tests passed
+969 statements
+208 branches
 100% test coverage
 ```
 
