@@ -1,10 +1,16 @@
 from pathlib import Path
 
+import duckdb
 import pandas as pd
 import pytest
 
 from verisight.execution.engine import DuckDBExecutor
-from verisight.execution.exceptions import QueryExecutionError
+from verisight.execution.exceptions import (
+    QueryExecutionError,
+    QueryResultLimitError,
+    QueryRuntimeError,
+    QueryValidationError,
+)
 from verisight.ingestion.models import (
     LoadedDataset,
     LoadedTable,
@@ -240,7 +246,7 @@ def test_query_can_return_no_rows() -> None:
     assert result.is_empty is True
 
 
-def test_invalid_sql_raises_query_execution_error() -> None:
+def test_invalid_sql_raises_query_validation_error() -> None:
     dataset = _make_dataset(
         name="Orders",
         relation_name="orders",
@@ -252,7 +258,7 @@ def test_invalid_sql_raises_query_execution_error() -> None:
     )
 
     with pytest.raises(
-        QueryExecutionError,
+        QueryValidationError,
         match="Analytical query validation failed:",
     ):
         DuckDBExecutor().execute(
@@ -261,7 +267,7 @@ def test_invalid_sql_raises_query_execution_error() -> None:
         )
 
 
-def test_unknown_relation_raises_query_execution_error() -> None:
+def test_unknown_relation_raises_query_runtime_error() -> None:
     dataset = _make_dataset(
         name="Orders",
         relation_name="orders",
@@ -273,13 +279,25 @@ def test_unknown_relation_raises_query_execution_error() -> None:
     )
 
     with pytest.raises(
-        QueryExecutionError,
+        QueryRuntimeError,
         match="Analytical query execution failed:",
     ):
         DuckDBExecutor().execute(
             dataset,
             "SELECT * FROM missing_relation",
         )
+
+
+def test_validation_error_is_query_execution_error() -> None:
+    error = QueryValidationError("Invalid query")
+
+    assert isinstance(error, QueryExecutionError)
+
+
+def test_runtime_error_is_query_execution_error() -> None:
+    error = QueryRuntimeError("Execution failed")
+
+    assert isinstance(error, QueryExecutionError)
 
 
 def test_executor_remains_usable_after_failed_query() -> None:
@@ -295,7 +313,7 @@ def test_executor_remains_usable_after_failed_query() -> None:
 
     executor = DuckDBExecutor()
 
-    with pytest.raises(QueryExecutionError):
+    with pytest.raises(QueryRuntimeError):
         executor.execute(
             dataset,
             "SELECT * FROM missing_relation",
@@ -314,3 +332,200 @@ def test_executor_remains_usable_after_failed_query() -> None:
         (1,),
         (2,),
     )
+
+
+def test_executor_cannot_read_external_text_file(
+    tmp_path: Path,
+) -> None:
+    secret_path = tmp_path / "secret.txt"
+    secret_path.write_text(
+        "verisight-secret-value",
+        encoding="utf-8",
+    )
+
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2],
+            }
+        ),
+    )
+
+    escaped_path = secret_path.as_posix().replace("'", "''")
+
+    query = f"SELECT content FROM read_text('{escaped_path}')"
+
+    with pytest.raises(
+        (
+            QueryValidationError,
+            QueryRuntimeError,
+        )
+    ):
+        DuckDBExecutor().execute(
+            dataset,
+            query,
+        )
+
+
+def test_executor_connection_disables_external_access(
+    tmp_path: Path,
+) -> None:
+    secret_path = tmp_path / "secret.txt"
+    secret_path.write_text(
+        "verisight-secret-value",
+        encoding="utf-8",
+    )
+
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2],
+            }
+        ),
+    )
+
+    escaped_path = secret_path.as_posix().replace("'", "''")
+
+    executor = DuckDBExecutor()
+
+    with executor._connection(dataset) as connection:
+        result = connection.execute(
+            """
+            SELECT order_id
+            FROM orders
+            ORDER BY order_id
+            """
+        ).fetchall()
+
+        assert result == [
+            (1,),
+            (2,),
+        ]
+
+        with pytest.raises(
+            duckdb.PermissionException,
+            match="file system operations are disabled by configuration",
+        ):
+            connection.execute(
+                f"SELECT content FROM read_text('{escaped_path}')"
+            ).fetchall()
+
+
+def test_executor_rejects_non_positive_result_limit() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Maximum query result rows must be positive.",
+    ):
+        DuckDBExecutor(max_result_rows=0)
+
+
+def test_executor_allows_result_exactly_at_row_limit() -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2, 3],
+            }
+        ),
+    )
+
+    result = DuckDBExecutor(
+        max_result_rows=3,
+    ).execute(
+        dataset,
+        """
+        SELECT order_id
+        FROM orders
+        ORDER BY order_id
+        """,
+    )
+
+    assert result.rows == (
+        (1,),
+        (2,),
+        (3,),
+    )
+
+
+def test_executor_rejects_result_exceeding_row_limit() -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2, 3],
+            }
+        ),
+    )
+
+    with pytest.raises(
+        QueryResultLimitError,
+        match="Analytical query result exceeded the maximum of 2 rows.",
+    ):
+        DuckDBExecutor(
+            max_result_rows=2,
+        ).execute(
+            dataset,
+            """
+            SELECT order_id
+            FROM orders
+            ORDER BY order_id
+            """,
+        )
+
+
+def test_result_limit_error_is_query_execution_error() -> None:
+    error = QueryResultLimitError("Result exceeded configured limit.")
+
+    assert isinstance(error, QueryExecutionError)
+
+
+def test_result_limit_error_is_not_query_runtime_error() -> None:
+    error = QueryResultLimitError("Result exceeded configured limit.")
+
+    assert not isinstance(error, QueryRuntimeError)
+
+
+def test_executor_rejects_non_positive_memory_limit() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Query memory limit must be positive.",
+    ):
+        DuckDBExecutor(memory_limit_mb=0)
+
+
+def test_executor_connection_applies_memory_limit() -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2],
+            }
+        ),
+    )
+
+    executor = DuckDBExecutor(
+        memory_limit_mb=64,
+    )
+
+    with executor._connection(dataset) as connection:
+        result = connection.execute(
+            """
+            SELECT value
+            FROM duckdb_settings()
+            WHERE name = 'memory_limit'
+            """
+        ).fetchone()
+
+    assert result is not None
+
+    memory_limit = str(result[0])
+
+    assert memory_limit
+    assert memory_limit != "unlimited"

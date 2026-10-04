@@ -44,6 +44,36 @@ def test_parses_generic_markdown_fence() -> None:
     assert sql == ("SELECT COUNT(*) AS order_count\n        FROM orders")
 
 
+def test_accepts_single_statement_with_trailing_semicolon() -> None:
+    sql = QueryResponseParser().parse("SELECT COUNT(*) AS order_count FROM orders;")
+
+    assert sql == "SELECT COUNT(*) AS order_count FROM orders;"
+
+
+def test_accepts_semicolon_inside_single_quoted_string() -> None:
+    sql = QueryResponseParser().parse("SELECT 'alpha;beta' AS value FROM orders")
+
+    assert sql == "SELECT 'alpha;beta' AS value FROM orders"
+
+
+def test_accepts_semicolon_inside_escaped_single_quoted_string() -> None:
+    sql = QueryResponseParser().parse("SELECT 'alpha'';''beta' AS value FROM orders")
+
+    assert sql == "SELECT 'alpha'';''beta' AS value FROM orders"
+
+
+def test_accepts_semicolon_inside_double_quoted_identifier() -> None:
+    sql = QueryResponseParser().parse('SELECT "amount;value" FROM orders')
+
+    assert sql == 'SELECT "amount;value" FROM orders'
+
+
+def test_accepts_semicolon_inside_escaped_double_quoted_identifier() -> None:
+    sql = QueryResponseParser().parse('SELECT "amount"";""value" FROM orders')
+
+    assert sql == 'SELECT "amount"";""value" FROM orders'
+
+
 @pytest.mark.parametrize(
     "response",
     [
@@ -91,9 +121,37 @@ def test_rejects_invalid_fenced_response(response: str) -> None:
         QueryResponseParser().parse(response)
 
 
+@pytest.mark.parametrize(
+    "response",
+    [
+        "SELECT 1; SELECT 2",
+        "SELECT 1;\nSELECT 2",
+        "SELECT 1;\n\nSELECT 2;",
+        "```sql\nSELECT 1;\nSELECT 2\n```",
+        "```\nSELECT 1;\nSELECT 2\n```",
+    ],
+)
+def test_rejects_multiple_sql_statements(response: str) -> None:
+    with pytest.raises(
+        QueryPlanningError,
+        match="Query planner returned multiple SQL statements.",
+    ):
+        QueryResponseParser().parse(response)
+
+
 def test_require_sql_rejects_empty_payload() -> None:
     with pytest.raises(
         QueryPlanningError,
         match="Query planner returned an empty SQL query.",
     ):
         QueryResponseParser._require_sql("   ")
+
+
+def test_require_single_statement_rejects_multiple_statements() -> None:
+    with pytest.raises(
+        QueryPlanningError,
+        match="Query planner returned multiple SQL statements.",
+    ):
+        QueryResponseParser._require_single_statement(
+            "SELECT COUNT(*) FROM orders; SELECT 1"
+        )

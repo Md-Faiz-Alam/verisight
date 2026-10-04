@@ -58,13 +58,68 @@ class QueryResponseParser:
 
         return self._require_sql(normalized)
 
-    @staticmethod
-    def _require_sql(sql: str) -> str:
-        """Return normalized SQL or reject an empty SQL payload."""
+    @classmethod
+    def _require_sql(cls, sql: str) -> str:
+        """Return one normalized SQL statement or reject invalid output."""
 
         normalized = sql.strip()
 
         if not normalized:
             raise QueryPlanningError("Query planner returned an empty SQL query.")
 
+        cls._require_single_statement(normalized)
+
         return normalized
+
+    @staticmethod
+    def _require_single_statement(sql: str) -> None:
+        """Require planner output to contain at most one SQL statement."""
+
+        in_single_quote = False
+        in_double_quote = False
+        index = 0
+
+        while index < len(sql):
+            character = sql[index]
+
+            if in_single_quote:
+                if character == "'":
+                    if index + 1 < len(sql) and sql[index + 1] == "'":
+                        index += 2
+                        continue
+
+                    in_single_quote = False
+
+                index += 1
+                continue
+
+            if in_double_quote:
+                if character == '"':
+                    if index + 1 < len(sql) and sql[index + 1] == '"':
+                        index += 2
+                        continue
+
+                    in_double_quote = False
+
+                index += 1
+                continue
+
+            if character == "'":
+                in_single_quote = True
+                index += 1
+                continue
+
+            if character == '"':
+                in_double_quote = True
+                index += 1
+                continue
+
+            if character == ";":
+                remaining = sql[index + 1 :].strip()
+
+                if remaining:
+                    raise QueryPlanningError(
+                        "Query planner returned multiple SQL statements."
+                    )
+
+            index += 1

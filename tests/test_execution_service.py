@@ -6,8 +6,13 @@ import pytest
 from verisight.execution.exceptions import (
     QueryExecutionError,
     QueryPlanningError,
+    QueryResultLimitError,
+    QueryRuntimeError,
+    QueryValidationError,
 )
+from verisight.execution.execution import QueryExecution
 from verisight.execution.planning import QueryPlan, QueryRequest
+from verisight.execution.repair import QueryRepairRequest
 from verisight.execution.service import AnalyticalExecutionService
 from verisight.ingestion.models import (
     LoadedDataset,
@@ -271,3 +276,354 @@ def test_service_rejects_plan_for_different_question() -> None:
         match="Query planner returned a plan for a different question.",
     ):
         service.plan("What is the total order amount?")
+
+
+def test_service_repairs_runtime_failure_once() -> None:
+    class BrokenPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT SUM(missing_amount) AS total_amount FROM orders",
+            )
+
+    class StubRepairer:
+        def __init__(self) -> None:
+            self.requests: list[QueryRepairRequest] = []
+
+        def repair(self, request: QueryRepairRequest) -> QueryPlan:
+            self.requests.append(request)
+
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT SUM(amount) AS total_amount FROM orders",
+            )
+
+    repairer = StubRepairer()
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=BrokenPlanner(),
+        repairer=repairer,
+    )
+
+    result = service.ask("What is the total amount?")
+
+    assert result.columns == ("total_amount",)
+    assert result.rows == ((60.0,),)
+
+    assert len(repairer.requests) == 1
+
+    repair_request = repairer.requests[0]
+
+    assert repair_request.question == "What is the total amount?"
+    assert repair_request.failed_sql == (
+        "SELECT SUM(missing_amount) AS total_amount FROM orders"
+    )
+    assert "missing_amount" in repair_request.error
+    assert repair_request.context is service.context
+
+
+def test_service_does_not_repair_validation_failure() -> None:
+    class UnsafePlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="DROP TABLE orders",
+            )
+
+    class FailingRepairer:
+        def repair(self, request: QueryRepairRequest) -> QueryPlan:
+            raise AssertionError("Repairer must not be called.")
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=UnsafePlanner(),
+        repairer=FailingRepairer(),
+    )
+
+    with pytest.raises(
+        QueryValidationError,
+        match="Only read-only analytical SELECT queries are allowed.",
+    ):
+        service.ask("Delete the orders table")
+
+
+def test_service_propagates_runtime_failure_without_repairer() -> None:
+    class BrokenPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT missing_amount FROM orders",
+            )
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=BrokenPlanner(),
+    )
+
+    with pytest.raises(
+        QueryRuntimeError,
+        match="Analytical query execution failed:",
+    ):
+        service.ask("Show the amount.")
+
+
+def test_service_does_not_retry_failed_repair() -> None:
+    class BrokenPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT missing_amount FROM orders",
+            )
+
+    class BrokenRepairer:
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        def repair(self, request: QueryRepairRequest) -> QueryPlan:
+            self.call_count += 1
+
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT still_missing FROM orders",
+            )
+
+    repairer = BrokenRepairer()
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=BrokenPlanner(),
+        repairer=repairer,
+    )
+
+    with pytest.raises(
+        QueryRuntimeError,
+        match="Analytical query execution failed:",
+    ):
+        service.ask("Show the amount.")
+
+    assert repairer.call_count == 1
+
+
+def test_repaired_query_still_passes_through_execution_validation() -> None:
+    class BrokenPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT missing_amount FROM orders",
+            )
+
+    class UnsafeRepairer:
+        def repair(self, request: QueryRepairRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="DROP TABLE orders",
+            )
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=BrokenPlanner(),
+        repairer=UnsafeRepairer(),
+    )
+
+    with pytest.raises(
+        QueryValidationError,
+        match="Only read-only analytical SELECT queries are allowed.",
+    ):
+        service.ask("Show the amount.")
+
+
+def test_service_rejects_empty_sql_from_repairer() -> None:
+    class BrokenPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT missing_amount FROM orders",
+            )
+
+    class EmptyRepairer:
+        def repair(self, request: QueryRepairRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql=" ",
+            )
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=BrokenPlanner(),
+        repairer=EmptyRepairer(),
+    )
+
+    with pytest.raises(
+        QueryPlanningError,
+        match="Query repairer returned an empty SQL query.",
+    ):
+        service.ask("Show the amount.")
+
+
+def test_service_rejects_repair_plan_for_different_question() -> None:
+    class BrokenPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT missing_amount FROM orders",
+            )
+
+    class MismatchedRepairer:
+        def repair(self, request: QueryRepairRequest) -> QueryPlan:
+            return QueryPlan(
+                question="A different question",
+                sql="SELECT amount FROM orders",
+            )
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=BrokenPlanner(),
+        repairer=MismatchedRepairer(),
+    )
+
+    with pytest.raises(
+        QueryPlanningError,
+        match="Query repairer returned a plan for a different question.",
+    ):
+        service.ask("Show the amount.")
+
+
+def test_service_run_preserves_successful_plan_and_result() -> None:
+    class StubPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT SUM(amount) AS total_amount FROM orders",
+            )
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=StubPlanner(),
+    )
+
+    execution = service.run("What is the total amount?")
+
+    assert isinstance(execution, QueryExecution)
+    assert execution.plan == QueryPlan(
+        question="What is the total amount?",
+        sql="SELECT SUM(amount) AS total_amount FROM orders",
+    )
+    assert execution.result.columns == ("total_amount",)
+    assert execution.result.rows == ((60.0,),)
+
+
+def test_service_run_preserves_repaired_plan_and_result() -> None:
+    class BrokenPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT SUM(missing_amount) AS total_amount FROM orders",
+            )
+
+    class StubRepairer:
+        def repair(self, request: QueryRepairRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT SUM(amount) AS total_amount FROM orders",
+            )
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=BrokenPlanner(),
+        repairer=StubRepairer(),
+    )
+
+    execution = service.run("What is the total amount?")
+
+    assert execution.plan == QueryPlan(
+        question="What is the total amount?",
+        sql="SELECT SUM(amount) AS total_amount FROM orders",
+    )
+    assert execution.result.columns == ("total_amount",)
+    assert execution.result.rows == ((60.0,),)
+
+
+def test_service_ask_returns_result_from_execution() -> None:
+    class StubPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT COUNT(*) AS order_count FROM orders",
+            )
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=StubPlanner(),
+    )
+
+    result = service.ask("How many orders are there?")
+
+    assert result.columns == ("order_count",)
+    assert result.rows == ((3,),)
+
+
+def test_service_enforces_result_row_limit() -> None:
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        max_result_rows=2,
+    )
+
+    with pytest.raises(
+        QueryResultLimitError,
+        match="Analytical query result exceeded the maximum of 2 rows.",
+    ):
+        service.execute(
+            """
+            SELECT order_id
+            FROM orders
+            ORDER BY order_id
+            """
+        )
+
+
+def test_service_does_not_repair_result_limit_failure() -> None:
+    class StubPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql=("SELECT order_id FROM orders ORDER BY order_id"),
+            )
+
+    class FailingRepairer:
+        def repair(self, request: QueryRepairRequest) -> QueryPlan:
+            raise AssertionError(
+                "Repairer must not be called for result-limit failures."
+            )
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=StubPlanner(),
+        repairer=FailingRepairer(),
+        max_result_rows=2,
+    )
+
+    with pytest.raises(
+        QueryResultLimitError,
+        match="Analytical query result exceeded the maximum of 2 rows.",
+    ):
+        service.ask("Show all order IDs.")
+
+
+def test_service_enforces_query_memory_limit() -> None:
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        memory_limit_mb=64,
+    )
+
+    with service._executor._connection(service._dataset) as connection:
+        result = connection.execute(
+            """
+            SELECT value
+            FROM duckdb_settings()
+            WHERE name = 'memory_limit'
+            """
+        ).fetchone()
+
+    assert result is not None
+    assert str(result[0]) != "unlimited"

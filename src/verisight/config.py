@@ -34,6 +34,16 @@ class Settings(BaseSettings):
         gt=0,
     )
 
+    max_query_result_rows: int = Field(
+        default=10_000,
+        gt=0,
+    )
+
+    max_query_memory_mb: int = Field(
+        default=512,
+        gt=0,
+    )
+
     gemini_api_key: str | None = None
 
     gemini_model: str = "gemini-3.1-flash-lite"

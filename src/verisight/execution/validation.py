@@ -4,7 +4,7 @@ import re
 
 import duckdb
 
-from verisight.execution.exceptions import QueryExecutionError
+from verisight.execution.exceptions import QueryValidationError
 
 _BLOCKED_SELECT_PATTERNS = (
     re.compile(r"\bread_csv(?:_auto)?\s*\(", re.IGNORECASE),
@@ -129,36 +129,36 @@ class AnalyticalQueryValidator:
         """Validate that a query is a single contained analytical statement."""
 
         if not query.strip():
-            raise QueryExecutionError("Analytical query must not be empty.")
+            raise QueryValidationError("Analytical query must not be empty.")
 
         try:
             statements = duckdb.extract_statements(query)
         except duckdb.Error as exc:
-            raise QueryExecutionError(
+            raise QueryValidationError(
                 f"Analytical query validation failed: {exc}"
             ) from exc
 
         if len(statements) != 1:
-            raise QueryExecutionError(
+            raise QueryValidationError(
                 "Analytical execution requires exactly one SQL statement."
             )
 
         statement = statements[0]
 
         if statement.type != duckdb.StatementType.SELECT:
-            raise QueryExecutionError(
+            raise QueryValidationError(
                 "Only read-only analytical SELECT queries are allowed."
             )
 
         masked_query = _mask_sql_literals_and_comments(query)
 
         if _PRAGMA_PATTERN.search(masked_query):
-            raise QueryExecutionError(
+            raise QueryValidationError(
                 "PRAGMA statements are not allowed in analytical queries."
             )
 
         for pattern in _BLOCKED_SELECT_PATTERNS:
             if pattern.search(masked_query):
-                raise QueryExecutionError(
+                raise QueryValidationError(
                     "External data access is not allowed in analytical queries."
                 )

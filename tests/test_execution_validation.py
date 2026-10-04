@@ -1,6 +1,9 @@
 import pytest
 
-from verisight.execution.exceptions import QueryExecutionError
+from verisight.execution.exceptions import (
+    QueryExecutionError,
+    QueryValidationError,
+)
 from verisight.execution.validation import (
     AnalyticalQueryValidator,
     _mask_sql_literals_and_comments,
@@ -73,7 +76,7 @@ def test_accepts_analytical_select_queries(query: str) -> None:
 )
 def test_rejects_non_select_statements(query: str) -> None:
     with pytest.raises(
-        QueryExecutionError,
+        QueryValidationError,
         match="Only read-only analytical SELECT queries are allowed.",
     ):
         AnalyticalQueryValidator().validate(query)
@@ -94,7 +97,7 @@ def test_rejects_non_select_statements(query: str) -> None:
 )
 def test_rejects_external_access_from_select(query: str) -> None:
     with pytest.raises(
-        QueryExecutionError,
+        QueryValidationError,
         match="External data access is not allowed",
     ):
         AnalyticalQueryValidator().validate(query)
@@ -109,7 +112,7 @@ def test_rejects_external_access_from_select(query: str) -> None:
 )
 def test_rejects_pragma_queries(query: str) -> None:
     with pytest.raises(
-        QueryExecutionError,
+        QueryValidationError,
         match="PRAGMA statements are not allowed",
     ):
         AnalyticalQueryValidator().validate(query)
@@ -117,7 +120,7 @@ def test_rejects_pragma_queries(query: str) -> None:
 
 def test_rejects_multiple_statements() -> None:
     with pytest.raises(
-        QueryExecutionError,
+        QueryValidationError,
         match="requires exactly one SQL statement",
     ):
         AnalyticalQueryValidator().validate("SELECT 1; SELECT 2")
@@ -133,7 +136,7 @@ def test_rejects_multiple_statements() -> None:
 )
 def test_rejects_empty_query(query: str) -> None:
     with pytest.raises(
-        QueryExecutionError,
+        QueryValidationError,
         match="Analytical query must not be empty.",
     ):
         AnalyticalQueryValidator().validate(query)
@@ -141,10 +144,16 @@ def test_rejects_empty_query(query: str) -> None:
 
 def test_invalid_sql_raises_validation_error() -> None:
     with pytest.raises(
-        QueryExecutionError,
+        QueryValidationError,
         match="Analytical query validation failed:",
     ):
         AnalyticalQueryValidator().validate("SELECT FROM")
+
+
+def test_validation_error_is_query_execution_error() -> None:
+    error = QueryValidationError("Invalid query")
+
+    assert isinstance(error, QueryExecutionError)
 
 
 @pytest.mark.parametrize(
