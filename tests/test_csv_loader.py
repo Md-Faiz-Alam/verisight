@@ -392,16 +392,9 @@ def test_csv_loader_supports_cp1252_encoding(
 
     assert table.column_count == 3
     assert table.row_count == 2
-
     assert table.data["customer_id"].tolist() == [1, 2]
-    assert table.data["name"].tolist() == [
-        "André",
-        "José",
-    ]
-    assert table.data["city"].tolist() == [
-        "Montréal",
-        "São Paulo",
-    ]
+    assert table.data["name"].tolist() == ["André", "José"]
+    assert table.data["city"].tolist() == ["Montréal", "São Paulo"]
 
 
 def test_csv_loader_supports_utf8_bom(
@@ -414,15 +407,9 @@ def test_csv_loader_supports_utf8_bom(
 
     assert table.column_count == 2
     assert table.row_count == 2
-    assert table.data.columns.tolist() == [
-        "customer_id",
-        "name",
-    ]
+    assert table.data.columns.tolist() == ["customer_id", "name"]
     assert table.data["customer_id"].tolist() == [1, 2]
-    assert table.data["name"].tolist() == [
-        "Alice",
-        "Bob",
-    ]
+    assert table.data["name"].tolist() == ["Alice", "Bob"]
 
 
 def test_csv_loader_supports_utf16_little_endian_bom(
@@ -435,15 +422,9 @@ def test_csv_loader_supports_utf16_little_endian_bom(
 
     assert table.column_count == 2
     assert table.row_count == 2
-    assert table.data.columns.tolist() == [
-        "customer_id",
-        "name",
-    ]
+    assert table.data.columns.tolist() == ["customer_id", "name"]
     assert table.data["customer_id"].tolist() == [1, 2]
-    assert table.data["name"].tolist() == [
-        "Alice",
-        "Bob",
-    ]
+    assert table.data["name"].tolist() == ["Alice", "Bob"]
 
 
 def test_csv_loader_supports_utf16_big_endian_bom(
@@ -458,15 +439,9 @@ def test_csv_loader_supports_utf16_big_endian_bom(
 
     assert table.column_count == 2
     assert table.row_count == 2
-    assert table.data.columns.tolist() == [
-        "customer_id",
-        "name",
-    ]
+    assert table.data.columns.tolist() == ["customer_id", "name"]
     assert table.data["customer_id"].tolist() == [1, 2]
-    assert table.data["name"].tolist() == [
-        "Alice",
-        "Bob",
-    ]
+    assert table.data["name"].tolist() == ["Alice", "Bob"]
 
 
 def test_csv_loader_detects_delimiter_in_utf16_csv(
@@ -479,15 +454,9 @@ def test_csv_loader_detects_delimiter_in_utf16_csv(
 
     assert table.column_count == 2
     assert table.row_count == 2
-    assert table.data.columns.tolist() == [
-        "customer_id",
-        "name",
-    ]
+    assert table.data.columns.tolist() == ["customer_id", "name"]
     assert table.data["customer_id"].tolist() == [1, 2]
-    assert table.data["name"].tolist() == [
-        "Alice",
-        "Bob",
-    ]
+    assert table.data["name"].tolist() == ["Alice", "Bob"]
 
 
 def test_csv_loader_rejects_bomless_utf16(
@@ -550,3 +519,84 @@ def test_csv_loader_falls_back_to_latin1(
         "Alice\x81",
         "Bob",
     ]
+
+
+def test_csv_encoding_detection_handles_split_utf8_sequence(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "split.csv"
+    prefix = b"name\n"
+    padding = b"a" * (65536 - len(prefix) - 1)
+
+    file_path.write_bytes(prefix + padding + "é".encode() + b"\n")
+
+    assert CsvLoader._detect_encoding(file_path) == "utf-8"
+
+
+def test_csv_encoding_detection_checks_nul_after_first_chunk(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "late_nul.csv"
+    file_path.write_bytes(b"name\n" + b"a" * 65536 + b"\x00")
+
+    with pytest.raises(
+        DataLoadError,
+        match="CSV file contains NUL bytes",
+    ):
+        CsvLoader._detect_encoding(file_path)
+
+
+def test_csv_encoding_detection_checks_invalid_utf8_after_first_chunk(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "late_invalid.csv"
+    file_path.write_bytes(b"name\n" + b"a" * 65536 + b"\xe9\n")
+
+    assert CsvLoader._detect_encoding(file_path) == "cp1252"
+
+
+def test_csv_encoding_detection_latin1_fallback_after_first_chunk(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "late_latin1.csv"
+    file_path.write_bytes(b"name\n" + b"a" * 65536 + b"\x81\n")
+
+    assert CsvLoader._detect_encoding(file_path) == "latin-1"
+
+
+def test_csv_encoding_detection_handles_incomplete_utf8_at_eof(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "incomplete.csv"
+    file_path.write_bytes(b"name\nAlice\xe2\x82")
+
+    assert CsvLoader._detect_encoding(file_path) == "cp1252"
+
+
+def test_csv_encoding_detection_continues_after_both_decoders_fail(
+    tmp_path: Path,
+) -> None:
+    """Continue scanning after both decoders fail to catch later NUL bytes."""
+
+    file_path = tmp_path / "multiple_chunks.csv"
+
+    chunk_size = 64 * 1024
+
+    file_path.write_bytes(b"a" * chunk_size + b"\x81" + b"b" * (chunk_size - 1) + b"c")
+
+    assert CsvLoader._detect_encoding(file_path) == "latin-1"
+
+
+def test_csv_type_inference_updates_input_dataframe_in_place() -> None:
+    data = pd.DataFrame(
+        {
+            "quantity": ["1", "2"],
+            "code": ["001", "002"],
+        }
+    )
+
+    converted = CsvLoader._infer_safe_column_types(data)
+
+    assert converted is data
+    assert data["quantity"].tolist() == [1, 2]
+    assert data["code"].tolist() == ["001", "002"]

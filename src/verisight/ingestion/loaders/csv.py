@@ -26,6 +26,7 @@ _NUMERIC_PATTERN = (
 _CSV_DELIMITERS = ",;\t|"
 _CSV_SAMPLE_SIZE = 8192
 _DEFAULT_CSV_DELIMITER = ","
+_ENCODING_CHUNK_SIZE = 64 * 1024
 
 _ENCODING_BOM_SAMPLE_SIZE = max(
     len(codecs.BOM_UTF8),
@@ -87,41 +88,61 @@ class CsvLoader(BaseTableLoader):
 
     @staticmethod
     def _detect_encoding(path: Path) -> str:
-        """Detect supported Unicode BOMs and reject unsupported binary-like input."""
+        """Detect Unicode BOMs and validate encoding in bounded chunks."""
 
         with path.open("rb") as file:
-            content = file.read()
+            prefix = file.read(_ENCODING_BOM_SAMPLE_SIZE)
 
-        prefix = content[:_ENCODING_BOM_SAMPLE_SIZE]
+            if prefix.startswith(codecs.BOM_UTF8):
+                return "utf-8-sig"
 
-        if prefix.startswith(codecs.BOM_UTF8):
-            return "utf-8-sig"
+            if prefix.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+                raise DataLoadError(
+                    "CSV file uses UTF-32 encoding, which is not supported."
+                )
 
-        if prefix.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
-            raise DataLoadError(
-                "CSV file uses UTF-32 encoding, which is not supported."
-            )
+            if prefix.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+                return "utf-16"
 
-        if prefix.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
-            return "utf-16"
+            file.seek(0)
 
-        if b"\x00" in content:
-            raise DataLoadError(
-                "CSV file contains NUL bytes and may use an unsupported "
-                "Unicode encoding without a BOM."
-            )
+            utf8_decoder = codecs.getincrementaldecoder("utf-8")()
+            utf8_valid = True
+            cp1252_decoder = codecs.getincrementaldecoder("cp1252")()
+            cp1252_valid = True
 
-        try:
-            content.decode("utf-8")
-        except UnicodeDecodeError:
-            try:
-                content.decode("cp1252")
-            except UnicodeDecodeError:
-                return "latin-1"
+            while chunk := file.read(_ENCODING_CHUNK_SIZE):
+                if b"\x00" in chunk:
+                    raise DataLoadError(
+                        "CSV file contains NUL bytes and may use an "
+                        "unsupported Unicode encoding without a BOM."
+                    )
 
-            return "cp1252"
+                if utf8_valid:
+                    try:
+                        utf8_decoder.decode(chunk, final=False)
+                    except UnicodeDecodeError:
+                        utf8_valid = False
 
-        return "utf-8"
+                if cp1252_valid:
+                    try:
+                        cp1252_decoder.decode(chunk, final=False)
+                    except UnicodeDecodeError:
+                        cp1252_valid = False
+
+            if utf8_valid:
+                try:
+                    utf8_decoder.decode(b"", final=True)
+                except UnicodeDecodeError:
+                    utf8_valid = False
+
+            if utf8_valid:
+                return "utf-8"
+
+            if cp1252_valid:
+                return "cp1252"
+
+            return "latin-1"
 
     @staticmethod
     def _detect_delimiter(
@@ -155,10 +176,8 @@ class CsvLoader(BaseTableLoader):
     ) -> pd.DataFrame:
         """Infer safe physical types while preserving lexical identifiers."""
 
-        converted = data.copy()
-
-        for column in converted.columns:
-            series = converted[column]
+        for column in data.columns:
+            series = data[column]
             non_missing = series.dropna()
 
             if non_missing.empty:
@@ -168,7 +187,7 @@ class CsvLoader(BaseTableLoader):
             normalized = values.str.lower()
 
             if normalized.isin(_BOOLEAN_LITERALS).all():
-                converted[column] = cls._convert_boolean_series(series)
+                data[column] = cls._convert_boolean_series(series)
                 continue
 
             numeric_mask = values.str.fullmatch(_NUMERIC_PATTERN)
@@ -196,18 +215,18 @@ class CsvLoader(BaseTableLoader):
                 numeric = pd.to_numeric(series, errors="raise")
 
                 if series.isna().any():
-                    converted[column] = numeric.astype("Int64")
+                    data[column] = numeric.astype("Int64")
                 else:
-                    converted[column] = numeric
+                    data[column] = numeric
 
                 continue
 
-            converted[column] = pd.to_numeric(
+            data[column] = pd.to_numeric(
                 series,
                 errors="raise",
             )
 
-        return converted
+        return data
 
     @staticmethod
     def _convert_boolean_series(series: pd.Series) -> pd.Series:
