@@ -636,3 +636,54 @@ def test_executor_connection_applies_temp_storage_limit() -> None:
 
     assert result is not None
     assert str(result[0]) == "122.0 MiB"
+
+
+def test_executor_closes_connection_after_query_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame({"order_id": [1, 2]}),
+    )
+
+    executor = DuckDBExecutor(
+        execution_timeout_seconds=0.05,
+        memory_limit_mb=64,
+        temp_storage_limit_mb=32,
+    )
+
+    original_connection = executor._connection
+    captured_connections: list[duckdb.DuckDBPyConnection] = []
+
+    from collections.abc import Iterator
+    from contextlib import contextmanager
+
+    @contextmanager
+    def tracked_connection() -> Iterator[duckdb.DuckDBPyConnection]:
+        with original_connection(dataset) as connection:
+            captured_connections.append(connection)
+            yield connection
+
+    # Track the connection created during execution.
+    # The wrapper uses the same dataset as the original call.
+    monkeypatch.setattr(
+        executor,
+        "_connection",
+        lambda _dataset: tracked_connection(),
+    )
+
+    with pytest.raises(QueryTimeoutError):
+        executor.execute(
+            dataset,
+            """
+            SELECT SUM(a.range * b.range)
+            FROM range(1000000000) AS a
+            CROSS JOIN range(1000000000) AS b
+            """,
+        )
+
+    assert len(captured_connections) == 1
+
+    with pytest.raises(duckdb.ConnectionException):
+        captured_connections[0].execute("SELECT 1")
