@@ -30,6 +30,7 @@ class AnalyticalExecutionService:
         *,
         max_result_rows: int = 10_000,
         memory_limit_mb: int = 512,
+        execution_timeout_seconds: float = 30.0,
     ) -> None:
         """Initialize the service for a loaded dataset."""
 
@@ -37,6 +38,7 @@ class AnalyticalExecutionService:
         self._executor = DuckDBExecutor(
             max_result_rows=max_result_rows,
             memory_limit_mb=memory_limit_mb,
+            execution_timeout_seconds=execution_timeout_seconds,
         )
         self._planner = planner
         self._repairer = repairer

@@ -9,6 +9,7 @@ from verisight.execution.exceptions import (
     QueryExecutionError,
     QueryResultLimitError,
     QueryRuntimeError,
+    QueryTimeoutError,
     QueryValidationError,
 )
 from verisight.ingestion.models import (
@@ -529,3 +530,79 @@ def test_executor_connection_applies_memory_limit() -> None:
 
     assert memory_limit
     assert memory_limit != "unlimited"
+
+
+def test_executor_rejects_non_positive_execution_timeout() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Query execution timeout must be positive.",
+    ):
+        DuckDBExecutor(
+            execution_timeout_seconds=0,
+        )
+
+
+def test_timeout_error_is_query_execution_error() -> None:
+    error = QueryTimeoutError("Query exceeded configured timeout.")
+
+    assert isinstance(error, QueryExecutionError)
+
+
+def test_timeout_error_is_not_query_runtime_error() -> None:
+    error = QueryTimeoutError("Query exceeded configured timeout.")
+
+    assert not isinstance(error, QueryRuntimeError)
+
+
+def test_executor_interrupts_query_after_execution_timeout() -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2],
+            }
+        ),
+    )
+
+    executor = DuckDBExecutor(
+        execution_timeout_seconds=0.05,
+    )
+
+    with pytest.raises(
+        QueryTimeoutError,
+        match="Analytical query exceeded the execution timeout",
+    ):
+        executor.execute(
+            dataset,
+            """
+            SELECT SUM(a.range * b.range)
+            FROM range(1000000000) AS a
+            CROSS JOIN range(1000000000) AS b
+            """,
+        )
+
+
+def test_executor_allows_query_within_execution_timeout() -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2, 3],
+            }
+        ),
+    )
+
+    result = DuckDBExecutor(
+        execution_timeout_seconds=1.0,
+    ).execute(
+        dataset,
+        """
+        SELECT SUM(order_id) AS total
+        FROM orders
+        """,
+    )
+
+    assert result.columns == ("total",)
+    assert result.rows == ((6,),)

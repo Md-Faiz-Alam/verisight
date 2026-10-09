@@ -44,6 +44,11 @@ class Settings(BaseSettings):
         gt=0,
     )
 
+    max_query_execution_seconds: float = Field(
+        default=30.0,
+        gt=0,
+    )
+
     gemini_api_key: str | None = None
 
     gemini_model: str = "gemini-3.1-flash-lite"

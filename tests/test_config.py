@@ -27,6 +27,7 @@ def test_settings_have_expected_defaults() -> None:
     assert settings.max_upload_size_mb == 100
     assert settings.max_query_result_rows == 10_000
     assert settings.max_query_memory_mb == 512
+    assert settings.max_query_execution_seconds == 30.0
     assert settings.gemini_api_key is None
     assert settings.gemini_model == "gemini-3.1-flash-lite"
 
@@ -34,14 +35,42 @@ def test_settings_have_expected_defaults() -> None:
 def test_settings_load_prefixed_environment_variables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("VERISIGHT_ENVIRONMENT", "test")
-    monkeypatch.setenv("VERISIGHT_LOG_LEVEL", "DEBUG")
-    monkeypatch.setenv("VERISIGHT_DATA_DIR", "custom-data")
-    monkeypatch.setenv("VERISIGHT_MAX_UPLOAD_SIZE_MB", "250")
-    monkeypatch.setenv("VERISIGHT_MAX_QUERY_RESULT_ROWS", "2500")
-    monkeypatch.setenv("VERISIGHT_MAX_QUERY_MEMORY_MB", "768")
-    monkeypatch.setenv("VERISIGHT_GEMINI_API_KEY", "test-api-key")
-    monkeypatch.setenv("VERISIGHT_GEMINI_MODEL", "test-model")
+    monkeypatch.setenv(
+        "VERISIGHT_ENVIRONMENT",
+        "test",
+    )
+    monkeypatch.setenv(
+        "VERISIGHT_LOG_LEVEL",
+        "DEBUG",
+    )
+    monkeypatch.setenv(
+        "VERISIGHT_DATA_DIR",
+        "custom-data",
+    )
+    monkeypatch.setenv(
+        "VERISIGHT_MAX_UPLOAD_SIZE_MB",
+        "250",
+    )
+    monkeypatch.setenv(
+        "VERISIGHT_MAX_QUERY_RESULT_ROWS",
+        "2500",
+    )
+    monkeypatch.setenv(
+        "VERISIGHT_MAX_QUERY_MEMORY_MB",
+        "768",
+    )
+    monkeypatch.setenv(
+        "VERISIGHT_MAX_QUERY_EXECUTION_SECONDS",
+        "45.5",
+    )
+    monkeypatch.setenv(
+        "VERISIGHT_GEMINI_API_KEY",
+        "test-api-key",
+    )
+    monkeypatch.setenv(
+        "VERISIGHT_GEMINI_MODEL",
+        "test-model",
+    )
 
     settings = SettingsWithoutEnvFile()
 
@@ -51,6 +80,7 @@ def test_settings_load_prefixed_environment_variables(
     assert settings.max_upload_size_mb == 250
     assert settings.max_query_result_rows == 2500
     assert settings.max_query_memory_mb == 768
+    assert settings.max_query_execution_seconds == 45.5
     assert settings.gemini_api_key == "test-api-key"
     assert settings.gemini_model == "test-model"
 
@@ -58,7 +88,10 @@ def test_settings_load_prefixed_environment_variables(
 def test_settings_reject_invalid_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("VERISIGHT_ENVIRONMENT", "invalid")
+    monkeypatch.setenv(
+        "VERISIGHT_ENVIRONMENT",
+        "invalid",
+    )
 
     with pytest.raises(ValidationError):
         SettingsWithoutEnvFile()
@@ -67,7 +100,10 @@ def test_settings_reject_invalid_environment(
 def test_settings_reject_non_positive_upload_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("VERISIGHT_MAX_UPLOAD_SIZE_MB", "0")
+    monkeypatch.setenv(
+        "VERISIGHT_MAX_UPLOAD_SIZE_MB",
+        "0",
+    )
 
     with pytest.raises(ValidationError):
         SettingsWithoutEnvFile()
@@ -121,4 +157,24 @@ def test_settings_reject_non_positive_query_memory_limit() -> None:
     with pytest.raises(ValidationError):
         SettingsWithoutEnvFile(
             max_query_memory_mb=0,
+        )
+
+
+def test_settings_load_query_execution_timeout_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "VERISIGHT_MAX_QUERY_EXECUTION_SECONDS",
+        "12.5",
+    )
+
+    settings = SettingsWithoutEnvFile()
+
+    assert settings.max_query_execution_seconds == 12.5
+
+
+def test_settings_reject_non_positive_query_execution_timeout() -> None:
+    with pytest.raises(ValidationError):
+        SettingsWithoutEnvFile(
+            max_query_execution_seconds=0,
         )

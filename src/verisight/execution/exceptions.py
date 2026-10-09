@@ -17,6 +17,10 @@ class QueryResultLimitError(QueryExecutionError):
     """Raised when an analytical query exceeds the allowed result size."""
 
 
+class QueryTimeoutError(QueryExecutionError):
+    """Raised when an analytical query exceeds the allowed execution time."""
+
+
 class QueryPlanningError(Exception):
     """Raised when an analytical query cannot be planned."""
 

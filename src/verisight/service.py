@@ -136,6 +136,7 @@ class VeriSight:
             dataset,
             max_result_rows=self._settings.max_query_result_rows,
             memory_limit_mb=self._settings.max_query_memory_mb,
+            execution_timeout_seconds=(self._settings.max_query_execution_seconds),
         )
 
         return execution_service.execute(query)
@@ -154,6 +155,7 @@ class VeriSight:
             planner=self._planner,
             max_result_rows=self._settings.max_query_result_rows,
             memory_limit_mb=self._settings.max_query_memory_mb,
+            execution_timeout_seconds=(self._settings.max_query_execution_seconds),
         )
 
         return execution_service.ask(question)
@@ -198,6 +200,7 @@ class VeriSight:
             planner=planner,
             max_result_rows=self._settings.max_query_result_rows,
             memory_limit_mb=self._settings.max_query_memory_mb,
+            execution_timeout_seconds=(self._settings.max_query_execution_seconds),
         )
 
         orchestrator = InvestigationOrchestrator(

@@ -8,6 +8,7 @@ from verisight.execution.exceptions import (
     QueryPlanningError,
     QueryResultLimitError,
     QueryRuntimeError,
+    QueryTimeoutError,
     QueryValidationError,
 )
 from verisight.execution.execution import QueryExecution
@@ -165,7 +166,6 @@ def test_service_plans_natural_language_question() -> None:
 
     assert plan.question == "What is the total amount?"
     assert plan.sql == "SELECT SUM(amount) AS total_amount FROM orders"
-
     assert planner.request is not None
     assert planner.request.question == "What is the total amount?"
     assert planner.request.context is service.context
@@ -587,7 +587,7 @@ def test_service_does_not_repair_result_limit_failure() -> None:
         def plan(self, request: QueryRequest) -> QueryPlan:
             return QueryPlan(
                 question=request.question,
-                sql=("SELECT order_id FROM orders ORDER BY order_id"),
+                sql="SELECT order_id FROM orders ORDER BY order_id",
             )
 
     class FailingRepairer:
@@ -627,3 +627,60 @@ def test_service_enforces_query_memory_limit() -> None:
 
     assert result is not None
     assert str(result[0]) != "unlimited"
+
+
+def test_service_enforces_query_execution_timeout() -> None:
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        execution_timeout_seconds=0.05,
+    )
+
+    with pytest.raises(
+        QueryTimeoutError,
+        match=(
+            r"Analytical query exceeded the execution timeout "
+            r"of 0\.05 seconds\."
+        ),
+    ):
+        service.execute(
+            """
+            SELECT SUM(a.range * b.range)
+            FROM range(1000000000) AS a
+            CROSS JOIN range(1000000000) AS b
+            """
+        )
+
+
+def test_service_does_not_repair_query_timeout_failure() -> None:
+    class SlowPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql=(
+                    "SELECT SUM(a.range * b.range) "
+                    "FROM range(1000000000) AS a "
+                    "CROSS JOIN range(1000000000) AS b"
+                ),
+            )
+
+    class FailingRepairer:
+        def repair(self, request: QueryRepairRequest) -> QueryPlan:
+            raise AssertionError(
+                "Repairer must not be called for query-timeout failures."
+            )
+
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        planner=SlowPlanner(),
+        repairer=FailingRepairer(),
+        execution_timeout_seconds=0.05,
+    )
+
+    with pytest.raises(
+        QueryTimeoutError,
+        match=(
+            r"Analytical query exceeded the execution timeout "
+            r"of 0\.05 seconds\."
+        ),
+    ):
+        service.ask("Run the expensive analytical calculation.")
