@@ -684,3 +684,22 @@ def test_service_does_not_repair_query_timeout_failure() -> None:
         ),
     ):
         service.ask("Run the expensive analytical calculation.")
+
+
+def test_service_applies_query_temp_storage_limit() -> None:
+    service = AnalyticalExecutionService(
+        _make_dataset(),
+        temp_storage_limit_mb=128,
+    )
+
+    with service._executor._connection(service._dataset) as connection:
+        result = connection.execute(
+            """
+            SELECT value
+            FROM duckdb_settings()
+            WHERE name = 'max_temp_directory_size'
+            """
+        ).fetchone()
+
+    assert result is not None
+    assert str(result[0]) == "122.0 MiB"

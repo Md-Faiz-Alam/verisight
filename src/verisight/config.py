@@ -49,6 +49,11 @@ class Settings(BaseSettings):
         gt=0,
     )
 
+    max_query_temp_storage_mb: int = Field(
+        default=1_024,
+        gt=0,
+    )
+
     gemini_api_key: str | None = None
 
     gemini_model: str = "gemini-3.1-flash-lite"

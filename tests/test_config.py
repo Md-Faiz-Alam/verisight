@@ -28,6 +28,7 @@ def test_settings_have_expected_defaults() -> None:
     assert settings.max_query_result_rows == 10_000
     assert settings.max_query_memory_mb == 512
     assert settings.max_query_execution_seconds == 30.0
+    assert settings.max_query_temp_storage_mb == 1_024
     assert settings.gemini_api_key is None
     assert settings.gemini_model == "gemini-3.1-flash-lite"
 
@@ -64,6 +65,10 @@ def test_settings_load_prefixed_environment_variables(
         "45.5",
     )
     monkeypatch.setenv(
+        "VERISIGHT_MAX_QUERY_TEMP_STORAGE_MB",
+        "256",
+    )
+    monkeypatch.setenv(
         "VERISIGHT_GEMINI_API_KEY",
         "test-api-key",
     )
@@ -81,6 +86,7 @@ def test_settings_load_prefixed_environment_variables(
     assert settings.max_query_result_rows == 2500
     assert settings.max_query_memory_mb == 768
     assert settings.max_query_execution_seconds == 45.5
+    assert settings.max_query_temp_storage_mb == 256
     assert settings.gemini_api_key == "test-api-key"
     assert settings.gemini_model == "test-model"
 
@@ -177,4 +183,27 @@ def test_settings_reject_non_positive_query_execution_timeout() -> None:
     with pytest.raises(ValidationError):
         SettingsWithoutEnvFile(
             max_query_execution_seconds=0,
+        )
+
+
+def test_settings_load_query_temp_storage_limit_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "VERISIGHT_MAX_QUERY_TEMP_STORAGE_MB",
+        "128",
+    )
+
+    settings = SettingsWithoutEnvFile()
+
+    assert settings.max_query_temp_storage_mb == 128
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_settings_reject_non_positive_query_temp_storage_limit(
+    limit: int,
+) -> None:
+    with pytest.raises(ValidationError):
+        SettingsWithoutEnvFile(
+            max_query_temp_storage_mb=limit,
         )

@@ -26,6 +26,7 @@ class DuckDBExecutor:
         max_result_rows: int = 10_000,
         memory_limit_mb: int = 512,
         execution_timeout_seconds: float = 30.0,
+        temp_storage_limit_mb: int = 1_024,
     ) -> None:
         """Initialize the executor with analytical execution guardrails."""
 
@@ -38,10 +39,14 @@ class DuckDBExecutor:
         if execution_timeout_seconds <= 0:
             raise ValueError("Query execution timeout must be positive.")
 
+        if temp_storage_limit_mb <= 0:
+            raise ValueError("Query temporary storage limit must be positive.")
+
         self._query_validator = AnalyticalQueryValidator()
         self._max_result_rows = max_result_rows
         self._memory_limit_mb = memory_limit_mb
         self._execution_timeout_seconds = execution_timeout_seconds
+        self._temp_storage_limit_mb = temp_storage_limit_mb
 
     def execute(
         self,
@@ -117,6 +122,7 @@ class DuckDBExecutor:
             config={
                 "enable_external_access": "false",
                 "memory_limit": f"{self._memory_limit_mb}MB",
+                "max_temp_directory_size": (f"{self._temp_storage_limit_mb}MB"),
             },
         )
 

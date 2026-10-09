@@ -31,6 +31,7 @@ class AnalyticalExecutionService:
         max_result_rows: int = 10_000,
         memory_limit_mb: int = 512,
         execution_timeout_seconds: float = 30.0,
+        temp_storage_limit_mb: int = 1_024,
     ) -> None:
         """Initialize the service for a loaded dataset."""
 
@@ -39,6 +40,7 @@ class AnalyticalExecutionService:
             max_result_rows=max_result_rows,
             memory_limit_mb=memory_limit_mb,
             execution_timeout_seconds=execution_timeout_seconds,
+            temp_storage_limit_mb=temp_storage_limit_mb,
         )
         self._planner = planner
         self._repairer = repairer

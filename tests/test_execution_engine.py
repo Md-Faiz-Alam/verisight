@@ -606,3 +606,33 @@ def test_executor_allows_query_within_execution_timeout() -> None:
 
     assert result.columns == ("total",)
     assert result.rows == ((6,),)
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_executor_rejects_non_positive_temp_storage_limit(limit: int) -> None:
+    with pytest.raises(
+        ValueError,
+        match="Query temporary storage limit must be positive.",
+    ):
+        DuckDBExecutor(temp_storage_limit_mb=limit)
+
+
+def test_executor_connection_applies_temp_storage_limit() -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame({"order_id": [1, 2]}),
+    )
+    executor = DuckDBExecutor(temp_storage_limit_mb=128)
+
+    with executor._connection(dataset) as connection:
+        result = connection.execute(
+            """
+            SELECT value
+            FROM duckdb_settings()
+            WHERE name = 'max_temp_directory_size'
+            """
+        ).fetchone()
+
+    assert result is not None
+    assert str(result[0]) == "122.0 MiB"
