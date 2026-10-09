@@ -35,28 +35,36 @@ class ExcelLoader:
                 f"ExcelLoader cannot load file type '{metadata.file_extension}'."
             )
 
+        tables: list[LoadedTable] = []
+
         try:
-            sheets = pd.read_excel(
-                metadata.path,
-                sheet_name=None,
-            )
+            with pd.ExcelFile(metadata.path) as workbook:
+                for sheet_name in workbook.sheet_names:
+                    if not isinstance(sheet_name, str):
+                        raise DataLoadError(
+                            "Excel workbook contains a non-string sheet name."
+                        )
+
+                    data = workbook.parse(sheet_name=sheet_name)
+
+                    tables.append(
+                        LoadedTable(
+                            name=sheet_name,
+                            data=data,
+                            source=SourceMetadata(
+                                path=metadata.path,
+                                file_name=metadata.file_name,
+                                file_extension=metadata.file_extension,
+                                file_size_bytes=metadata.file_size_bytes,
+                                sheet_name=sheet_name,
+                            ),
+                        )
+                    )
+
+        except DataLoadError:
+            raise
         except Exception as exc:
             raise DataLoadError(f"Could not load Excel file: {metadata.path}") from exc
-
-        tables = [
-            LoadedTable(
-                name=sheet_name,
-                data=data,
-                source=SourceMetadata(
-                    path=metadata.path,
-                    file_name=metadata.file_name,
-                    file_extension=metadata.file_extension,
-                    file_size_bytes=metadata.file_size_bytes,
-                    sheet_name=sheet_name,
-                ),
-            )
-            for sheet_name, data in sheets.items()
-        ]
 
         return LoadedWorkbook(
             source=metadata,

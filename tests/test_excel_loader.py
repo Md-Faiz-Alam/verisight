@@ -140,9 +140,125 @@ def test_excel_loader_wraps_read_failure(
     ) -> dict[str, pd.DataFrame]:
         raise ValueError("broken workbook")
 
-    monkeypatch.setattr(pd, "read_excel", raise_read_error)
+    monkeypatch.setattr(pd, "ExcelFile", raise_read_error)
 
     loader = ExcelLoader(Settings())
 
     with pytest.raises(DataLoadError, match="Could not load Excel file"):
         loader.load(file_path)
+
+
+def test_excel_loader_wraps_sheet_parse_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    file_path = tmp_path / "broken.xlsx"
+    file_path.write_bytes(b"not-a-real-excel-workbook")
+
+    class FailingWorkbook:
+        sheet_names = ["Customers"]
+
+        def __enter__(self) -> "FailingWorkbook":
+            return self
+
+        def __exit__(
+            self,
+            exc_type: object,
+            exc_value: object,
+            traceback: object,
+        ) -> None:
+            return None
+
+        def parse(self, sheet_name: str) -> pd.DataFrame:
+            raise ValueError(f"Could not parse {sheet_name}")
+
+    monkeypatch.setattr(
+        pd,
+        "ExcelFile",
+        lambda *args, **kwargs: FailingWorkbook(),
+    )
+
+    with pytest.raises(
+        DataLoadError,
+        match="Could not load Excel file",
+    ):
+        ExcelLoader(Settings()).load(file_path)
+
+
+def test_excel_loader_closes_workbook_after_loading(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    file_path = tmp_path / "workbook.xlsx"
+    file_path.write_bytes(b"placeholder")
+
+    closed = False
+
+    class TrackingWorkbook:
+        sheet_names = ["Customers"]
+
+        def __enter__(self) -> "TrackingWorkbook":
+            return self
+
+        def __exit__(
+            self,
+            exc_type: object,
+            exc_value: object,
+            traceback: object,
+        ) -> None:
+            nonlocal closed
+            closed = True
+
+        def parse(self, sheet_name: str) -> pd.DataFrame:
+            return pd.DataFrame({"id": [1, 2]})
+
+    monkeypatch.setattr(
+        pd,
+        "ExcelFile",
+        lambda *args, **kwargs: TrackingWorkbook(),
+    )
+
+    workbook = ExcelLoader(Settings()).load(file_path)
+
+    assert closed is True
+    assert workbook.table_count == 1
+    assert workbook.tables[0].name == "Customers"
+
+
+def test_excel_loader_rejects_non_string_sheet_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject unexpected worksheet names without silently converting them."""
+
+    file_path = tmp_path / "invalid.xlsx"
+    file_path.write_bytes(b"placeholder")
+
+    class InvalidWorkbook:
+        sheet_names = [123]
+
+        def __enter__(self) -> "InvalidWorkbook":
+            return self
+
+        def __exit__(
+            self,
+            exc_type: object,
+            exc_value: object,
+            traceback: object,
+        ) -> None:
+            return None
+
+        def parse(self, sheet_name: str) -> pd.DataFrame:
+            pytest.fail("Invalid worksheet name must not be parsed.")
+
+    monkeypatch.setattr(
+        pd,
+        "ExcelFile",
+        lambda *args, **kwargs: InvalidWorkbook(),
+    )
+
+    with pytest.raises(
+        DataLoadError,
+        match="Excel workbook contains a non-string sheet name",
+    ):
+        ExcelLoader(Settings()).load(file_path)

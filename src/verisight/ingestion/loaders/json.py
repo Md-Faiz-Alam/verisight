@@ -41,10 +41,17 @@ class JsonLoader(BaseTableLoader):
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise DataLoadError(f"Could not load JSON file: {metadata.path}") from exc
 
-        data = self._to_dataframe(
-            payload,
-            path=metadata.path,
-        )
+        try:
+            data = self._to_dataframe(
+                payload,
+                path=metadata.path,
+            )
+        except DataLoadError:
+            raise
+        except (ValueError, TypeError, OverflowError) as exc:
+            raise DataLoadError(
+                f"Could not convert JSON data into a table: {metadata.path}"
+            ) from exc
 
         return LoadedTable(
             name=metadata.path.stem,

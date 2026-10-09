@@ -190,3 +190,44 @@ def test_json_loader_rejects_empty_file(tmp_path: Path) -> None:
 
     with pytest.raises(FileValidationError, match="File is empty"):
         loader.load(file_path)
+
+
+def test_json_loader_wraps_dataframe_value_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    file_path = tmp_path / "customers.json"
+    file_path.write_text(
+        '[{"customer_id": 1}]',
+        encoding="utf-8",
+    )
+
+    def raise_conversion_error(
+        *args: object,
+        **kwargs: object,
+    ) -> pd.DataFrame:
+        raise ValueError("conversion failed")
+
+    monkeypatch.setattr(pd, "DataFrame", raise_conversion_error)
+
+    with pytest.raises(
+        DataLoadError,
+        match="Could not convert JSON data into a table",
+    ):
+        JsonLoader(Settings()).load(file_path)
+
+
+def test_json_loader_preserves_structure_errors(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "invalid.json"
+    file_path.write_text(
+        '[{"id": 1}, 42]',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        DataLoadError,
+        match="JSON array must contain objects",
+    ):
+        JsonLoader(Settings()).load(file_path)
