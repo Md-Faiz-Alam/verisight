@@ -93,6 +93,9 @@ def test_rejects_non_select_statements(query: str) -> None:
         "SELECT read_blob('data.txt')",
         "SELECT * FROM glob('*')",
         "SELECT getenv('PATH')",
+        "SELECT * FROM read_text('data.txt')",
+        "SELECT * FROM read_ndjson('data.ndjson')",
+        "SELECT * FROM read_ndjson_auto('data.ndjson')",
     ],
 )
 def test_rejects_external_access_from_select(query: str) -> None:
@@ -190,3 +193,29 @@ def test_masks_unterminated_block_comment_preserving_newline() -> None:
     masked = _mask_sql_literals_and_comments(query)
 
     assert masked == "SELECT 1            \n         "
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        """SELECT * FROM "read_csv"('data.csv')""",
+        """SELECT * FROM "read_csv_auto"('data.csv')""",
+        """SELECT * FROM "read_parquet"('data.parquet')""",
+        """SELECT * FROM "read_json"('data.json')""",
+        """SELECT * FROM "read_json_auto"('data.json')""",
+        """SELECT * FROM "read_text"('data.txt')""",
+        """SELECT * FROM "read_ndjson"('data.ndjson')""",
+        """SELECT * FROM "read_ndjson_auto"('data.ndjson')""",
+        """SELECT "read_blob"('data.txt')""",
+        """SELECT * FROM "glob"('*')""",
+        """SELECT "getenv"('PATH')""",
+    ],
+)
+def test_rejects_quoted_external_access_functions(
+    query: str,
+) -> None:
+    with pytest.raises(
+        QueryValidationError,
+        match="External data access is not allowed",
+    ):
+        AnalyticalQueryValidator().validate(query)

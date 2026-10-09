@@ -6,13 +6,33 @@ import duckdb
 
 from verisight.execution.exceptions import QueryValidationError
 
-_BLOCKED_SELECT_PATTERNS = (
-    re.compile(r"\bread_csv(?:_auto)?\s*\(", re.IGNORECASE),
-    re.compile(r"\bread_parquet\s*\(", re.IGNORECASE),
-    re.compile(r"\bread_json(?:_auto)?\s*\(", re.IGNORECASE),
-    re.compile(r"\bread_blob\s*\(", re.IGNORECASE),
-    re.compile(r"\bglob\s*\(", re.IGNORECASE),
-    re.compile(r"\bgetenv\s*\(", re.IGNORECASE),
+
+def _blocked_function_pattern(name: str) -> re.Pattern[str]:
+    """Match unquoted or double-quoted calls to a blocked function."""
+
+    escaped_name = re.escape(name)
+
+    return re.compile(
+        rf'(?:\b{escaped_name}|"{escaped_name}")\s*\(',
+        re.IGNORECASE,
+    )
+
+
+_BLOCKED_SELECT_PATTERNS = tuple(
+    _blocked_function_pattern(name)
+    for name in (
+        "read_csv",
+        "read_csv_auto",
+        "read_parquet",
+        "read_json",
+        "read_json_auto",
+        "read_blob",
+        "read_text",
+        "read_ndjson",
+        "read_ndjson_auto",
+        "glob",
+        "getenv",
+    )
 )
 
 _PRAGMA_PATTERN = re.compile(
