@@ -228,3 +228,57 @@ def test_finish_rejects_question() -> None:
         match="Investigator returned an invalid decision:",
     ):
         InvestigationResponseParser().parse(response)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        (
+            '{"action":"finish","action":"investigate",'
+            '"reasoning":"Done.","question":null}'
+        ),
+        (
+            '{"action":"finish","reasoning":"Done.",'
+            '"question":null,"metadata":{"key":1,"key":2}}'
+        ),
+    ],
+)
+def test_rejects_duplicate_json_fields(response: str) -> None:
+    with pytest.raises(
+        InvestigationError,
+        match="Investigator returned invalid JSON.",
+    ):
+        InvestigationResponseParser().parse(response)
+
+
+@pytest.mark.parametrize(
+    "constant",
+    ["NaN", "Infinity", "-Infinity"],
+)
+def test_rejects_nonstandard_json_constants(constant: str) -> None:
+    response = (
+        '{"action":"finish","reasoning":"Done.",'
+        f'"question":null,"metadata":{constant}' + "}"
+    )
+
+    with pytest.raises(
+        InvestigationError,
+        match="Investigator returned invalid JSON.",
+    ):
+        InvestigationResponseParser().parse(response)
+
+
+def test_accepts_escaped_json_field_content() -> None:
+    response = json.dumps(
+        {
+            "action": "investigate",
+            "reasoning": 'Compare revenue for "North" and "South".',
+            "question": "What is revenue by region?\nInclude totals.",
+        }
+    )
+
+    decision = InvestigationResponseParser().parse(response)
+
+    assert decision.action is InvestigationAction.INVESTIGATE
+    assert decision.reasoning == 'Compare revenue for "North" and "South".'
+    assert decision.question == "What is revenue by region?\nInclude totals."

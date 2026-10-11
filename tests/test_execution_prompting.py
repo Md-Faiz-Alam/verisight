@@ -1,9 +1,14 @@
+"""Tests for analytical SQL planning prompt construction."""
+
+import pytest
+
 from verisight.execution.context import (
     QueryColumn,
     QueryContext,
     QueryRelation,
 )
 from verisight.execution.planning import QueryRequest
+from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.prompting import QueryPromptBuilder
 from verisight.ingestion.schema import LogicalType
 
@@ -328,3 +333,129 @@ def test_builds_prompt_for_empty_context() -> None:
 
     assert "AVAILABLE DATA:\n\n\nQUESTION:" in prompt
     assert "QUESTION:\nWhat data is available?" in prompt
+
+
+def test_prompt_applies_exclusions_to_aggregated_measures() -> None:
+    prompt = QueryPromptBuilder().build(_make_request())
+
+    assert "apply that condition to every affected analytical measure" in prompt
+    assert "not only to accompanying counts or labels" in prompt
+    assert "use the requested eligible population" in prompt
+    assert "use WHERE, FILTER, or CASE as appropriate" in prompt
+
+
+def test_prompt_keeps_population_counts_and_denominators_consistent() -> None:
+    prompt = QueryPromptBuilder().build(_make_request())
+
+    assert "counting those populations does not itself" in prompt
+    assert "filter the aggregate" in prompt
+    assert "population and exclusion rules consistently to numerators" in prompt
+    assert "and denominators" in prompt
+
+
+def test_planning_prompt_preserves_content_at_exact_budget() -> None:
+    request = _make_request()
+    original = QueryPromptBuilder().build(request)
+
+    budgeted = QueryPromptBuilder(max_prompt_chars=len(original)).build(request)
+
+    assert budgeted == original
+    assert len(budgeted) == len(original)
+
+
+def test_planning_prompt_rejects_one_character_over_budget() -> None:
+    request = _make_request()
+    original = QueryPromptBuilder().build(request)
+
+    with pytest.raises(PromptBudgetExceededError) as exc_info:
+        QueryPromptBuilder(max_prompt_chars=len(original) - 1).build(request)
+
+    assert exc_info.value.actual_prompt_chars == len(original)
+    assert exc_info.value.max_prompt_chars == len(original) - 1
+
+
+def test_planning_prompt_rejects_invalid_budget() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Maximum prompt characters must be positive.",
+    ):
+        QueryPromptBuilder(max_prompt_chars=0)
+
+
+def test_planning_prompt_preserves_complete_schema() -> None:
+    columns = tuple(
+        QueryColumn(
+            name=f"column_{index}",
+            physical_dtype="int64",
+            logical_type=LogicalType.INTEGER,
+            nullable=False,
+        )
+        for index in range(20)
+    )
+
+    context = QueryContext(
+        relations=(
+            QueryRelation(
+                name="Wide Table",
+                relation_name="wide_table",
+                row_count=10,
+                columns=columns,
+            ),
+        )
+    )
+
+    request = QueryRequest(
+        question="Count all rows.",
+        context=context,
+    )
+
+    prompt = QueryPromptBuilder().build(request)
+
+    assert "RELATION wide_table" in prompt
+
+    for index in range(20):
+        assert f"- column_{index} | integer | int64 | nullable=false" in prompt
+
+
+def test_planning_prompt_rejects_oversized_schema() -> None:
+    columns = tuple(
+        QueryColumn(
+            name=f"column_{index}",
+            physical_dtype="int64",
+            logical_type=LogicalType.INTEGER,
+            nullable=False,
+        )
+        for index in range(50)
+    )
+
+    context = QueryContext(
+        relations=(
+            QueryRelation(
+                name="Wide Table",
+                relation_name="wide_table",
+                row_count=10,
+                columns=columns,
+            ),
+        )
+    )
+
+    request = QueryRequest(
+        question="Count all rows.",
+        context=context,
+    )
+
+    with pytest.raises(PromptBudgetExceededError) as exc_info:
+        QueryPromptBuilder(max_prompt_chars=1_000).build(request)
+
+    assert exc_info.value.max_prompt_chars == 1_000
+    assert exc_info.value.actual_prompt_chars > 1_000
+
+
+def test_planning_prompt_budget_includes_question() -> None:
+    request = QueryRequest(
+        question="X" * 500,
+        context=_make_request().context,
+    )
+
+    with pytest.raises(PromptBudgetExceededError):
+        QueryPromptBuilder(max_prompt_chars=100).build(request)

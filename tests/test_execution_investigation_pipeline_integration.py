@@ -1,0 +1,342 @@
+"""Integration tests for generative investigation and synthesis orchestration."""
+
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+from verisight.analysis.models import DatasetAnalysis
+from verisight.analysis.result import AnalysisResultBuilder, DatasetAnalysisResult
+from verisight.execution.exceptions import InvestigationError
+from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.generative_investigator import GenerativeInvestigator
+from verisight.execution.generative_synthesis import (
+    GenerativeInvestigationSynthesizer,
+)
+from verisight.execution.orchestration import InvestigationOrchestrator
+from verisight.execution.planning import QueryPlan, QueryRequest
+from verisight.execution.service import AnalyticalExecutionService
+from verisight.ingestion.models import (
+    LoadedDataset,
+    LoadedTable,
+    SourceMetadata,
+)
+from verisight.ingestion.schema import SchemaInferer
+from verisight.profiling.models import DatasetProfile
+
+
+class RecordingGenerationClient:
+    """Return a configured response or raise a configured provider error."""
+
+    def __init__(
+        self,
+        *,
+        response: str | None = None,
+        error: GeminiGenerationError | None = None,
+    ) -> None:
+        self.response = response
+        self.error = error
+        self.prompts: list[str] = []
+
+    def generate(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+
+        if self.error is not None:
+            raise self.error
+
+        if self.response is None:
+            raise AssertionError("No generation response was configured.")
+
+        return self.response
+
+
+class SequenceGenerationClient:
+    """Return consecutive investigation decisions."""
+
+    def __init__(self, responses: list[str]) -> None:
+        self.responses = responses
+        self.prompts: list[str] = []
+
+    def generate(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+
+        index = len(self.prompts) - 1
+
+        if index >= len(self.responses):
+            raise AssertionError("Unexpected additional investigator decision.")
+
+        return self.responses[index]
+
+
+class CountingPlanner:
+    """Produce a deterministic SQL query and record planning requests."""
+
+    def __init__(self) -> None:
+        self.requests: list[QueryRequest] = []
+
+    def plan(self, request: QueryRequest) -> QueryPlan:
+        self.requests.append(request)
+
+        return QueryPlan(
+            question=request.question,
+            sql="SELECT COUNT(*) AS record_count FROM observations",
+        )
+
+
+def _dataset() -> LoadedDataset:
+    source = SourceMetadata(
+        path=Path("observations.csv"),
+        file_name="observations.csv",
+        file_extension=".csv",
+        file_size_bytes=1,
+    )
+
+    table = LoadedTable(
+        name="Observations",
+        data=pd.DataFrame(
+            {
+                "category": ["A", "B", "A"],
+                "value": [10.0, 20.0, 30.0],
+            }
+        ),
+        source=source,
+    )
+    table.relation_name = "observations"
+
+    return LoadedDataset(tables=[table])
+
+
+def _analysis(dataset: LoadedDataset) -> DatasetAnalysisResult:
+    return AnalysisResultBuilder().build(
+        DatasetAnalysis(
+            schema=SchemaInferer().infer_dataset(dataset),
+            profile=DatasetProfile(tables=()),
+            issues=(),
+        )
+    )
+
+
+def _investigate_response() -> str:
+    return (
+        '{"action":"investigate",'
+        '"reasoning":"Count the available records.",'
+        '"question":"How many records are available?"}'
+    )
+
+
+def _finish_response() -> str:
+    return (
+        '{"action":"finish",'
+        '"reasoning":"Sufficient analytical evidence is available.",'
+        '"question":null}'
+    )
+
+
+def test_investigator_provider_failure_stops_before_sql_execution() -> None:
+    """A provider failure during decision generation must stop the pipeline."""
+
+    dataset = _dataset()
+    provider_error = GeminiGenerationError("Provider unavailable.")
+
+    investigator_client = RecordingGenerationClient(error=provider_error)
+    synthesis_client = RecordingGenerationClient(
+        response="Three records are available."
+    )
+    planner = CountingPlanner()
+
+    orchestrator = InvestigationOrchestrator(
+        execution_service=AnalyticalExecutionService(
+            dataset,
+            planner=planner,
+        ),
+        investigator=GenerativeInvestigator(investigator_client),
+        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        max_steps=3,
+    )
+
+    with pytest.raises(
+        InvestigationError,
+        match="Investigator text generation failed.",
+    ) as exc_info:
+        orchestrator.investigate(
+            question="Investigate the available data.",
+            analysis=_analysis(dataset),
+        )
+
+    assert exc_info.value.__cause__ is provider_error
+    assert len(investigator_client.prompts) == 1
+    assert planner.requests == []
+    assert synthesis_client.prompts == []
+
+
+def test_synthesizer_provider_failure_propagates_after_sql_execution() -> None:
+    """Synthesis failure must propagate without discarding the provider cause."""
+
+    dataset = _dataset()
+    provider_error = GeminiGenerationError("Provider unavailable.")
+
+    investigator_client = SequenceGenerationClient(
+        [
+            _investigate_response(),
+            _finish_response(),
+        ]
+    )
+    synthesis_client = RecordingGenerationClient(error=provider_error)
+    planner = CountingPlanner()
+
+    orchestrator = InvestigationOrchestrator(
+        execution_service=AnalyticalExecutionService(
+            dataset,
+            planner=planner,
+        ),
+        investigator=GenerativeInvestigator(investigator_client),
+        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        max_steps=1,
+    )
+
+    with pytest.raises(
+        InvestigationError,
+        match="Investigation synthesis text generation failed.",
+    ) as exc_info:
+        orchestrator.investigate(
+            question="Investigate the available data.",
+            analysis=_analysis(dataset),
+        )
+
+    assert exc_info.value.__cause__ is provider_error
+    assert len(investigator_client.prompts) == 2
+    assert len(planner.requests) == 1
+    assert planner.requests[0].question == "How many records are available?"
+    assert len(synthesis_client.prompts) == 1
+
+    synthesis_prompt = synthesis_client.prompts[0]
+
+    assert "OBSERVATION 1" in synthesis_prompt
+    assert "How many records are available?" in synthesis_prompt
+    assert "record_count" in synthesis_prompt
+    assert "[3]" in synthesis_prompt
+
+
+def test_successful_generative_investigation_and_synthesis() -> None:
+    """Verify the complete decision, SQL execution, and synthesis pipeline."""
+
+    dataset = _dataset()
+
+    investigator_client = SequenceGenerationClient(
+        [
+            _investigate_response(),
+            _finish_response(),
+        ]
+    )
+    synthesis_client = RecordingGenerationClient(
+        response="  Three records are available.  "
+    )
+    planner = CountingPlanner()
+
+    orchestrator = InvestigationOrchestrator(
+        execution_service=AnalyticalExecutionService(
+            dataset,
+            planner=planner,
+        ),
+        investigator=GenerativeInvestigator(investigator_client),
+        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        max_steps=1,
+    )
+
+    result = orchestrator.investigate(
+        question="Investigate the available data.",
+        analysis=_analysis(dataset),
+    )
+
+    assert len(investigator_client.prompts) == 2
+    assert len(planner.requests) == 1
+    assert len(synthesis_client.prompts) == 1
+
+    assert result.question == "Investigate the available data."
+    assert result.observation_count == 1
+    assert result.observations[0].question == "How many records are available?"
+    assert result.observations[0].sql == (
+        "SELECT COUNT(*) AS record_count FROM observations"
+    )
+    assert result.observations[0].result.columns == ("record_count",)
+    assert result.observations[0].result.rows == ((3,),)
+    assert result.conclusion == "Three records are available."
+
+    synthesis_prompt = synthesis_client.prompts[0]
+
+    assert "OBSERVATION 1" in synthesis_prompt
+    assert "How many records are available?" in synthesis_prompt
+    assert "[3]" in synthesis_prompt
+
+
+def test_investigator_invalid_response_stops_before_sql_execution() -> None:
+    """Malformed investigation decisions must not trigger SQL execution."""
+
+    dataset = _dataset()
+
+    investigator_client = RecordingGenerationClient(response="not valid json")
+    synthesis_client = RecordingGenerationClient(
+        response="Three records are available."
+    )
+    planner = CountingPlanner()
+
+    orchestrator = InvestigationOrchestrator(
+        execution_service=AnalyticalExecutionService(
+            dataset,
+            planner=planner,
+        ),
+        investigator=GenerativeInvestigator(investigator_client),
+        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        max_steps=3,
+    )
+
+    with pytest.raises(
+        InvestigationError,
+        match="Investigator returned invalid JSON.",
+    ):
+        orchestrator.investigate(
+            question="Investigate the available data.",
+            analysis=_analysis(dataset),
+        )
+
+    assert len(investigator_client.prompts) == 1
+    assert planner.requests == []
+    assert synthesis_client.prompts == []
+
+
+def test_empty_synthesis_conclusion_propagates() -> None:
+    """Empty synthesis output must not be accepted as a valid conclusion."""
+
+    dataset = _dataset()
+
+    investigator_client = SequenceGenerationClient(
+        [
+            _investigate_response(),
+            _finish_response(),
+        ]
+    )
+    synthesis_client = RecordingGenerationClient(response=" \n\t ")
+    planner = CountingPlanner()
+
+    orchestrator = InvestigationOrchestrator(
+        execution_service=AnalyticalExecutionService(
+            dataset,
+            planner=planner,
+        ),
+        investigator=GenerativeInvestigator(investigator_client),
+        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        max_steps=1,
+    )
+
+    with pytest.raises(
+        InvestigationError,
+        match="Investigation synthesizer returned an empty conclusion.",
+    ):
+        orchestrator.investigate(
+            question="Investigate the available data.",
+            analysis=_analysis(dataset),
+        )
+
+    assert len(investigator_client.prompts) == 2
+    assert len(planner.requests) == 1
+    assert len(synthesis_client.prompts) == 1

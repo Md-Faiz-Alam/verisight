@@ -2,20 +2,24 @@
 
 from verisight.execution.formatting import QueryContextFormatter
 from verisight.execution.planning import QueryRequest
+from verisight.execution.prompt_budget import PromptBudget
 
 
 class QueryPromptBuilder:
     """Build deterministic prompts for analytical SQL planning."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_prompt_chars: int = 60_000) -> None:
+        """Initialize the SQL planner prompt builder."""
+
         self._context_formatter = QueryContextFormatter()
+        self._prompt_budget = PromptBudget(max_prompt_chars=max_prompt_chars)
 
     def build(self, request: QueryRequest) -> str:
         """Build a planner prompt from an analytical query request."""
 
         context = self._context_formatter.format(request.context)
 
-        return (
+        prompt = (
             "You are an analytical SQL planner for VeriSight.\n\n"
             "Generate exactly one read-only DuckDB SELECT query that answers "
             "the user's question using only the relations and columns provided "
@@ -98,6 +102,18 @@ class QueryPromptBuilder:
             "- If the appropriate aggregation or interpretation of a measure "
             "is uncertain, prefer a conservative query that does not impose "
             "unsupported semantics.\n"
+            "- When the question explicitly includes or excludes records, "
+            "apply that condition to every affected analytical measure, "
+            "not only to accompanying counts or labels.\n"
+            "- For conditional aggregates, ensure AVG, SUM, MIN, MAX, "
+            "and other measures use the requested eligible population; "
+            "use WHERE, FILTER, or CASE as appropriate.\n"
+            "- When reporting included and excluded populations alongside "
+            "an aggregate, counting those populations does not itself "
+            "filter the aggregate.\n"
+            "- For rates, ratios, and percentages, apply the requested "
+            "population and exclusion rules consistently to numerators "
+            "and denominators.\n"
             "- Do not infer domain-specific meaning solely from a column name "
             "when the supplied context does not establish that meaning.\n"
             "- Do not invent semantic metadata, units, weighting rules, "
@@ -110,3 +126,5 @@ class QueryPromptBuilder:
             "QUESTION:\n"
             f"{request.question}\n"
         )
+
+        return self._prompt_budget.enforce(prompt)

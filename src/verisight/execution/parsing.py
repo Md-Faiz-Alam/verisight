@@ -73,21 +73,41 @@ class QueryResponseParser:
 
     @staticmethod
     def _require_single_statement(sql: str) -> None:
-        """Require planner output to contain at most one SQL statement."""
+        """Reject multiple SQL statements while respecting quotes and comments."""
 
         in_single_quote = False
         in_double_quote = False
-        index = 0
+        in_line_comment = False
+        in_block_comment = False
+        statement_ended = False
 
-        while index < len(sql):
+        index = 0
+        length = len(sql)
+
+        while index < length:
             character = sql[index]
+            next_character = sql[index + 1] if index + 1 < length else ""
+
+            if in_line_comment:
+                if character in "\r\n":
+                    in_line_comment = False
+                index += 1
+                continue
+
+            if in_block_comment:
+                if character == "*" and next_character == "/":
+                    in_block_comment = False
+                    index += 2
+                    continue
+
+                index += 1
+                continue
 
             if in_single_quote:
                 if character == "'":
-                    if index + 1 < len(sql) and sql[index + 1] == "'":
+                    if next_character == "'":
                         index += 2
                         continue
-
                     in_single_quote = False
 
                 index += 1
@@ -95,14 +115,32 @@ class QueryResponseParser:
 
             if in_double_quote:
                 if character == '"':
-                    if index + 1 < len(sql) and sql[index + 1] == '"':
+                    if next_character == '"':
                         index += 2
                         continue
-
                     in_double_quote = False
 
                 index += 1
                 continue
+
+            if character == "-" and next_character == "-":
+                in_line_comment = True
+                index += 2
+                continue
+
+            if character == "/" and next_character == "*":
+                in_block_comment = True
+                index += 2
+                continue
+
+            if character.isspace():
+                index += 1
+                continue
+
+            if statement_ended:
+                raise QueryPlanningError(
+                    "Query planner returned multiple SQL statements."
+                )
 
             if character == "'":
                 in_single_quote = True
@@ -115,11 +153,6 @@ class QueryResponseParser:
                 continue
 
             if character == ";":
-                remaining = sql[index + 1 :].strip()
-
-                if remaining:
-                    raise QueryPlanningError(
-                        "Query planner returned multiple SQL statements."
-                    )
+                statement_ended = True
 
             index += 1

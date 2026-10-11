@@ -366,6 +366,9 @@ def test_verisight_builds_gemini_planner_from_settings() -> None:
     client_class.assert_called_once_with(
         api_key="test-api-key",
         model="test-model",
+        request_timeout_seconds=30.0,
+        max_retries=2,
+        retry_base_delay_seconds=1.0,
     )
 
     assert isinstance(service._planner, GenerativeQueryPlanner)
@@ -754,10 +757,16 @@ def test_public_investigate_builds_default_gemini_components(
     assert client_class.call_args_list[0].kwargs == {
         "api_key": "test-api-key",
         "model": "test-model",
+        "request_timeout_seconds": 30.0,
+        "max_retries": 2,
+        "retry_base_delay_seconds": 1.0,
     }
     assert client_class.call_args_list[1].kwargs == {
         "api_key": "test-api-key",
         "model": "test-model",
+        "request_timeout_seconds": 30.0,
+        "max_retries": 2,
+        "retry_base_delay_seconds": 1.0,
     }
 
     investigator_client.generate.assert_called_once()

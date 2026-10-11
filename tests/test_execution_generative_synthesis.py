@@ -2,12 +2,15 @@ import pytest
 
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder
+from verisight.execution.exceptions import InvestigationError
+from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.generative_synthesis import (
     GenerativeInvestigationSynthesizer,
 )
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
+from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.ingestion.schema import DatasetSchema
 from verisight.profiling.models import DatasetProfile
 
@@ -70,7 +73,7 @@ def test_generative_synthesizer_strips_surrounding_whitespace() -> None:
 def test_generative_synthesizer_builds_prompt_from_state() -> None:
     observation = QueryObservation(
         question="What is revenue by month?",
-        sql=("SELECT month, SUM(revenue) AS revenue FROM sales GROUP BY month"),
+        sql="SELECT month, SUM(revenue) AS revenue FROM sales GROUP BY month",
         result=QueryResult(
             columns=("month", "revenue"),
             rows=(
@@ -114,7 +117,53 @@ def test_generative_synthesizer_rejects_empty_conclusion(
     synthesizer = GenerativeInvestigationSynthesizer(client)
 
     with pytest.raises(
-        ValueError,
+        InvestigationError,
         match="Investigation synthesizer returned an empty conclusion.",
+    ):
+        synthesizer.synthesize(_build_state())
+
+
+def test_generative_synthesizer_does_not_call_llm_for_oversized_prompt() -> None:
+    client = StubTextGenerationClient("Conclusion.")
+    synthesizer = GenerativeInvestigationSynthesizer(client)
+
+    state = _build_state()
+    oversized_state = InvestigationState(
+        question="X" * 60_000,
+        analysis=state.analysis,
+    )
+
+    with pytest.raises(PromptBudgetExceededError):
+        synthesizer.synthesize(oversized_state)
+
+    assert client.prompts == []
+
+
+def test_generative_synthesizer_translates_provider_failure() -> None:
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise GeminiGenerationError("Provider unavailable.")
+
+    synthesizer = GenerativeInvestigationSynthesizer(FailingClient())
+
+    with pytest.raises(
+        InvestigationError,
+        match="Investigation synthesis text generation failed.",
+    ) as exc_info:
+        synthesizer.synthesize(_build_state())
+
+    assert isinstance(exc_info.value.__cause__, GeminiGenerationError)
+
+
+def test_generative_synthesizer_preserves_unexpected_errors() -> None:
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise RuntimeError("Unexpected programming error.")
+
+    synthesizer = GenerativeInvestigationSynthesizer(FailingClient())
+
+    with pytest.raises(
+        RuntimeError,
+        match="Unexpected programming error.",
     ):
         synthesizer.synthesize(_build_state())

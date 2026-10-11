@@ -6,7 +6,10 @@ from verisight.analysis.insights import (
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.analysis.summary import AnalysisSummary
-from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation import (
+    FailedQueryAttempt,
+    InvestigationState,
+)
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
@@ -410,3 +413,57 @@ def test_formats_quality_issue_without_evidence() -> None:
         "Column 'amount' contains missing values."
     ) in formatted
     assert "Evidence:" not in formatted
+
+
+def test_formats_failed_attempts_separately_from_evidence() -> None:
+    attempt = FailedQueryAttempt(
+        question="What is the average score?",
+        error_type="QueryRuntimeError",
+        message="Referenced column score was not found.",
+    )
+
+    state = _build_state().add_failed_attempt(attempt)
+
+    formatted = InvestigationStateFormatter().format(state)
+
+    assert "EXECUTED OBSERVATIONS\nNone" in formatted
+    assert "FAILED QUERY ATTEMPTS" in formatted
+    assert "FAILED ATTEMPT 1" in formatted
+    assert "Question: What is the average score?" in formatted
+    assert "Error type: QueryRuntimeError" in formatted
+    assert "Error: Referenced column score was not found." in formatted
+    assert "Status: Failed; not analytical evidence." in formatted
+
+
+def test_formats_multiple_failed_attempts_in_order() -> None:
+    first = FailedQueryAttempt(
+        question="First analytical question",
+        error_type="QueryRuntimeError",
+        message="First failure",
+    )
+
+    second = FailedQueryAttempt(
+        question="Second analytical question",
+        error_type="QueryResultLimitError",
+        message="Result exceeds the configured row limit",
+    )
+
+    state = _build_state()
+    state = state.add_failed_attempt(first)
+    state = state.add_failed_attempt(second)
+
+    formatted = InvestigationStateFormatter().format(state)
+
+    assert formatted.index("FAILED ATTEMPT 1") < formatted.index("FAILED ATTEMPT 2")
+    assert "Error type: QueryRuntimeError" in formatted
+    assert "Error type: QueryResultLimitError" in formatted
+    assert state.failed_attempt_count == 2
+
+
+def test_formatter_preserves_existing_output_without_failures() -> None:
+    state = _build_state()
+
+    formatted = InvestigationStateFormatter().format(state)
+
+    assert "FAILED QUERY ATTEMPTS" not in formatted
+    assert "EXECUTED OBSERVATIONS\nNone" in formatted

@@ -1,3 +1,5 @@
+"""Tests for autonomous investigation orchestration."""
+
 import pytest
 
 from verisight.analysis.models import DatasetAnalysis
@@ -9,13 +11,23 @@ from verisight.execution.decisions import (
     InvestigationAction,
     InvestigationDecision,
 )
-from verisight.execution.exceptions import InvestigationError
+from verisight.execution.exceptions import (
+    InvestigationError,
+    QueryExecutionError,
+    QueryPlanningError,
+    QueryResultLimitError,
+    QueryRuntimeError,
+    QueryTimeoutError,
+    QueryValidationError,
+)
 from verisight.execution.execution import QueryExecution
+from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import InvestigationResult
 from verisight.execution.models import QueryResult
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.planning import QueryPlan
+from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.ingestion.schema import DatasetSchema
 from verisight.profiling.models import DatasetProfile
 
@@ -35,12 +47,11 @@ class StubInvestigator:
         state: InvestigationState,
     ) -> InvestigationDecision:
         self.states.append(state)
-
         return self._decisions[len(self.states) - 1]
 
 
 class StubExecutionService:
-    """Deterministic analytical execution service for tests."""
+    """Deterministic analytical execution service."""
 
     def __init__(self) -> None:
         self.run_questions: list[str] = []
@@ -60,8 +71,26 @@ class StubExecutionService:
         )
 
 
+class FailingExecutionService(StubExecutionService):
+    """Execution service with configurable failures."""
+
+    def __init__(
+        self,
+        failures: dict[str, Exception],
+    ) -> None:
+        super().__init__()
+        self._failures = failures
+
+    def run(self, question: str) -> QueryExecution:
+        if question in self._failures:
+            self.run_questions.append(question)
+            raise self._failures[question]
+
+        return super().run(question)
+
+
 class StubInvestigationSynthesizer:
-    """Deterministic investigation synthesizer for orchestration tests."""
+    """Deterministic investigation synthesizer."""
 
     def __init__(
         self,
@@ -75,7 +104,6 @@ class StubInvestigationSynthesizer:
         state: InvestigationState,
     ) -> str:
         self.states.append(state)
-
         return self.conclusion
 
 
@@ -85,31 +113,51 @@ def _build_analysis_result() -> DatasetAnalysisResult:
         profile=DatasetProfile(tables=()),
         issues=(),
     )
-
     return AnalysisResultBuilder().build(analysis)
 
 
-def test_investigation_finishes_without_querying() -> None:
-    investigator = StubInvestigator(
-        [
-            InvestigationDecision(
-                action=InvestigationAction.FINISH,
-                reasoning="Existing evidence is sufficient.",
-            )
-        ]
+def _investigate(question: str) -> InvestigationDecision:
+    return InvestigationDecision(
+        action=InvestigationAction.INVESTIGATE,
+        reasoning="Additional analytical evidence is required.",
+        question=question,
     )
+
+
+def _finish() -> InvestigationDecision:
+    return InvestigationDecision(
+        action=InvestigationAction.FINISH,
+        reasoning="The available evidence is sufficient.",
+    )
+
+
+def _build_orchestrator(
+    *,
+    investigator: StubInvestigator,
+    execution_service: StubExecutionService,
+    synthesizer: StubInvestigationSynthesizer,
+    max_steps: int = 5,
+) -> InvestigationOrchestrator:
+    return InvestigationOrchestrator(
+        execution_service=execution_service,
+        investigator=investigator,
+        synthesizer=synthesizer,
+        max_steps=max_steps,
+    )
+
+
+def test_investigation_finishes_without_querying() -> None:
+    investigator = StubInvestigator([_finish()])
     execution_service = StubExecutionService()
     synthesizer = StubInvestigationSynthesizer(
         conclusion="The existing evidence supports the final conclusion."
     )
 
-    orchestrator = InvestigationOrchestrator(
-        execution_service=execution_service,
+    result = _build_orchestrator(
         investigator=investigator,
+        execution_service=execution_service,
         synthesizer=synthesizer,
-    )
-
-    result = orchestrator.investigate(
+    ).investigate(
         question="Why did revenue decline?",
         analysis=_build_analysis_result(),
     )
@@ -119,26 +167,16 @@ def test_investigation_finishes_without_querying() -> None:
     assert result.conclusion == ("The existing evidence supports the final conclusion.")
     assert result.observations == ()
     assert result.observation_count == 0
-
     assert execution_service.run_questions == []
-
     assert len(synthesizer.states) == 1
-    assert synthesizer.states[0].question == "Why did revenue decline?"
     assert synthesizer.states[0].observation_count == 0
 
 
 def test_investigation_executes_requested_observation() -> None:
     investigator = StubInvestigator(
         [
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="Revenue should be examined over time.",
-                question="What is revenue by month?",
-            ),
-            InvestigationDecision(
-                action=InvestigationAction.FINISH,
-                reasoning="The evidence is sufficient.",
-            ),
+            _investigate("What is revenue by month?"),
+            _finish(),
         ]
     )
     execution_service = StubExecutionService()
@@ -146,13 +184,11 @@ def test_investigation_executes_requested_observation() -> None:
         conclusion="Revenue changed across the observed period."
     )
 
-    orchestrator = InvestigationOrchestrator(
-        execution_service=execution_service,
+    result = _build_orchestrator(
         investigator=investigator,
+        execution_service=execution_service,
         synthesizer=synthesizer,
-    )
-
-    result = orchestrator.investigate(
+    ).investigate(
         question="Why did revenue decline?",
         analysis=_build_analysis_result(),
     )
@@ -161,44 +197,30 @@ def test_investigation_executes_requested_observation() -> None:
     assert result.observation_count == 1
 
     observation = result.observations[0]
-
     assert observation.question == "What is revenue by month?"
     assert observation.sql == "SELECT 100 AS revenue"
     assert observation.result == QueryResult(
         columns=("revenue",),
         rows=((100,),),
     )
-
     assert execution_service.run_questions == ["What is revenue by month?"]
-
-    assert len(synthesizer.states) == 1
-    assert synthesizer.states[0].observation_count == 1
     assert synthesizer.states[0].observations[0] == observation
 
 
 def test_investigator_receives_updated_state() -> None:
     investigator = StubInvestigator(
         [
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="More evidence is required.",
-                question="What is revenue by month?",
-            ),
-            InvestigationDecision(
-                action=InvestigationAction.FINISH,
-                reasoning="The observation answers the question.",
-            ),
+            _investigate("What is revenue by month?"),
+            _finish(),
         ]
     )
     synthesizer = StubInvestigationSynthesizer()
 
-    orchestrator = InvestigationOrchestrator(
-        execution_service=StubExecutionService(),
+    _build_orchestrator(
         investigator=investigator,
+        execution_service=StubExecutionService(),
         synthesizer=synthesizer,
-    )
-
-    orchestrator.investigate(
+    ).investigate(
         question="Why did revenue decline?",
         analysis=_build_analysis_result(),
     )
@@ -206,75 +228,44 @@ def test_investigator_receives_updated_state() -> None:
     assert len(investigator.states) == 2
     assert investigator.states[0].observation_count == 0
     assert investigator.states[1].observation_count == 1
-
-    assert len(synthesizer.states) == 1
     assert synthesizer.states[0].observation_count == 1
 
 
 def test_investigation_can_execute_multiple_observations() -> None:
     investigator = StubInvestigator(
         [
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="First inspect revenue over time.",
-                question="What is revenue by month?",
-            ),
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="Now inspect customer contribution.",
-                question="What is revenue by customer?",
-            ),
-            InvestigationDecision(
-                action=InvestigationAction.FINISH,
-                reasoning="The available evidence is sufficient.",
-            ),
+            _investigate("What is revenue by month?"),
+            _investigate("What is revenue by customer?"),
+            _finish(),
         ]
     )
-
     execution_service = StubExecutionService()
-    synthesizer = StubInvestigationSynthesizer(
-        conclusion="The observations support the final conclusion."
-    )
+    synthesizer = StubInvestigationSynthesizer()
 
-    orchestrator = InvestigationOrchestrator(
-        execution_service=execution_service,
+    result = _build_orchestrator(
         investigator=investigator,
+        execution_service=execution_service,
         synthesizer=synthesizer,
-    )
-
-    result = orchestrator.investigate(
+    ).investigate(
         question="Why did revenue decline?",
         analysis=_build_analysis_result(),
     )
 
-    assert result.conclusion == ("The observations support the final conclusion.")
     assert result.observation_count == 2
-
     assert execution_service.run_questions == [
         "What is revenue by month?",
         "What is revenue by customer?",
     ]
-
-    assert len(synthesizer.states) == 1
     assert synthesizer.states[0].observation_count == 2
 
 
 def test_investigation_result_preserves_analysis() -> None:
     analysis = _build_analysis_result()
-
-    investigator = StubInvestigator(
-        [
-            InvestigationDecision(
-                action=InvestigationAction.FINISH,
-                reasoning="The deterministic evidence is sufficient.",
-            )
-        ]
-    )
     synthesizer = StubInvestigationSynthesizer()
 
-    result = InvestigationOrchestrator(
+    result = _build_orchestrator(
+        investigator=StubInvestigator([_finish()]),
         execution_service=StubExecutionService(),
-        investigator=investigator,
         synthesizer=synthesizer,
     ).investigate(
         question="Inspect the dataset.",
@@ -286,21 +277,13 @@ def test_investigation_result_preserves_analysis() -> None:
 
 
 def test_finish_reasoning_is_not_used_as_conclusion() -> None:
-    investigator = StubInvestigator(
-        [
-            InvestigationDecision(
-                action=InvestigationAction.FINISH,
-                reasoning="Enough evidence has been collected.",
-            )
-        ]
-    )
     synthesizer = StubInvestigationSynthesizer(
         conclusion="Revenue declined in the observed data."
     )
 
-    result = InvestigationOrchestrator(
+    result = _build_orchestrator(
+        investigator=StubInvestigator([_finish()]),
         execution_service=StubExecutionService(),
-        investigator=investigator,
         synthesizer=synthesizer,
     ).investigate(
         question="Why did revenue decline?",
@@ -308,28 +291,21 @@ def test_finish_reasoning_is_not_used_as_conclusion() -> None:
     )
 
     assert result.conclusion == "Revenue declined in the observed data."
-    assert result.conclusion != "Enough evidence has been collected."
+    assert result.conclusion != "The available evidence is sufficient."
 
 
 def test_synthesizer_is_called_only_after_finish() -> None:
     investigator = StubInvestigator(
         [
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="More evidence is required.",
-                question="What is revenue by month?",
-            ),
-            InvestigationDecision(
-                action=InvestigationAction.FINISH,
-                reasoning="The evidence is now sufficient.",
-            ),
+            _investigate("What is revenue by month?"),
+            _finish(),
         ]
     )
     synthesizer = StubInvestigationSynthesizer()
 
-    orchestrator = InvestigationOrchestrator(
-        execution_service=StubExecutionService(),
+    orchestrator = _build_orchestrator(
         investigator=investigator,
+        execution_service=StubExecutionService(),
         synthesizer=synthesizer,
     )
 
@@ -349,9 +325,9 @@ def test_investigation_rejects_empty_question() -> None:
     investigator = StubInvestigator([])
     synthesizer = StubInvestigationSynthesizer()
 
-    orchestrator = InvestigationOrchestrator(
-        execution_service=StubExecutionService(),
+    orchestrator = _build_orchestrator(
         investigator=investigator,
+        execution_service=StubExecutionService(),
         synthesizer=synthesizer,
     )
 
@@ -364,6 +340,7 @@ def test_investigation_rejects_empty_question() -> None:
             analysis=_build_analysis_result(),
         )
 
+    assert investigator.states == []
     assert synthesizer.states == []
 
 
@@ -372,9 +349,9 @@ def test_investigation_rejects_non_positive_max_steps() -> None:
         ValueError,
         match="Maximum investigation steps must be positive.",
     ):
-        InvestigationOrchestrator(
-            execution_service=StubExecutionService(),
+        _build_orchestrator(
             investigator=StubInvestigator([]),
+            execution_service=StubExecutionService(),
             synthesizer=StubInvestigationSynthesizer(),
             max_steps=0,
         )
@@ -383,25 +360,17 @@ def test_investigation_rejects_non_positive_max_steps() -> None:
 def test_investigation_stops_at_maximum_steps() -> None:
     investigator = StubInvestigator(
         [
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="More evidence is required.",
-                question="What is revenue by month?",
-            ),
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="Different evidence is still required.",
-                question="What is revenue by customer?",
-            ),
+            _investigate("What is revenue by month?"),
+            _investigate("What is revenue by customer?"),
+            _investigate("What is revenue by region?"),
         ]
     )
-
     execution_service = StubExecutionService()
     synthesizer = StubInvestigationSynthesizer()
 
-    orchestrator = InvestigationOrchestrator(
-        execution_service=execution_service,
+    orchestrator = _build_orchestrator(
         investigator=investigator,
+        execution_service=execution_service,
         synthesizer=synthesizer,
         max_steps=2,
     )
@@ -415,93 +384,72 @@ def test_investigation_stops_at_maximum_steps() -> None:
             analysis=_build_analysis_result(),
         )
 
-    assert len(execution_service.run_questions) == 2
+    assert execution_service.run_questions == [
+        "What is revenue by month?",
+        "What is revenue by customer?",
+    ]
+    assert len(investigator.states) == 3
+    assert investigator.states[2].observation_count == 2
     assert synthesizer.states == []
 
 
 def test_investigation_rejects_repeated_question() -> None:
+    question = "What is revenue by month?"
     investigator = StubInvestigator(
         [
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="Revenue should be examined over time.",
-                question="What is revenue by month?",
-            ),
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="The same evidence should be checked again.",
-                question="What is revenue by month?",
-            ),
+            _investigate(question),
+            _investigate(question),
         ]
     )
-
     execution_service = StubExecutionService()
     synthesizer = StubInvestigationSynthesizer()
-
-    orchestrator = InvestigationOrchestrator(
-        execution_service=execution_service,
-        investigator=investigator,
-        synthesizer=synthesizer,
-    )
 
     with pytest.raises(
         InvestigationError,
         match="Investigator requested a repeated analytical question.",
     ):
-        orchestrator.investigate(
+        _build_orchestrator(
+            investigator=investigator,
+            execution_service=execution_service,
+            synthesizer=synthesizer,
+        ).investigate(
             question="Why did revenue decline?",
             analysis=_build_analysis_result(),
         )
 
-    assert execution_service.run_questions == ["What is revenue by month?"]
+    assert execution_service.run_questions == [question]
     assert synthesizer.states == []
 
 
 def test_repeated_question_detection_is_normalized() -> None:
     investigator = StubInvestigator(
         [
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="Revenue should be examined over time.",
-                question="What is revenue by month?",
-            ),
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="The same evidence should be checked again.",
-                question="  what   is REVENUE by month?  ",
-            ),
+            _investigate("What is revenue by month?"),
+            _investigate("  what   is REVENUE by month?  "),
         ]
     )
-
     execution_service = StubExecutionService()
-    synthesizer = StubInvestigationSynthesizer()
-
-    orchestrator = InvestigationOrchestrator(
-        execution_service=execution_service,
-        investigator=investigator,
-        synthesizer=synthesizer,
-    )
 
     with pytest.raises(
         InvestigationError,
         match="Investigator requested a repeated analytical question.",
     ):
-        orchestrator.investigate(
+        _build_orchestrator(
+            investigator=investigator,
+            execution_service=execution_service,
+            synthesizer=StubInvestigationSynthesizer(),
+        ).investigate(
             question="Why did revenue decline?",
             analysis=_build_analysis_result(),
         )
 
     assert execution_service.run_questions == ["What is revenue by month?"]
-    assert synthesizer.states == []
 
 
 @pytest.mark.parametrize(
     ("question", "expected"),
     [
-        (
-            "What is revenue by month?",
-            "what is revenue by month?",
-        ),
+        ("What is revenue by month?", "what is revenue by month?"),
         (
             "  What   is   revenue   by month?  ",
             "what is revenue by month?",
@@ -521,6 +469,7 @@ def test_normalizes_investigation_question(
 
 def test_investigation_rejects_investigate_decision_without_question() -> None:
     malformed_decision = object.__new__(InvestigationDecision)
+
     object.__setattr__(
         malformed_decision,
         "action",
@@ -541,17 +490,15 @@ def test_investigation_rejects_investigate_decision_without_question() -> None:
     execution_service = StubExecutionService()
     synthesizer = StubInvestigationSynthesizer()
 
-    orchestrator = InvestigationOrchestrator(
-        execution_service=execution_service,
-        investigator=investigator,
-        synthesizer=synthesizer,
-    )
-
     with pytest.raises(
         InvestigationError,
         match="Investigator did not provide an analytical question.",
     ):
-        orchestrator.investigate(
+        _build_orchestrator(
+            investigator=investigator,
+            execution_service=execution_service,
+            synthesizer=synthesizer,
+        ).investigate(
             question="Why did revenue decline?",
             analysis=_build_analysis_result(),
         )
@@ -581,36 +528,23 @@ def test_investigation_preserves_executed_plan_provenance() -> None:
 
     investigator = StubInvestigator(
         [
-            InvestigationDecision(
-                action=InvestigationAction.INVESTIGATE,
-                reasoning="Assessment performance should be quantified.",
-                question="What is the average assessment score?",
-            ),
-            InvestigationDecision(
-                action=InvestigationAction.FINISH,
-                reasoning="The requested evidence is available.",
-            ),
+            _investigate("What is the average assessment score?"),
+            _finish(),
         ]
     )
-
     execution_service = RepairedExecutionService()
-    synthesizer = StubInvestigationSynthesizer(
-        conclusion="The executed observation provides the requested evidence."
-    )
+    synthesizer = StubInvestigationSynthesizer()
 
-    orchestrator = InvestigationOrchestrator(
+    result = InvestigationOrchestrator(
         execution_service=execution_service,
         investigator=investigator,
         synthesizer=synthesizer,
-    )
-
-    result = orchestrator.investigate(
+    ).investigate(
         question="Investigate assessment performance.",
         analysis=_build_analysis_result(),
     )
 
     assert execution_service.run_questions == ["What is the average assessment score?"]
-
     assert result.observation_count == 1
 
     observation = result.observations[0]
@@ -621,3 +555,497 @@ def test_investigation_preserves_executed_plan_provenance() -> None:
         columns=("average_score",),
         rows=((84.5,),),
     )
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        QueryExecutionError("Analytical execution failed."),
+        QueryRuntimeError("Query execution failed."),
+        QueryResultLimitError("Result exceeded the row limit."),
+        QueryTimeoutError("Query exceeded the timeout."),
+        QueryPlanningError("Query planning failed."),
+    ],
+)
+def test_investigation_recovers_from_query_failure(
+    error: Exception,
+) -> None:
+    failed_question = "Calculate the unavailable measure."
+    successful_question = "Count the available records."
+
+    investigator = StubInvestigator(
+        [
+            _investigate(failed_question),
+            _investigate(successful_question),
+            _finish(),
+        ]
+    )
+    execution_service = FailingExecutionService(failures={failed_question: error})
+    synthesizer = StubInvestigationSynthesizer()
+
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert result.observation_count == 1
+    assert result.observations[0].question == successful_question
+    assert execution_service.run_questions == [
+        failed_question,
+        successful_question,
+    ]
+    assert len(investigator.states) == 3
+
+    failed_state = investigator.states[1]
+
+    assert failed_state.observation_count == 0
+    assert failed_state.failed_attempt_count == 1
+    assert failed_state.failed_attempts[0].question == failed_question
+    assert failed_state.failed_attempts[0].error_type == type(error).__name__
+    assert failed_state.failed_attempts[0].message == str(error)
+
+    final_state = synthesizer.states[0]
+
+    assert final_state.observation_count == 1
+    assert final_state.failed_attempt_count == 1
+
+
+def test_investigation_rejects_query_validation_error() -> None:
+    question = "Inspect the dataset using prohibited SQL."
+    investigator = StubInvestigator(
+        [
+            _investigate(question),
+            _finish(),
+        ]
+    )
+    execution_service = FailingExecutionService(
+        failures={
+            question: QueryValidationError(
+                "Only read-only analytical SELECT queries are allowed."
+            )
+        }
+    )
+    synthesizer = StubInvestigationSynthesizer()
+
+    with pytest.raises(
+        QueryValidationError,
+        match="Only read-only analytical SELECT queries are allowed.",
+    ):
+        _build_orchestrator(
+            investigator=investigator,
+            execution_service=execution_service,
+            synthesizer=synthesizer,
+        ).investigate(
+            question="Investigate the dataset.",
+            analysis=_build_analysis_result(),
+        )
+
+    assert execution_service.run_questions == [question]
+    assert len(investigator.states) == 1
+    assert investigator.states[0].failed_attempt_count == 0
+    assert synthesizer.states == []
+
+
+def test_investigation_preserves_evidence_after_failure() -> None:
+    first_question = "Count the available records."
+    failed_question = "Calculate an unavailable measure."
+    final_question = "Count distinct categories."
+
+    investigator = StubInvestigator(
+        [
+            _investigate(first_question),
+            _investigate(failed_question),
+            _investigate(final_question),
+            _finish(),
+        ]
+    )
+    execution_service = FailingExecutionService(
+        failures={
+            failed_question: QueryRuntimeError("The requested measure does not exist.")
+        }
+    )
+    synthesizer = StubInvestigationSynthesizer()
+
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert result.observation_count == 2
+    assert result.observations[0].question == first_question
+    assert result.observations[1].question == final_question
+
+    final_state = synthesizer.states[0]
+
+    assert final_state.observation_count == 2
+    assert final_state.failed_attempt_count == 1
+    assert final_state.failed_attempts[0].question == failed_question
+
+
+def test_investigation_rejects_repeated_failed_question() -> None:
+    question = "Calculate the unavailable measure."
+    investigator = StubInvestigator(
+        [
+            _investigate(question),
+            _investigate(question),
+        ]
+    )
+    execution_service = FailingExecutionService(
+        failures={question: QueryRuntimeError("The requested measure does not exist.")}
+    )
+    synthesizer = StubInvestigationSynthesizer()
+
+    with pytest.raises(
+        InvestigationError,
+        match="Investigator requested a repeated analytical question.",
+    ):
+        _build_orchestrator(
+            investigator=investigator,
+            execution_service=execution_service,
+            synthesizer=synthesizer,
+        ).investigate(
+            question="Investigate the dataset.",
+            analysis=_build_analysis_result(),
+        )
+
+    assert execution_service.run_questions == [question]
+    assert investigator.states[1].failed_attempt_count == 1
+    assert synthesizer.states == []
+
+
+def test_failed_queries_count_toward_maximum_steps() -> None:
+    first_question = "First unavailable measure."
+    second_question = "Second unavailable measure."
+
+    investigator = StubInvestigator(
+        [
+            _investigate(first_question),
+            _investigate(second_question),
+            _investigate("Third unavailable measure."),
+        ]
+    )
+    execution_service = FailingExecutionService(
+        failures={
+            first_question: QueryRuntimeError("First query failed."),
+            second_question: QueryTimeoutError("Second query timed out."),
+        }
+    )
+    synthesizer = StubInvestigationSynthesizer()
+
+    with pytest.raises(
+        InvestigationError,
+        match="Investigation exceeded the maximum number of steps.",
+    ):
+        _build_orchestrator(
+            investigator=investigator,
+            execution_service=execution_service,
+            synthesizer=synthesizer,
+            max_steps=2,
+        ).investigate(
+            question="Investigate the dataset.",
+            analysis=_build_analysis_result(),
+        )
+
+    assert execution_service.run_questions == [
+        first_question,
+        second_question,
+    ]
+    assert len(investigator.states) == 3
+    assert investigator.states[2].failed_attempt_count == 2
+    assert synthesizer.states == []
+
+
+def test_unexpected_execution_errors_are_not_suppressed() -> None:
+    question = "Count the available records."
+    investigator = StubInvestigator([_investigate(question)])
+    execution_service = FailingExecutionService(
+        failures={question: ValueError("Unexpected programming error.")}
+    )
+    synthesizer = StubInvestigationSynthesizer()
+
+    with pytest.raises(
+        ValueError,
+        match="Unexpected programming error.",
+    ):
+        _build_orchestrator(
+            investigator=investigator,
+            execution_service=execution_service,
+            synthesizer=synthesizer,
+        ).investigate(
+            question="Investigate the dataset.",
+            analysis=_build_analysis_result(),
+        )
+
+    assert execution_service.run_questions == [question]
+    assert synthesizer.states == []
+
+
+def test_investigation_can_finish_after_recoverable_failure() -> None:
+    question = "Calculate an unavailable measure."
+    investigator = StubInvestigator(
+        [
+            _investigate(question),
+            _finish(),
+        ]
+    )
+    execution_service = FailingExecutionService(
+        failures={question: QueryRuntimeError("The requested measure does not exist.")}
+    )
+    synthesizer = StubInvestigationSynthesizer()
+
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert result.observation_count == 0
+    assert synthesizer.states[0].failed_attempt_count == 1
+    assert synthesizer.states[0].failed_attempts[0].question == question
+
+
+def test_finishes_after_final_permitted_successful_query() -> None:
+    """The last permitted query must remain available for synthesis."""
+
+    investigator = StubInvestigator(
+        [
+            _investigate("First analytical question."),
+            _investigate("Second analytical question."),
+            _finish(),
+        ]
+    )
+    execution_service = StubExecutionService()
+    synthesizer = StubInvestigationSynthesizer()
+
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+        max_steps=2,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert result.observation_count == 2
+    assert execution_service.run_questions == [
+        "First analytical question.",
+        "Second analytical question.",
+    ]
+    assert len(investigator.states) == 3
+    assert investigator.states[2].observation_count == 2
+    assert len(synthesizer.states) == 1
+    assert synthesizer.states[0].observation_count == 2
+
+
+def test_finishes_after_final_permitted_failed_query() -> None:
+    """A failed final query must not prevent an explicit finish."""
+
+    question = "Unavailable measure."
+    investigator = StubInvestigator(
+        [
+            _investigate(question),
+            _finish(),
+        ]
+    )
+    execution_service = FailingExecutionService(
+        failures={question: QueryRuntimeError("The requested measure is unavailable.")}
+    )
+    synthesizer = StubInvestigationSynthesizer()
+
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+        max_steps=1,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert result.observation_count == 0
+    assert execution_service.run_questions == [question]
+    assert len(investigator.states) == 2
+    assert investigator.states[1].failed_attempt_count == 1
+    assert synthesizer.states[0].failed_attempt_count == 1
+
+
+def test_single_step_budget_rejects_second_query() -> None:
+    """A final decision cannot execute a query beyond the budget."""
+
+    investigator = StubInvestigator(
+        [
+            _investigate("First question."),
+            _investigate("Second question."),
+        ]
+    )
+    execution_service = StubExecutionService()
+    synthesizer = StubInvestigationSynthesizer()
+
+    with pytest.raises(
+        InvestigationError,
+        match="Investigation exceeded the maximum number of steps.",
+    ):
+        _build_orchestrator(
+            investigator=investigator,
+            execution_service=execution_service,
+            synthesizer=synthesizer,
+            max_steps=1,
+        ).investigate(
+            question="Investigate the dataset.",
+            analysis=_build_analysis_result(),
+        )
+
+    assert execution_service.run_questions == ["First question."]
+    assert len(investigator.states) == 2
+    assert investigator.states[1].observation_count == 1
+    assert synthesizer.states == []
+
+
+def test_single_step_budget_can_finish_without_querying() -> None:
+    """Finishing immediately does not consume the query budget."""
+
+    investigator = StubInvestigator([_finish()])
+    execution_service = StubExecutionService()
+    synthesizer = StubInvestigationSynthesizer()
+
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+        max_steps=1,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert result.observation_count == 0
+    assert execution_service.run_questions == []
+    assert len(investigator.states) == 1
+    assert len(synthesizer.states) == 1
+
+
+def test_mixed_success_and_failure_consume_query_budget() -> None:
+    """Successful and failed attempts share the same query budget."""
+
+    successful_question = "Count records."
+    failed_question = "Calculate unavailable measure."
+
+    investigator = StubInvestigator(
+        [
+            _investigate(successful_question),
+            _investigate(failed_question),
+            _finish(),
+        ]
+    )
+    execution_service = FailingExecutionService(
+        failures={failed_question: QueryRuntimeError("Measure is unavailable.")}
+    )
+    synthesizer = StubInvestigationSynthesizer()
+
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+        max_steps=2,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert execution_service.run_questions == [
+        successful_question,
+        failed_question,
+    ]
+    assert result.observation_count == 1
+    assert len(investigator.states) == 3
+
+    final_state = synthesizer.states[0]
+
+    assert final_state.observation_count == 1
+    assert final_state.failed_attempt_count == 1
+    assert final_state.failed_attempts[0].question == failed_question
+
+
+def test_investigation_propagates_prompt_budget_failure() -> None:
+    """Prompt-budget failures must not be treated as recoverable SQL errors."""
+
+    question = "Analyze revenue by region."
+
+    investigator = StubInvestigator(
+        [
+            _investigate(question),
+            _finish(),
+        ]
+    )
+
+    budget_error = PromptBudgetExceededError(
+        max_prompt_chars=100,
+        actual_prompt_chars=150,
+    )
+
+    execution_service = FailingExecutionService(failures={question: budget_error})
+    synthesizer = StubInvestigationSynthesizer()
+
+    with pytest.raises(PromptBudgetExceededError) as exc_info:
+        _build_orchestrator(
+            investigator=investigator,
+            execution_service=execution_service,
+            synthesizer=synthesizer,
+        ).investigate(
+            question="Investigate revenue performance.",
+            analysis=_build_analysis_result(),
+        )
+
+    assert exc_info.value is budget_error
+    assert execution_service.run_questions == [question]
+    assert len(investigator.states) == 1
+    assert investigator.states[0].observation_count == 0
+    assert investigator.states[0].failed_attempt_count == 0
+    assert synthesizer.states == []
+
+
+def test_investigation_propagates_provider_planning_failure() -> None:
+    """Provider outages must not be recorded as recoverable SQL failures."""
+
+    question = "Analyze revenue by region."
+    provider_error = GeminiGenerationError("Provider unavailable.")
+    planning_error = QueryPlanningError("Query planner text generation failed.")
+    planning_error.__cause__ = provider_error
+
+    investigator = StubInvestigator(
+        [
+            _investigate(question),
+            _finish(),
+        ]
+    )
+    execution_service = FailingExecutionService(failures={question: planning_error})
+    synthesizer = StubInvestigationSynthesizer()
+
+    with pytest.raises(QueryPlanningError) as exc_info:
+        _build_orchestrator(
+            investigator=investigator,
+            execution_service=execution_service,
+            synthesizer=synthesizer,
+        ).investigate(
+            question="Investigate revenue performance.",
+            analysis=_build_analysis_result(),
+        )
+
+    assert exc_info.value is planning_error
+    assert exc_info.value.__cause__ is provider_error
+    assert execution_service.run_questions == [question]
+    assert len(investigator.states) == 1
+    assert investigator.states[0].failed_attempt_count == 0
+    assert synthesizer.states == []

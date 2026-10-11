@@ -7,10 +7,12 @@ from verisight.execution.decisions import (
     InvestigationDecision,
 )
 from verisight.execution.exceptions import InvestigationError
+from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.generative_investigator import (
     GenerativeInvestigator,
 )
 from verisight.execution.investigation import InvestigationState
+from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.ingestion.schema import (
     ColumnSchema,
     DatasetSchema,
@@ -187,5 +189,53 @@ def test_generative_investigator_propagates_invalid_response() -> None:
     with pytest.raises(
         InvestigationError,
         match="Investigator returned invalid JSON.",
+    ):
+        investigator.decide(_build_state())
+
+
+def test_generative_investigator_does_not_call_llm_for_oversized_prompt() -> None:
+    client = StubTextGenerationClient(
+        '{"action": "finish", "reasoning": "Done.", "question": null}'
+    )
+    investigator = GenerativeInvestigator(client)
+
+    state = _build_state()
+    oversized_state = InvestigationState(
+        question="X" * 60_000,
+        analysis=state.analysis,
+    )
+
+    with pytest.raises(PromptBudgetExceededError):
+        investigator.decide(oversized_state)
+
+    assert client.prompts == []
+
+
+def test_generative_investigator_translates_provider_failure() -> None:
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise GeminiGenerationError("Provider unavailable.")
+
+    investigator = GenerativeInvestigator(FailingClient())
+
+    with pytest.raises(
+        InvestigationError,
+        match="Investigator text generation failed.",
+    ) as exc_info:
+        investigator.decide(_build_state())
+
+    assert isinstance(exc_info.value.__cause__, GeminiGenerationError)
+
+
+def test_generative_investigator_preserves_unexpected_errors() -> None:
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise RuntimeError("Unexpected programming error.")
+
+    investigator = GenerativeInvestigator(FailingClient())
+
+    with pytest.raises(
+        RuntimeError,
+        match="Unexpected programming error.",
     ):
         investigator.decide(_build_state())

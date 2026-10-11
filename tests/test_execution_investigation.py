@@ -1,6 +1,9 @@
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder, DatasetAnalysisResult
-from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation import (
+    FailedQueryAttempt,
+    InvestigationState,
+)
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
 from verisight.ingestion.schema import (
@@ -117,3 +120,79 @@ def test_add_observation_returns_new_investigation_state() -> None:
     assert updated.question == state.question
     assert updated.analysis is state.analysis
     assert updated.context == state.context
+
+
+def test_investigation_state_starts_without_failed_attempts() -> None:
+    state = InvestigationState(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert state.failed_attempts == ()
+    assert state.failed_attempt_count == 0
+
+
+def test_add_failed_attempt_preserves_existing_observations() -> None:
+    observation = QueryObservation(
+        question="Count the records.",
+        sql="SELECT COUNT(*) AS total FROM records",
+        result=QueryResult(
+            columns=("total",),
+            rows=((10,),),
+        ),
+    )
+
+    original = InvestigationState(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+        observations=(observation,),
+    )
+
+    attempt = FailedQueryAttempt(
+        question="Calculate an unavailable measure.",
+        error_type="QueryRuntimeError",
+        message="The requested column does not exist.",
+    )
+
+    updated = original.add_failed_attempt(attempt)
+
+    assert updated is not original
+    assert original.failed_attempt_count == 0
+    assert updated.failed_attempts == (attempt,)
+    assert updated.failed_attempt_count == 1
+
+    assert updated.observations == (observation,)
+    assert updated.observation_count == 1
+    assert updated.analysis is original.analysis
+
+
+def test_add_observation_preserves_existing_failed_attempts() -> None:
+    attempt = FailedQueryAttempt(
+        question="Calculate an unavailable measure.",
+        error_type="QueryRuntimeError",
+        message="The requested column does not exist.",
+    )
+
+    original = InvestigationState(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+        failed_attempts=(attempt,),
+    )
+
+    observation = QueryObservation(
+        question="Count the records.",
+        sql="SELECT COUNT(*) AS total FROM records",
+        result=QueryResult(
+            columns=("total",),
+            rows=((10,),),
+        ),
+    )
+
+    updated = original.add_observation(observation)
+
+    assert updated.failed_attempts == (attempt,)
+    assert updated.failed_attempt_count == 1
+    assert updated.observations == (observation,)
+    assert updated.observation_count == 1
+
+    assert original.observations == ()

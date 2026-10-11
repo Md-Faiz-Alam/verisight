@@ -3,8 +3,17 @@
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.execution.analytical import AnalyticalQueryRunner
 from verisight.execution.decisions import InvestigationAction
-from verisight.execution.exceptions import InvestigationError
-from verisight.execution.investigation import InvestigationState
+from verisight.execution.exceptions import (
+    InvestigationError,
+    QueryExecutionError,
+    QueryPlanningError,
+    QueryValidationError,
+)
+from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.investigation import (
+    FailedQueryAttempt,
+    InvestigationState,
+)
 from verisight.execution.investigation_result import InvestigationResult
 from verisight.execution.investigator import Investigator
 from verisight.execution.observations import QueryObservation
@@ -48,9 +57,10 @@ class InvestigationOrchestrator:
             analysis=analysis,
         )
 
-        executed_questions: set[str] = set()
+        attempted_questions: set[str] = set()
+        attempt_count = 0
 
-        for _ in range(self._max_steps):
+        while True:
             decision = self._investigator.decide(state)
 
             if decision.action is InvestigationAction.FINISH:
@@ -63,6 +73,13 @@ class InvestigationOrchestrator:
                     observations=state.observations,
                 )
 
+            # Permit a final FINISH decision after the query budget
+            # is exhausted, but never execute another query.
+            if attempt_count >= self._max_steps:
+                raise InvestigationError(
+                    "Investigation exceeded the maximum number of steps."
+                )
+
             investigation_question = decision.question
 
             if investigation_question is None:
@@ -72,12 +89,36 @@ class InvestigationOrchestrator:
 
             normalized_question = self._normalize_question(investigation_question)
 
-            if normalized_question in executed_questions:
+            if normalized_question in attempted_questions:
                 raise InvestigationError(
                     "Investigator requested a repeated analytical question."
                 )
 
-            execution = self._execution_service.run(investigation_question)
+            attempted_questions.add(normalized_question)
+            attempt_count += 1
+
+            try:
+                execution = self._execution_service.run(investigation_question)
+
+            except QueryValidationError:
+                # Preserve the existing SQL safety contract.
+                # Prohibited SQL must not be treated as recoverable.
+                raise
+
+            except (QueryExecutionError, QueryPlanningError) as exc:
+                if isinstance(exc, QueryPlanningError) and isinstance(
+                    exc.__cause__, GeminiGenerationError
+                ):
+                    raise
+
+                state = state.add_failed_attempt(
+                    FailedQueryAttempt(
+                        question=investigation_question,
+                        error_type=type(exc).__name__,
+                        message=str(exc),
+                    )
+                )
+                continue
 
             observation = QueryObservation(
                 question=execution.plan.question,
@@ -86,9 +127,6 @@ class InvestigationOrchestrator:
             )
 
             state = state.add_observation(observation)
-            executed_questions.add(normalized_question)
-
-        raise InvestigationError("Investigation exceeded the maximum number of steps.")
 
     @staticmethod
     def _normalize_question(question: str) -> str:

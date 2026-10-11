@@ -4,22 +4,24 @@ from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
+from verisight.execution.prompt_budget import PromptBudget
 
 
 class InvestigationSynthesisPromptBuilder:
     """Build deterministic prompts for investigation synthesis."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_prompt_chars: int = 60_000) -> None:
         """Initialize the synthesis prompt builder."""
 
         self._state_formatter = InvestigationStateFormatter()
+        self._prompt_budget = PromptBudget(max_prompt_chars=max_prompt_chars)
 
     def build(self, state: InvestigationState) -> str:
         """Build a synthesis prompt from completed investigation state."""
 
         context = self._state_formatter.format(state)
 
-        return (
+        prompt = (
             "You are the analytical conclusion synthesizer for VeriSight.\n\n"
             "Your job is to answer the original investigation question using "
             "only the evidence contained in the supplied investigation state.\n\n"
@@ -46,8 +48,8 @@ class InvestigationSynthesisPromptBuilder:
             "evidence.\n"
             "- Do not present a newly calculated mean, total, rate, ratio, "
             "percentage, correlation, trend statistic, or grouped result as "
-            "observed evidence unless that quantity is explicitly present in "
-            "the investigation state.\n"
+            "observed evidence unless that quantity is explicitly present "
+            "in the investigation state.\n"
             "- If answering the original question requires an analytical "
             "quantity that was not produced by the investigation, state that "
             "the available evidence is insufficient for that part of the "
@@ -67,3 +69,5 @@ class InvestigationSynthesisPromptBuilder:
             "INVESTIGATION STATE:\n"
             f"{context}\n"
         )
+
+        return self._prompt_budget.enforce(prompt)

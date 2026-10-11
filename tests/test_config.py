@@ -31,6 +31,9 @@ def test_settings_have_expected_defaults() -> None:
     assert settings.max_query_temp_storage_mb == 1_024
     assert settings.gemini_api_key is None
     assert settings.gemini_model == "gemini-3.1-flash-lite"
+    assert settings.gemini_request_timeout_seconds == 30.0
+    assert settings.gemini_max_retries == 2
+    assert settings.gemini_retry_base_delay_seconds == 1.0
 
 
 def test_settings_load_prefixed_environment_variables(
@@ -207,3 +210,52 @@ def test_settings_reject_non_positive_query_temp_storage_limit(
         SettingsWithoutEnvFile(
             max_query_temp_storage_mb=limit,
         )
+
+
+def test_settings_load_gemini_reliability_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "VERISIGHT_GEMINI_REQUEST_TIMEOUT_SECONDS",
+        "12.5",
+    )
+    monkeypatch.setenv(
+        "VERISIGHT_GEMINI_MAX_RETRIES",
+        "3",
+    )
+    monkeypatch.setenv(
+        "VERISIGHT_GEMINI_RETRY_BASE_DELAY_SECONDS",
+        "0.5",
+    )
+
+    settings = SettingsWithoutEnvFile()
+
+    assert settings.gemini_request_timeout_seconds == 12.5
+    assert settings.gemini_max_retries == 3
+    assert settings.gemini_retry_base_delay_seconds == 0.5
+
+
+@pytest.mark.parametrize(
+    ("environment_variable", "value"),
+    [
+        ("VERISIGHT_GEMINI_REQUEST_TIMEOUT_SECONDS", "0"),
+        ("VERISIGHT_GEMINI_REQUEST_TIMEOUT_SECONDS", "-1"),
+        ("VERISIGHT_GEMINI_REQUEST_TIMEOUT_SECONDS", "inf"),
+        ("VERISIGHT_GEMINI_REQUEST_TIMEOUT_SECONDS", "nan"),
+        ("VERISIGHT_GEMINI_MAX_RETRIES", "-1"),
+        ("VERISIGHT_GEMINI_MAX_RETRIES", "6"),
+        ("VERISIGHT_GEMINI_RETRY_BASE_DELAY_SECONDS", "0"),
+        ("VERISIGHT_GEMINI_RETRY_BASE_DELAY_SECONDS", "-1"),
+        ("VERISIGHT_GEMINI_RETRY_BASE_DELAY_SECONDS", "inf"),
+        ("VERISIGHT_GEMINI_RETRY_BASE_DELAY_SECONDS", "nan"),
+    ],
+)
+def test_settings_reject_invalid_gemini_reliability_options(
+    monkeypatch: pytest.MonkeyPatch,
+    environment_variable: str,
+    value: str,
+) -> None:
+    monkeypatch.setenv(environment_variable, value)
+
+    with pytest.raises(ValidationError):
+        SettingsWithoutEnvFile()

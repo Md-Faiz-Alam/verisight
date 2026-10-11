@@ -68,6 +68,9 @@ class VeriSight:
         return GeminiTextGenerationClient(
             api_key=api_key,
             model=settings.gemini_model,
+            request_timeout_seconds=settings.gemini_request_timeout_seconds,
+            max_retries=settings.gemini_max_retries,
+            retry_base_delay_seconds=settings.gemini_retry_base_delay_seconds,
         )
 
     @classmethod

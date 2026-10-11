@@ -155,3 +155,69 @@ def test_require_single_statement_rejects_multiple_statements() -> None:
         QueryResponseParser._require_single_statement(
             "SELECT COUNT(*) FROM orders; SELECT 1"
         )
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "SELECT 1 -- comment; still comment",
+        "SELECT 1 /* comment; still comment */",
+        "SELECT 1 /* comment; still comment */;",
+        "SELECT 1; -- trailing comment",
+    ],
+)
+def test_accepts_semicolons_inside_sql_comments(response: str) -> None:
+    sql = QueryResponseParser().parse(response)
+
+    assert sql == response
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "SELECT 1; -- comment\nSELECT 2",
+        "SELECT 1; /* comment */ SELECT 2",
+        "SELECT 1 /* comment; */; SELECT 2",
+    ],
+)
+def test_rejects_multiple_statements_with_comments(response: str) -> None:
+    with pytest.raises(
+        QueryPlanningError,
+        match="Query planner returned multiple SQL statements.",
+    ):
+        QueryResponseParser().parse(response)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "SELECT 1 -- comment\n;",
+        "SELECT 1 /* comment */;",
+        "SELECT '-- not a comment; still a string'",
+        'SELECT "/* not a comment; */" FROM orders',
+        "SELECT 1; /* trailing comment */",
+        "SELECT 1; -- trailing comment\n",
+        "SELECT 1 /* comment */ -- line comment; still comment",
+    ],
+)
+def test_accepts_sql_comment_and_quote_boundaries(response: str) -> None:
+    assert QueryResponseParser().parse(response) == response.strip()
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "SELECT 1; -- comment\nSELECT 2",
+        "SELECT 1; /* comment */ SELECT 2",
+        "SELECT 1; /* comment */ ;",
+        "SELECT 1; -- comment\n;",
+        "SELECT 1; SELECT '-- comment'",
+        "SELECT 1; SELECT '/* comment */'",
+    ],
+)
+def test_rejects_sql_after_statement_terminator(response: str) -> None:
+    with pytest.raises(
+        QueryPlanningError,
+        match="Query planner returned multiple SQL statements.",
+    ):
+        QueryResponseParser().parse(response)

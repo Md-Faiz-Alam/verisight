@@ -1,5 +1,7 @@
 """Generative implementation of evidence-grounded investigation synthesis."""
 
+from verisight.execution.exceptions import InvestigationError
+from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.generation import TextGenerationClient
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.synthesis_prompting import (
@@ -20,10 +22,19 @@ class GenerativeInvestigationSynthesizer:
         """Generate an evidence-grounded conclusion."""
 
         prompt = self._prompt_builder.build(state)
-        response = self._client.generate(prompt)
+
+        try:
+            response = self._client.generate(prompt)
+        except GeminiGenerationError as exc:
+            raise InvestigationError(
+                "Investigation synthesis text generation failed."
+            ) from exc
+
         conclusion = response.strip()
 
         if not conclusion:
-            raise ValueError("Investigation synthesizer returned an empty conclusion.")
+            raise InvestigationError(
+                "Investigation synthesizer returned an empty conclusion."
+            )
 
         return conclusion

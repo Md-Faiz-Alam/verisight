@@ -1,21 +1,25 @@
 """Prompt construction for analytical query repair."""
 
 from verisight.execution.formatting import QueryContextFormatter
+from verisight.execution.prompt_budget import PromptBudget
 from verisight.execution.repair import QueryRepairRequest
 
 
 class QueryRepairPromptBuilder:
     """Build deterministic prompts for analytical query repair."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_prompt_chars: int = 60_000) -> None:
+        """Initialize the SQL repair prompt builder."""
+
         self._context_formatter = QueryContextFormatter()
+        self._prompt_budget = PromptBudget(max_prompt_chars=max_prompt_chars)
 
     def build(self, request: QueryRepairRequest) -> str:
         """Build a repair prompt from a failed analytical query."""
 
         context = self._context_formatter.format(request.context)
 
-        return (
+        prompt = (
             "You are an analytical SQL repairer for VeriSight.\n\n"
             "A previously generated DuckDB SELECT query failed during "
             "execution. Generate exactly one replacement read-only DuckDB "
@@ -62,3 +66,5 @@ class QueryRepairPromptBuilder:
             "RUNTIME ERROR:\n"
             f"{request.error}\n"
         )
+
+        return self._prompt_budget.enforce(prompt)

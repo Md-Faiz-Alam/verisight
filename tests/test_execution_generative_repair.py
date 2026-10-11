@@ -1,6 +1,11 @@
+import pytest
+
 from verisight.execution.context import QueryContext
+from verisight.execution.exceptions import QueryPlanningError
+from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.generative_repair import GenerativeQueryRepairer
 from verisight.execution.planning import QueryPlan
+from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.repair import QueryRepairRequest
 
 
@@ -35,7 +40,7 @@ def test_generative_repairer_builds_query_plan() -> None:
 
     assert plan == QueryPlan(
         question="Compare values across groups.",
-        sql=("SELECT group_name, AVG(value) FROM observations GROUP BY group_name"),
+        sql="SELECT group_name, AVG(value) FROM observations GROUP BY group_name",
     )
 
 
@@ -69,3 +74,52 @@ def test_generative_repairer_parses_fenced_sql_response() -> None:
     assert plan.sql == (
         "SELECT group_name, AVG(value)\nFROM observations\nGROUP BY group_name"
     )
+
+
+def test_generative_repairer_does_not_call_llm_for_oversized_prompt() -> None:
+    client = StubTextGenerationClient("SELECT 1")
+    repairer = GenerativeQueryRepairer(client)
+
+    original = _make_request()
+
+    request = QueryRepairRequest(
+        question=original.question,
+        failed_sql="SELECT " + "X" * 60_000,
+        error=original.error,
+        context=original.context,
+    )
+
+    with pytest.raises(PromptBudgetExceededError):
+        repairer.repair(request)
+
+    assert client.prompts == []
+
+
+def test_generative_repairer_translates_provider_failure() -> None:
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise GeminiGenerationError("Provider unavailable.")
+
+    repairer = GenerativeQueryRepairer(FailingClient())
+
+    with pytest.raises(
+        QueryPlanningError,
+        match="Query repairer text generation failed.",
+    ) as exc_info:
+        repairer.repair(_make_request())
+
+    assert isinstance(exc_info.value.__cause__, GeminiGenerationError)
+
+
+def test_generative_repairer_preserves_unexpected_errors() -> None:
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise RuntimeError("Unexpected programming error.")
+
+    repairer = GenerativeQueryRepairer(FailingClient())
+
+    with pytest.raises(
+        RuntimeError,
+        match="Unexpected programming error.",
+    ):
+        repairer.repair(_make_request())

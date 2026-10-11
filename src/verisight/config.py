@@ -58,6 +58,24 @@ class Settings(BaseSettings):
 
     gemini_model: str = "gemini-3.1-flash-lite"
 
+    gemini_request_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        allow_inf_nan=False,
+    )
+
+    gemini_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+    )
+
+    gemini_retry_base_delay_seconds: float = Field(
+        default=1.0,
+        gt=0,
+        allow_inf_nan=False,
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

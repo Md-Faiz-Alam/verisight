@@ -10,6 +10,27 @@ from verisight.execution.decisions import (
 from verisight.execution.exceptions import InvestigationError
 
 
+def _reject_duplicate_fields(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    """Build a JSON object without allowing duplicate field names."""
+
+    payload: dict[str, Any] = {}
+
+    for key, value in pairs:
+        if key in payload:
+            raise ValueError("Duplicate JSON field.")
+        payload[key] = value
+
+    return payload
+
+
+def _reject_nonstandard_constant(value: str) -> None:
+    """Reject NaN and Infinity, which are not valid JSON constants."""
+
+    raise ValueError(f"Nonstandard JSON constant: {value}")
+
+
 class InvestigationResponseParser:
     """Parse model responses into validated investigation decisions."""
 
@@ -22,8 +43,12 @@ class InvestigationResponseParser:
             raise InvestigationError("Investigator returned an empty response.")
 
         try:
-            payload = json.loads(normalized)
-        except json.JSONDecodeError as exc:
+            payload = json.loads(
+                normalized,
+                object_pairs_hook=_reject_duplicate_fields,
+                parse_constant=_reject_nonstandard_constant,
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
             raise InvestigationError("Investigator returned invalid JSON.") from exc
 
         if not isinstance(payload, dict):

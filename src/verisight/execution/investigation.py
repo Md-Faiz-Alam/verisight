@@ -8,18 +8,34 @@ from verisight.execution.observations import QueryObservation
 
 
 @dataclass(frozen=True, slots=True)
+class FailedQueryAttempt:
+    """A failed analytical request, not usable as query evidence."""
+
+    question: str
+    error_type: str
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
 class InvestigationState:
     """Current state of an autonomous analytical investigation."""
 
     question: str
     analysis: DatasetAnalysisResult
     observations: tuple[QueryObservation, ...] = ()
+    failed_attempts: tuple[FailedQueryAttempt, ...] = ()
 
     @property
     def observation_count(self) -> int:
-        """Return the number of executed analytical observations."""
+        """Return the number of successful analytical observations."""
 
         return len(self.observations)
+
+    @property
+    def failed_attempt_count(self) -> int:
+        """Return the number of failed analytical attempts."""
+
+        return len(self.failed_attempts)
 
     @property
     def context(self) -> QueryContext:
@@ -37,4 +53,18 @@ class InvestigationState:
             question=self.question,
             analysis=self.analysis,
             observations=(*self.observations, observation),
+            failed_attempts=self.failed_attempts,
+        )
+
+    def add_failed_attempt(
+        self,
+        attempt: FailedQueryAttempt,
+    ) -> "InvestigationState":
+        """Return a new state containing an unsuccessful analytical attempt."""
+
+        return InvestigationState(
+            question=self.question,
+            analysis=self.analysis,
+            observations=self.observations,
+            failed_attempts=(*self.failed_attempts, attempt),
         )

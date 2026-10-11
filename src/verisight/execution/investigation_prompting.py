@@ -4,20 +4,24 @@ from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
+from verisight.execution.prompt_budget import PromptBudget
 
 
 class InvestigationPromptBuilder:
     """Build deterministic prompts for autonomous investigation."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_prompt_chars: int = 60_000) -> None:
+        """Initialize the investigator prompt builder."""
+
         self._state_formatter = InvestigationStateFormatter()
+        self._prompt_budget = PromptBudget(max_prompt_chars=max_prompt_chars)
 
     def build(self, state: InvestigationState) -> str:
         """Build an investigator prompt from the current state."""
 
         context = self._state_formatter.format(state)
 
-        return (
+        prompt = (
             "You are the autonomous analytical investigator for VeriSight.\n\n"
             "Your job is to decide whether more analytical evidence is needed "
             "to answer the original question.\n\n"
@@ -197,3 +201,5 @@ class InvestigationPromptBuilder:
             "INVESTIGATION STATE:\n"
             f"{context}\n"
         )
+
+        return self._prompt_budget.enforce(prompt)
