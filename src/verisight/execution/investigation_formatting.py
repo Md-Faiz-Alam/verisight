@@ -14,6 +14,7 @@ from verisight.execution.investigation import (
 )
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
+from verisight.serialization import to_jsonable
 
 
 class InvestigationStateFormatter:
@@ -23,6 +24,7 @@ class InvestigationStateFormatter:
         self,
         *,
         max_result_rows: int = 100,
+        max_observations: int | None = None,
         max_insights: int = 50,
         max_quality_issues: int = 50,
         max_failed_attempts: int = 20,
@@ -46,6 +48,10 @@ class InvestigationStateFormatter:
             if value <= 0:
                 raise ValueError(f"{name} must be positive.")
 
+        if max_observations is not None and max_observations < 0:
+            raise ValueError("Maximum observations must not be negative.")
+
+        self._max_observations = max_observations
         self._max_result_rows = max_result_rows
         self._max_insights = max_insights
         self._max_quality_issues = max_quality_issues
@@ -228,9 +234,27 @@ class InvestigationStateFormatter:
 
         sections = ["EXECUTED OBSERVATIONS"]
 
+        observations = state.observations
+
+        if self._max_observations is not None:
+            observations = (
+                observations[-self._max_observations :]
+                if self._max_observations
+                else ()
+            )
+
+        omitted = len(state.observations) - len(observations)
+
+        if omitted:
+            sections.append(
+                f"EVIDENCE COMPACTED: {omitted} of {len(state.observations)} "
+                "executed observations omitted from this prompt. "
+                "Do not assume omitted results support any conclusion."
+            )
+
         for index, observation in enumerate(
-            state.observations,
-            start=1,
+            observations,
+            start=len(state.observations) - len(observations) + 1,
         ):
             sections.append(
                 self._format_observation(
@@ -272,7 +296,7 @@ class InvestigationStateFormatter:
 
         lines.extend(
             json.dumps(
-                list(row),
+                to_jsonable(row),
                 separators=(",", ":"),
             )
             for row in result.rows[: self._max_result_rows]

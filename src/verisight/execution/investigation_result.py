@@ -1,19 +1,28 @@
 """Results produced by autonomous analytical investigations."""
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.execution.observations import QueryObservation
 
 
+class InvestigationStatus(StrEnum):
+    """Completion status of an autonomous analytical investigation."""
+
+    COMPLETE = "complete"
+    INCOMPLETE = "incomplete"
+
+
 @dataclass(frozen=True, slots=True)
 class InvestigationResult:
-    """Complete result produced by an autonomous investigation."""
+    """Result produced by an autonomous analytical investigation."""
 
     question: str
     conclusion: str
     analysis: DatasetAnalysisResult
     observations: tuple[QueryObservation, ...] = ()
+    status: InvestigationStatus = InvestigationStatus.COMPLETE
 
     def __post_init__(self) -> None:
         """Validate investigation result invariants."""

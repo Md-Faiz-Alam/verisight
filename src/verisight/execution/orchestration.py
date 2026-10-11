@@ -10,13 +10,18 @@ from verisight.execution.exceptions import (
     QueryValidationError,
 )
 from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.incomplete_evidence import IncompleteEvidenceError
 from verisight.execution.investigation import (
     FailedQueryAttempt,
     InvestigationState,
 )
-from verisight.execution.investigation_result import InvestigationResult
+from verisight.execution.investigation_result import (
+    InvestigationResult,
+    InvestigationStatus,
+)
 from verisight.execution.investigator import Investigator
 from verisight.execution.observations import QueryObservation
+from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.synthesis import InvestigationSynthesizer
 
 
@@ -61,10 +66,16 @@ class InvestigationOrchestrator:
         attempt_count = 0
 
         while True:
-            decision = self._investigator.decide(state)
+            try:
+                decision = self._investigator.decide(state)
+            except (PromptBudgetExceededError, IncompleteEvidenceError):
+                return self._incomplete(state)
 
             if decision.action is InvestigationAction.FINISH:
-                conclusion = self._synthesizer.synthesize(state)
+                try:
+                    conclusion = self._synthesizer.synthesize(state)
+                except (PromptBudgetExceededError, IncompleteEvidenceError):
+                    return self._incomplete(state)
 
                 return InvestigationResult(
                     question=state.question,
@@ -73,8 +84,6 @@ class InvestigationOrchestrator:
                     observations=state.observations,
                 )
 
-            # Permit a final FINISH decision after the query budget
-            # is exhausted, but never execute another query.
             if attempt_count >= self._max_steps:
                 raise InvestigationError(
                     "Investigation exceeded the maximum number of steps."
@@ -101,13 +110,12 @@ class InvestigationOrchestrator:
                 execution = self._execution_service.run(investigation_question)
 
             except QueryValidationError:
-                # Preserve the existing SQL safety contract.
-                # Prohibited SQL must not be treated as recoverable.
                 raise
 
             except (QueryExecutionError, QueryPlanningError) as exc:
                 if isinstance(exc, QueryPlanningError) and isinstance(
-                    exc.__cause__, GeminiGenerationError
+                    exc.__cause__,
+                    GeminiGenerationError,
                 ):
                     raise
 
@@ -120,16 +128,34 @@ class InvestigationOrchestrator:
                 )
                 continue
 
-            observation = QueryObservation(
-                question=execution.plan.question,
-                sql=execution.plan.sql,
-                result=execution.result,
+            state = state.add_observation(
+                QueryObservation(
+                    question=execution.plan.question,
+                    sql=execution.plan.sql,
+                    result=execution.result,
+                )
             )
 
-            state = state.add_observation(observation)
+    @staticmethod
+    def _incomplete(
+        state: InvestigationState,
+    ) -> InvestigationResult:
+        """Preserve evidence when a safe conclusion cannot be produced."""
+
+        return InvestigationResult(
+            question=state.question,
+            conclusion=(
+                "Investigation incomplete: the available evidence could "
+                "not be fully evaluated within the configured prompt "
+                "budget. No analytical conclusion has been established."
+            ),
+            analysis=state.analysis,
+            observations=state.observations,
+            status=InvestigationStatus.INCOMPLETE,
+        )
 
     @staticmethod
     def _normalize_question(question: str) -> str:
-        """Normalize an analytical question for repetition detection."""
+        """Normalize a question for repetition detection."""
 
         return " ".join(question.split()).casefold()

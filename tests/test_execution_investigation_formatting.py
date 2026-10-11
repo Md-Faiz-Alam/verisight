@@ -1,3 +1,5 @@
+import pytest
+
 from verisight.analysis.insights import (
     AnalysisInsight,
     InsightScope,
@@ -467,3 +469,55 @@ def test_formatter_preserves_existing_output_without_failures() -> None:
 
     assert "FAILED QUERY ATTEMPTS" not in formatted
     assert "EXECUTED OBSERVATIONS\nNone" in formatted
+
+
+def test_rejects_negative_max_observations() -> None:
+    """Observation limits cannot be negative."""
+
+    with pytest.raises(
+        ValueError,
+        match="Maximum observations must not be negative",
+    ):
+        InvestigationStateFormatter(max_observations=-1)
+
+
+def test_formats_bounded_observations() -> None:
+    """A positive observation limit keeps only the latest observation."""
+
+    first = QueryObservation(
+        question="First question",
+        sql="SELECT 1",
+        result=QueryResult(columns=("value",), rows=((1,),)),
+    )
+    second = QueryObservation(
+        question="Second question",
+        sql="SELECT 2",
+        result=QueryResult(columns=("value",), rows=((2,),)),
+    )
+
+    formatted = InvestigationStateFormatter(max_observations=1).format(
+        _build_state(observations=(first, second))
+    )
+
+    assert "EVIDENCE COMPACTED: 1 of 2" in formatted
+    assert "OBSERVATION 2" in formatted
+    assert "Question: Second question" in formatted
+    assert "Question: First question" not in formatted
+
+
+def test_zero_observation_limit_discloses_omitted_evidence() -> None:
+    """A zero limit removes observations but explicitly discloses the omission."""
+
+    observation = QueryObservation(
+        question="Calculate total revenue",
+        sql="SELECT SUM(revenue) FROM sales",
+        result=QueryResult(columns=("revenue",), rows=((1000,),)),
+    )
+
+    formatted = InvestigationStateFormatter(max_observations=0).format(
+        _build_state(observations=(observation,))
+    )
+
+    assert "EVIDENCE COMPACTED: 1 of 1" in formatted
+    assert "Do not assume omitted results support any conclusion." in formatted
+    assert "OBSERVATION 1" not in formatted

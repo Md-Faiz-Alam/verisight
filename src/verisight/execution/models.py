@@ -1,9 +1,25 @@
 """Domain models for analytical execution."""
 
 from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from typing import TypeAlias
+from uuid import UUID
 
-QueryScalar: TypeAlias = str | int | float | bool | None
+QueryScalar: TypeAlias = (
+    str
+    | int
+    | float
+    | bool
+    | None
+    | date
+    | datetime
+    | time
+    | timedelta
+    | Decimal
+    | UUID
+)
+
 QueryRow: TypeAlias = tuple[QueryScalar, ...]
 
 

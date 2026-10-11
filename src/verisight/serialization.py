@@ -3,11 +3,12 @@
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import fields, is_dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import TypeAlias
+from uuid import UUID
 
 import numpy as np
 import pandas as pd
@@ -48,6 +49,18 @@ def to_jsonable(value: object) -> JsonValue:
 
     if isinstance(value, date):
         return value.isoformat()
+
+    if isinstance(value, time):
+        return value.isoformat()
+
+    if isinstance(value, timedelta):
+        total_microseconds = (
+            value.days * 86_400 + value.seconds
+        ) * 1_000_000 + value.microseconds
+        return str(total_microseconds)
+
+    if isinstance(value, UUID):
+        return str(value)
 
     if isinstance(value, Decimal):
         if not value.is_finite():

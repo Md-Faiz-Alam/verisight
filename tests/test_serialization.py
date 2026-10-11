@@ -1,10 +1,11 @@
 import json
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum, StrEnum
 from pathlib import Path
 from types import MappingProxyType
+from uuid import UUID
 
 import numpy as np
 import pandas as pd
@@ -441,3 +442,38 @@ def test_to_jsonable_maps_nat_timedelta_to_none() -> None:
     value = pd.Timedelta("NaT")
 
     assert to_jsonable(value) is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (
+            time(12, 30, 45),
+            "12:30:45",
+        ),
+        (
+            time(12, 30, 45, 123456),
+            "12:30:45.123456",
+        ),
+        (
+            timedelta(days=2, seconds=3, microseconds=4),
+            "172803000004",
+        ),
+        (
+            timedelta(microseconds=-1),
+            "-1",
+        ),
+        (
+            UUID("12345678-1234-5678-1234-567812345678"),
+            "12345678-1234-5678-1234-567812345678",
+        ),
+    ],
+)
+def test_to_jsonable_supports_additional_duckdb_scalars(
+    value: time | timedelta | UUID,
+    expected: str,
+) -> None:
+    serialized = to_jsonable(value)
+
+    assert serialized == expected
+    assert json.loads(json.dumps(serialized, allow_nan=False)) == expected
