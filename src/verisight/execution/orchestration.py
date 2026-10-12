@@ -11,10 +11,7 @@ from verisight.execution.exceptions import (
 )
 from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.incomplete_evidence import IncompleteEvidenceError
-from verisight.execution.investigation import (
-    FailedQueryAttempt,
-    InvestigationState,
-)
+from verisight.execution.investigation import FailedQueryAttempt, InvestigationState
 from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
@@ -57,11 +54,7 @@ class InvestigationOrchestrator:
         if not question.strip():
             raise InvestigationError("Investigation question must not be empty.")
 
-        state = InvestigationState(
-            question=question,
-            analysis=analysis,
-        )
-
+        state = InvestigationState(question=question, analysis=analysis)
         attempted_questions: set[str] = set()
         attempt_count = 0
 
@@ -85,22 +78,22 @@ class InvestigationOrchestrator:
                 )
 
             if attempt_count >= self._max_steps:
-                raise InvestigationError(
-                    "Investigation exceeded the maximum number of steps."
+                return self._incomplete(
+                    state,
+                    reason="the maximum number of analytical steps was reached",
                 )
 
             investigation_question = decision.question
-
             if investigation_question is None:
                 raise InvestigationError(
                     "Investigator did not provide an analytical question."
                 )
 
             normalized_question = self._normalize_question(investigation_question)
-
             if normalized_question in attempted_questions:
-                raise InvestigationError(
-                    "Investigator requested a repeated analytical question."
+                return self._incomplete(
+                    state,
+                    reason="the investigator repeated an analytical question",
                 )
 
             attempted_questions.add(normalized_question)
@@ -108,14 +101,13 @@ class InvestigationOrchestrator:
 
             try:
                 execution = self._execution_service.run(investigation_question)
-
-            except QueryValidationError:
-                raise
-
-            except (QueryExecutionError, QueryPlanningError) as exc:
+            except (
+                QueryValidationError,
+                QueryExecutionError,
+                QueryPlanningError,
+            ) as exc:
                 if isinstance(exc, QueryPlanningError) and isinstance(
-                    exc.__cause__,
-                    GeminiGenerationError,
+                    exc.__cause__, GeminiGenerationError
                 ):
                     raise
 
@@ -139,15 +131,22 @@ class InvestigationOrchestrator:
     @staticmethod
     def _incomplete(
         state: InvestigationState,
+        *,
+        reason: str | None = None,
     ) -> InvestigationResult:
-        """Preserve evidence when a safe conclusion cannot be produced."""
+        """Preserve observations without presenting unsupported conclusions."""
+
+        if reason is None:
+            reason = (
+                "the available evidence could not be fully evaluated "
+                "within the configured prompt budget"
+            )
 
         return InvestigationResult(
             question=state.question,
             conclusion=(
-                "Investigation incomplete: the available evidence could "
-                "not be fully evaluated within the configured prompt "
-                "budget. No analytical conclusion has been established."
+                f"Investigation incomplete: {reason}. "
+                "No analytical conclusion has been established."
             ),
             analysis=state.analysis,
             observations=state.observations,

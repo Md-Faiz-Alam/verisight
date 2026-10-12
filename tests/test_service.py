@@ -17,7 +17,10 @@ from verisight.execution.exceptions import (
 )
 from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.investigation import InvestigationState
-from verisight.execution.investigation_result import InvestigationResult
+from verisight.execution.investigation_result import (
+    InvestigationResult,
+    InvestigationStatus,
+)
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.service import VeriSight
 
@@ -665,37 +668,52 @@ def test_public_investigate_preserves_safe_execution_validation(
             )
 
     path = tmp_path / "orders.csv"
+    pd.DataFrame({"order_id": [1, 2, 3]}).to_csv(path, index=False)
 
-    pd.DataFrame(
-        {
-            "order_id": [1, 2, 3],
-        }
-    ).to_csv(path, index=False)
+    question = "Inspect the orders table."
 
     investigator = StubInvestigator(
         [
             InvestigationDecision(
                 action=InvestigationAction.INVESTIGATE,
                 reasoning="The orders table should be inspected.",
-                question="Inspect the orders table.",
-            )
+                question=question,
+            ),
+            InvestigationDecision(
+                action=InvestigationAction.INVESTIGATE,
+                reasoning="Retry the same analytical request.",
+                question=question,
+            ),
         ]
     )
 
     synthesizer = StubInvestigationSynthesizer()
 
-    with pytest.raises(
-        QueryExecutionError,
-        match="Only read-only analytical SELECT queries are allowed.",
-    ):
-        VeriSight(
-            planner=UnsafeQueryPlanner(),
-            investigator=investigator,
-            synthesizer=synthesizer,
-        ).investigate(
-            [path],
-            "Investigate the orders.",
-        )
+    result = VeriSight(
+        planner=UnsafeQueryPlanner(),
+        investigator=investigator,
+        synthesizer=synthesizer,
+    ).investigate(
+        [path],
+        "Investigate the orders.",
+    )
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 0
+    assert "repeated an analytical question" in result.conclusion
+
+    assert len(investigator.states) == 2
+
+    failed_state = investigator.states[1]
+
+    assert failed_state.failed_attempt_count == 1
+    assert failed_state.failed_attempts[0].question == question
+    assert failed_state.failed_attempts[0].error_type == "QueryValidationError"
+
+    assert (
+        "Only read-only analytical SELECT queries are allowed."
+        in failed_state.failed_attempts[0].message
+    )
 
     assert synthesizer.states == []
 

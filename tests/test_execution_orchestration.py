@@ -23,7 +23,10 @@ from verisight.execution.exceptions import (
 from verisight.execution.execution import QueryExecution
 from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.investigation import InvestigationState
-from verisight.execution.investigation_result import InvestigationResult
+from verisight.execution.investigation_result import (
+    InvestigationResult,
+    InvestigationStatus,
+)
 from verisight.execution.models import QueryResult
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.planning import QueryPlan
@@ -368,28 +371,24 @@ def test_investigation_stops_at_maximum_steps() -> None:
     execution_service = StubExecutionService()
     synthesizer = StubInvestigationSynthesizer()
 
-    orchestrator = _build_orchestrator(
+    result = _build_orchestrator(
         investigator=investigator,
         execution_service=execution_service,
         synthesizer=synthesizer,
         max_steps=2,
+    ).investigate(
+        question="Why did revenue decline?",
+        analysis=_build_analysis_result(),
     )
 
-    with pytest.raises(
-        InvestigationError,
-        match="Investigation exceeded the maximum number of steps.",
-    ):
-        orchestrator.investigate(
-            question="Why did revenue decline?",
-            analysis=_build_analysis_result(),
-        )
-
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert "maximum number of analytical steps" in result.conclusion
+    assert result.observation_count == 2
     assert execution_service.run_questions == [
         "What is revenue by month?",
         "What is revenue by customer?",
     ]
     assert len(investigator.states) == 3
-    assert investigator.states[2].observation_count == 2
     assert synthesizer.states == []
 
 
@@ -404,19 +403,18 @@ def test_investigation_rejects_repeated_question() -> None:
     execution_service = StubExecutionService()
     synthesizer = StubInvestigationSynthesizer()
 
-    with pytest.raises(
-        InvestigationError,
-        match="Investigator requested a repeated analytical question.",
-    ):
-        _build_orchestrator(
-            investigator=investigator,
-            execution_service=execution_service,
-            synthesizer=synthesizer,
-        ).investigate(
-            question="Why did revenue decline?",
-            analysis=_build_analysis_result(),
-        )
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+    ).investigate(
+        question="Why did revenue decline?",
+        analysis=_build_analysis_result(),
+    )
 
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert "repeated an analytical question" in result.conclusion
+    assert result.observation_count == 1
     assert execution_service.run_questions == [question]
     assert synthesizer.states == []
 
@@ -430,19 +428,17 @@ def test_repeated_question_detection_is_normalized() -> None:
     )
     execution_service = StubExecutionService()
 
-    with pytest.raises(
-        InvestigationError,
-        match="Investigator requested a repeated analytical question.",
-    ):
-        _build_orchestrator(
-            investigator=investigator,
-            execution_service=execution_service,
-            synthesizer=StubInvestigationSynthesizer(),
-        ).investigate(
-            question="Why did revenue decline?",
-            analysis=_build_analysis_result(),
-        )
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=StubInvestigationSynthesizer(),
+    ).investigate(
+        question="Why did revenue decline?",
+        analysis=_build_analysis_result(),
+    )
 
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 1
     assert execution_service.run_questions == ["What is revenue by month?"]
 
 
@@ -616,9 +612,12 @@ def test_investigation_recovers_from_query_failure(
 
 def test_investigation_rejects_query_validation_error() -> None:
     question = "Inspect the dataset using prohibited SQL."
+    corrected_question = "Count available records."
+
     investigator = StubInvestigator(
         [
             _investigate(question),
+            _investigate(corrected_question),
             _finish(),
         ]
     )
@@ -631,23 +630,23 @@ def test_investigation_rejects_query_validation_error() -> None:
     )
     synthesizer = StubInvestigationSynthesizer()
 
-    with pytest.raises(
-        QueryValidationError,
-        match="Only read-only analytical SELECT queries are allowed.",
-    ):
-        _build_orchestrator(
-            investigator=investigator,
-            execution_service=execution_service,
-            synthesizer=synthesizer,
-        ).investigate(
-            question="Investigate the dataset.",
-            analysis=_build_analysis_result(),
-        )
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
 
-    assert execution_service.run_questions == [question]
-    assert len(investigator.states) == 1
-    assert investigator.states[0].failed_attempt_count == 0
-    assert synthesizer.states == []
+    assert result.observation_count == 1
+    assert result.observations[0].question == corrected_question
+    assert execution_service.run_questions == [question, corrected_question]
+    assert investigator.states[1].failed_attempt_count == 1
+    assert investigator.states[1].failed_attempts[0].error_type == (
+        "QueryValidationError"
+    )
+    assert synthesizer.states[0].failed_attempt_count == 1
 
 
 def test_investigation_preserves_evidence_after_failure() -> None:
@@ -703,19 +702,17 @@ def test_investigation_rejects_repeated_failed_question() -> None:
     )
     synthesizer = StubInvestigationSynthesizer()
 
-    with pytest.raises(
-        InvestigationError,
-        match="Investigator requested a repeated analytical question.",
-    ):
-        _build_orchestrator(
-            investigator=investigator,
-            execution_service=execution_service,
-            synthesizer=synthesizer,
-        ).investigate(
-            question="Investigate the dataset.",
-            analysis=_build_analysis_result(),
-        )
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
 
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 0
     assert execution_service.run_questions == [question]
     assert investigator.states[1].failed_attempt_count == 1
     assert synthesizer.states == []
@@ -740,20 +737,18 @@ def test_failed_queries_count_toward_maximum_steps() -> None:
     )
     synthesizer = StubInvestigationSynthesizer()
 
-    with pytest.raises(
-        InvestigationError,
-        match="Investigation exceeded the maximum number of steps.",
-    ):
-        _build_orchestrator(
-            investigator=investigator,
-            execution_service=execution_service,
-            synthesizer=synthesizer,
-            max_steps=2,
-        ).investigate(
-            question="Investigate the dataset.",
-            analysis=_build_analysis_result(),
-        )
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+        max_steps=2,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
 
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 0
     assert execution_service.run_questions == [
         first_question,
         second_question,
@@ -893,23 +888,20 @@ def test_single_step_budget_rejects_second_query() -> None:
     execution_service = StubExecutionService()
     synthesizer = StubInvestigationSynthesizer()
 
-    with pytest.raises(
-        InvestigationError,
-        match="Investigation exceeded the maximum number of steps.",
-    ):
-        _build_orchestrator(
-            investigator=investigator,
-            execution_service=execution_service,
-            synthesizer=synthesizer,
-            max_steps=1,
-        ).investigate(
-            question="Investigate the dataset.",
-            analysis=_build_analysis_result(),
-        )
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+        max_steps=1,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
 
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 1
     assert execution_service.run_questions == ["First question."]
     assert len(investigator.states) == 2
-    assert investigator.states[1].observation_count == 1
     assert synthesizer.states == []
 
 
@@ -1049,3 +1041,65 @@ def test_investigation_propagates_provider_planning_failure() -> None:
     assert len(investigator.states) == 1
     assert investigator.states[0].failed_attempt_count == 0
     assert synthesizer.states == []
+
+
+def test_validation_failure_consumes_step_budget_and_preserves_evidence() -> None:
+    first = "Count records."
+    invalid = "Attempt prohibited SQL."
+
+    investigator = StubInvestigator(
+        [
+            _investigate(first),
+            _investigate(invalid),
+            _investigate("Another question."),
+        ]
+    )
+    execution_service = FailingExecutionService(
+        failures={invalid: QueryValidationError("Unsafe query rejected.")}
+    )
+    synthesizer = StubInvestigationSynthesizer()
+
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+        max_steps=2,
+    ).investigate(
+        question="Inspect records.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 1
+    assert result.observations[0].question == first
+    assert investigator.states[2].failed_attempts[0].error_type == (
+        "QueryValidationError"
+    )
+    assert execution_service.run_questions == [first, invalid]
+    assert synthesizer.states == []
+
+
+def test_repeated_validation_failure_is_not_reexecuted() -> None:
+    invalid = "Prohibited SQL request."
+    investigator = StubInvestigator(
+        [
+            _investigate(invalid),
+            _investigate(invalid),
+        ]
+    )
+    execution_service = FailingExecutionService(
+        failures={invalid: QueryValidationError("Unsafe query rejected.")}
+    )
+
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=StubInvestigationSynthesizer(),
+    ).investigate(
+        question="Inspect records.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 0
+    assert execution_service.run_questions == [invalid]
