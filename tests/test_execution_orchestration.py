@@ -167,12 +167,16 @@ def test_investigation_finishes_without_querying() -> None:
 
     assert isinstance(result, InvestigationResult)
     assert result.question == "Why did revenue decline?"
-    assert result.conclusion == ("The existing evidence supports the final conclusion.")
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.conclusion == (
+        "Investigation incomplete: no analytical observations were collected. "
+        "No analytical conclusion has been established."
+    )
     assert result.observations == ()
     assert result.observation_count == 0
     assert execution_service.run_questions == []
-    assert len(synthesizer.states) == 1
-    assert synthesizer.states[0].observation_count == 0
+    assert len(investigator.states) == 1
+    assert synthesizer.states == []
 
 
 def test_investigation_executes_requested_observation() -> None:
@@ -276,7 +280,10 @@ def test_investigation_result_preserves_analysis() -> None:
     )
 
     assert result.analysis is analysis
-    assert synthesizer.states[0].analysis is analysis
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 0
+    assert result.observations == ()
+    assert synthesizer.states == []
 
 
 def test_finish_reasoning_is_not_used_as_conclusion() -> None:
@@ -285,7 +292,12 @@ def test_finish_reasoning_is_not_used_as_conclusion() -> None:
     )
 
     result = _build_orchestrator(
-        investigator=StubInvestigator([_finish()]),
+        investigator=StubInvestigator(
+            [
+                _investigate("What is revenue by month?"),
+                _finish(),
+            ]
+        ),
         execution_service=StubExecutionService(),
         synthesizer=synthesizer,
     ).investigate(
@@ -293,8 +305,11 @@ def test_finish_reasoning_is_not_used_as_conclusion() -> None:
         analysis=_build_analysis_result(),
     )
 
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.observation_count == 1
     assert result.conclusion == "Revenue declined in the observed data."
     assert result.conclusion != "The available evidence is sufficient."
+    assert len(synthesizer.states) == 1
 
 
 def test_synthesizer_is_called_only_after_finish() -> None:
@@ -991,10 +1006,11 @@ def test_single_step_budget_can_finish_without_querying() -> None:
         analysis=_build_analysis_result(),
     )
 
+    assert result.status is InvestigationStatus.INCOMPLETE
     assert result.observation_count == 0
     assert execution_service.run_questions == []
     assert len(investigator.states) == 1
-    assert len(synthesizer.states) == 1
+    assert synthesizer.states == []
 
 
 def test_mixed_success_and_failure_consume_query_budget() -> None:

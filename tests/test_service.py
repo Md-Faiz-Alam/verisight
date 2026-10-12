@@ -548,12 +548,14 @@ def test_public_investigate_can_finish_without_querying(
         "Inspect the orders dataset.",
     )
 
-    assert result.conclusion == ("The deterministic analysis supports the conclusion.")
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.conclusion == (
+        "Investigation incomplete: no analytical observations were collected. "
+        "No analytical conclusion has been established."
+    )
     assert result.observation_count == 0
     assert len(investigator.states) == 1
-
-    assert len(synthesizer.states) == 1
-    assert synthesizer.states[0].observation_count == 0
+    assert synthesizer.states == []
 
 
 def test_public_investigate_requires_configured_investigator(
@@ -655,8 +657,14 @@ def test_explicit_investigator_and_synthesizer_do_not_require_gemini(
         "Inspect the orders.",
     )
 
-    assert result.conclusion == ("No additional analytical evidence is required.")
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.conclusion == (
+        "Investigation incomplete: no analytical observations were collected. "
+        "No analytical conclusion has been established."
+    )
     assert result.observation_count == 0
+    assert len(investigator.states) == 1
+    assert synthesizer.states == []
 
 
 def test_public_investigate_preserves_safe_execution_validation(
@@ -767,8 +775,10 @@ def test_public_investigate_builds_default_gemini_components(
         )
 
     assert result.question == "What can we learn about these orders?"
+    assert result.status is InvestigationStatus.INCOMPLETE
     assert result.conclusion == (
-        "The available deterministic evidence supports the final conclusion."
+        "Investigation incomplete: no analytical observations were collected. "
+        "No analytical conclusion has been established."
     )
     assert result.observation_count == 0
 
@@ -790,22 +800,15 @@ def test_public_investigate_builds_default_gemini_components(
     }
 
     investigator_client.generate.assert_called_once()
-    synthesizer_client.generate.assert_called_once()
+    synthesizer_client.generate.assert_not_called()
 
     investigator_prompt = investigator_client.generate.call_args.args[0]
-    synthesis_prompt = synthesizer_client.generate.call_args.args[0]
 
     assert (
         "You are the autonomous analytical investigator for VeriSight."
         in investigator_prompt
     )
     assert "What can we learn about these orders?" in investigator_prompt
-
-    assert (
-        "You are the analytical conclusion synthesizer for VeriSight."
-        in synthesis_prompt
-    )
-    assert "What can we learn about these orders?" in synthesis_prompt
 
 
 def test_default_gemini_investigator_can_request_observe_and_synthesize(
@@ -948,10 +951,15 @@ def test_public_investigate_rebuilds_missing_planner(
             "Inspect the orders dataset.",
         )
 
-    assert result.conclusion == ("The deterministic analysis supports the conclusion.")
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.conclusion == (
+        "Investigation incomplete: no analytical observations were collected. "
+        "No analytical conclusion has been established."
+    )
     assert result.observation_count == 0
 
     build_planner.assert_called_once_with(settings)
+    assert synthesizer.states == []
 
 
 def test_public_ask_repairs_failed_generated_sql(tmp_path: Path) -> None:

@@ -65,11 +65,13 @@ class InvestigationOrchestrator:
                 return self._incomplete(state)
 
             if decision.action is InvestigationAction.FINISH:
-                if state.failed_attempt_count > 0 and state.observation_count == 0:
-                    return self._incomplete(
-                        state,
-                        reason="all attempted analytical queries failed",
+                if state.observation_count == 0:
+                    reason = (
+                        "all attempted analytical queries failed"
+                        if state.failed_attempt_count > 0
+                        else "no analytical observations were collected"
                     )
+                    return self._incomplete(state, reason=reason)
 
                 try:
                     conclusion = self._synthesizer.synthesize(state)

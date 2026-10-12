@@ -235,9 +235,19 @@ def test_orchestrator_preserves_incomplete_synthesis_result(
     investigator = MagicMock()
     synthesizer = MagicMock()
 
-    investigator.decide.return_value = MagicMock(
-        action=InvestigationAction.FINISH,
-    )
+    investigator.decide.side_effect = [
+        MagicMock(
+            action=InvestigationAction.INVESTIGATE,
+            question="Count the records.",
+        ),
+        MagicMock(
+            action=InvestigationAction.FINISH,
+        ),
+    ]
+
+    execution_service.run.return_value.plan.question = "Count the records."
+    execution_service.run.return_value.plan.sql = "SELECT COUNT(*) FROM records"
+
     synthesizer.synthesize.side_effect = failure
 
     orchestrator = InvestigationOrchestrator(
@@ -252,10 +262,12 @@ def test_orchestrator_preserves_incomplete_synthesis_result(
     )
 
     assert result.status is InvestigationStatus.INCOMPLETE
-    assert result.observations == ()
+    assert result.observation_count == 1
+    assert result.observations[0].question == "Count the records."
     assert "No analytical conclusion has been established." in result.conclusion
 
-    execution_service.run.assert_not_called()
+    execution_service.run.assert_called_once_with("Count the records.")
+    assert investigator.decide.call_count == 2
     synthesizer.synthesize.assert_called_once()
 
 
