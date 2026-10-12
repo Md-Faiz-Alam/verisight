@@ -1,6 +1,7 @@
 """Orchestration for autonomous analytical investigations."""
 
 from verisight.analysis.result import DatasetAnalysisResult
+from verisight.error_reporting import to_public_error
 from verisight.execution.analytical import AnalyticalQueryRunner
 from verisight.execution.decisions import InvestigationAction
 from verisight.execution.exceptions import (
@@ -123,7 +124,7 @@ class InvestigationOrchestrator:
                     FailedQueryAttempt(
                         question=investigation_question,
                         error_type=type(exc).__name__,
-                        message=str(exc),
+                        message=to_public_error(exc).message,
                     )
                 )
                 continue

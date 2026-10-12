@@ -6,10 +6,12 @@ import pandas as pd
 
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder
+from verisight.error_reporting import to_public_error
 from verisight.execution.decisions import (
     InvestigationAction,
     InvestigationDecision,
 )
+from verisight.execution.exceptions import QueryRuntimeError
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.planning import QueryPlan, QueryRequest
@@ -179,7 +181,12 @@ def test_failed_sql_repair_recovers_with_alternative_question() -> None:
 
     assert failed_attempt.question == "Calculate unavailable metric."
     assert failed_attempt.error_type == "QueryRuntimeError"
-    assert "still_missing" in failed_attempt.message
+    assert (
+        failed_attempt.message
+        == to_public_error(QueryRuntimeError("SQL execution failed.")).message
+    )
+    assert "still_missing" not in failed_attempt.message
+    assert "missing_metric" not in failed_attempt.message
 
     final_state = synthesizer.states[0]
 

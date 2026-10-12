@@ -7,6 +7,7 @@ from verisight.analysis.result import (
     AnalysisResultBuilder,
     DatasetAnalysisResult,
 )
+from verisight.error_reporting import to_public_error
 from verisight.execution.decisions import (
     InvestigationAction,
     InvestigationDecision,
@@ -617,12 +618,62 @@ def test_investigation_recovers_from_query_failure(
     assert failed_state.failed_attempt_count == 1
     assert failed_state.failed_attempts[0].question == failed_question
     assert failed_state.failed_attempts[0].error_type == type(error).__name__
-    assert failed_state.failed_attempts[0].message == str(error)
+    assert failed_state.failed_attempts[0].message == to_public_error(error).message
 
     final_state = synthesizer.states[0]
 
     assert final_state.observation_count == 1
     assert final_state.failed_attempt_count == 1
+
+
+def test_failed_query_diagnostics_do_not_reach_investigation_state() -> None:
+    """Sensitive SQL diagnostics must not enter investigation state."""
+
+    question = "Calculate the unavailable measure."
+    secret = "super-secret-database-token"
+    raw_sql = "SELECT private_salary FROM confidential_payroll"
+
+    error = QueryRuntimeError(f"Query failed for {raw_sql}; credential={secret}")
+    error.__cause__ = ValueError(f"Provider secret: {secret}")
+
+    investigator = StubInvestigator(
+        [
+            _investigate(question),
+            _finish(),
+        ]
+    )
+
+    execution_service = FailingExecutionService(failures={question: error})
+    synthesizer = StubInvestigationSynthesizer()
+
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 0
+    assert execution_service.run_questions == [question]
+    assert len(investigator.states) == 2
+
+    failed_attempt = investigator.states[1].failed_attempts[0]
+
+    assert failed_attempt.question == question
+    assert failed_attempt.error_type == "QueryRuntimeError"
+    assert failed_attempt.message == to_public_error(error).message
+
+    assert raw_sql not in failed_attempt.message
+    assert secret not in failed_attempt.message
+    assert str(error) not in failed_attempt.message
+
+    assert error.__cause__ is not None
+    assert secret in str(error.__cause__)
+
+    assert synthesizer.states == []
 
 
 def test_investigation_rejects_query_validation_error() -> None:

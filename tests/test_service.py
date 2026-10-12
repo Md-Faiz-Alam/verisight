@@ -6,6 +6,7 @@ import pytest
 
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.config import Settings
+from verisight.error_reporting import to_public_error
 from verisight.execution.decisions import (
     InvestigationAction,
     InvestigationDecision,
@@ -15,6 +16,7 @@ from verisight.execution.exceptions import (
     QueryExecutionError,
     QueryPlanningError,
     QueryRuntimeError,
+    QueryValidationError,
 )
 from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.investigation import InvestigationState
@@ -721,8 +723,12 @@ def test_public_investigate_preserves_safe_execution_validation(
     assert failed_state.failed_attempts[0].error_type == "QueryValidationError"
 
     assert (
-        "Only read-only analytical SELECT queries are allowed."
-        in failed_state.failed_attempts[0].message
+        failed_state.failed_attempts[0].message
+        == to_public_error(
+            QueryValidationError(
+                "Only read-only analytical SELECT queries are allowed."
+            )
+        ).message
     )
 
     assert synthesizer.states == []
