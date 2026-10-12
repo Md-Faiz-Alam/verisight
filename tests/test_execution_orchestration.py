@@ -649,6 +649,54 @@ def test_investigation_rejects_query_validation_error() -> None:
     assert synthesizer.states[0].failed_attempt_count == 1
 
 
+def test_investigation_cannot_synthesize_after_only_validation_failure() -> None:
+    """Rejected SQL cannot provide evidence for a successful conclusion."""
+
+    question = "Inspect the dataset using prohibited SQL."
+
+    investigator = StubInvestigator(
+        [
+            _investigate(question),
+            _finish(),
+        ]
+    )
+
+    execution_service = FailingExecutionService(
+        failures={
+            question: QueryValidationError(
+                "Only read-only analytical SELECT queries are allowed."
+            )
+        }
+    )
+
+    synthesizer = StubInvestigationSynthesizer()
+
+    result = _build_orchestrator(
+        investigator=investigator,
+        execution_service=execution_service,
+        synthesizer=synthesizer,
+    ).investigate(
+        question="Investigate the dataset.",
+        analysis=_build_analysis_result(),
+    )
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 0
+    assert "all attempted analytical queries failed" in result.conclusion
+
+    assert execution_service.run_questions == [question]
+    assert len(investigator.states) == 2
+
+    failed_state = investigator.states[1]
+
+    assert failed_state.observation_count == 0
+    assert failed_state.failed_attempt_count == 1
+    assert failed_state.failed_attempts[0].question == question
+    assert failed_state.failed_attempts[0].error_type == "QueryValidationError"
+
+    assert synthesizer.states == []
+
+
 def test_investigation_preserves_evidence_after_failure() -> None:
     first_question = "Count the available records."
     failed_question = "Calculate an unavailable measure."
@@ -785,15 +833,18 @@ def test_unexpected_execution_errors_are_not_suppressed() -> None:
 
 def test_investigation_can_finish_after_recoverable_failure() -> None:
     question = "Calculate an unavailable measure."
+
     investigator = StubInvestigator(
         [
             _investigate(question),
             _finish(),
         ]
     )
+
     execution_service = FailingExecutionService(
         failures={question: QueryRuntimeError("The requested measure does not exist.")}
     )
+
     synthesizer = StubInvestigationSynthesizer()
 
     result = _build_orchestrator(
@@ -805,9 +856,20 @@ def test_investigation_can_finish_after_recoverable_failure() -> None:
         analysis=_build_analysis_result(),
     )
 
+    assert result.status is InvestigationStatus.INCOMPLETE
     assert result.observation_count == 0
-    assert synthesizer.states[0].failed_attempt_count == 1
-    assert synthesizer.states[0].failed_attempts[0].question == question
+    assert "all attempted analytical queries failed" in result.conclusion
+
+    assert execution_service.run_questions == [question]
+    assert len(investigator.states) == 2
+
+    failed_state = investigator.states[1]
+
+    assert failed_state.failed_attempt_count == 1
+    assert failed_state.failed_attempts[0].question == question
+    assert failed_state.failed_attempts[0].error_type == "QueryRuntimeError"
+
+    assert synthesizer.states == []
 
 
 def test_finishes_after_final_permitted_successful_query() -> None:
@@ -845,18 +907,21 @@ def test_finishes_after_final_permitted_successful_query() -> None:
 
 
 def test_finishes_after_final_permitted_failed_query() -> None:
-    """A failed final query must not prevent an explicit finish."""
+    """A failed final query cannot justify a synthesized conclusion."""
 
     question = "Unavailable measure."
+
     investigator = StubInvestigator(
         [
             _investigate(question),
             _finish(),
         ]
     )
+
     execution_service = FailingExecutionService(
         failures={question: QueryRuntimeError("The requested measure is unavailable.")}
     )
+
     synthesizer = StubInvestigationSynthesizer()
 
     result = _build_orchestrator(
@@ -869,11 +934,15 @@ def test_finishes_after_final_permitted_failed_query() -> None:
         analysis=_build_analysis_result(),
     )
 
+    assert result.status is InvestigationStatus.INCOMPLETE
     assert result.observation_count == 0
+    assert "all attempted analytical queries failed" in result.conclusion
+
     assert execution_service.run_questions == [question]
     assert len(investigator.states) == 2
     assert investigator.states[1].failed_attempt_count == 1
-    assert synthesizer.states[0].failed_attempt_count == 1
+
+    assert synthesizer.states == []
 
 
 def test_single_step_budget_rejects_second_query() -> None:

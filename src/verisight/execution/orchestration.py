@@ -65,6 +65,12 @@ class InvestigationOrchestrator:
                 return self._incomplete(state)
 
             if decision.action is InvestigationAction.FINISH:
+                if state.failed_attempt_count > 0 and state.observation_count == 0:
+                    return self._incomplete(
+                        state,
+                        reason="all attempted analytical queries failed",
+                    )
+
                 try:
                     conclusion = self._synthesizer.synthesize(state)
                 except (PromptBudgetExceededError, IncompleteEvidenceError):
