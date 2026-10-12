@@ -14,6 +14,7 @@ from verisight.execution.exceptions import (
     InvestigationError,
     QueryExecutionError,
     QueryPlanningError,
+    QueryRuntimeError,
 )
 from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.investigation import InvestigationState
@@ -22,7 +23,8 @@ from verisight.execution.investigation_result import (
     InvestigationStatus,
 )
 from verisight.execution.planning import QueryPlan, QueryRequest
-from verisight.service import VeriSight
+from verisight.execution.repair import QueryRepairRequest
+from verisight.service import VeriSight, _LazyGeminiQueryRepairer
 
 
 class StubQueryPlanner:
@@ -950,3 +952,202 @@ def test_public_investigate_rebuilds_missing_planner(
     assert result.observation_count == 0
 
     build_planner.assert_called_once_with(settings)
+
+
+def test_public_ask_repairs_failed_generated_sql(tmp_path: Path) -> None:
+    """The public ask API executes a repaired query after runtime failure."""
+
+    class FailingPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT SUM(missing_amount) FROM orders",
+            )
+
+    class StubRepairer:
+        def __init__(self) -> None:
+            self.requests: list[QueryRepairRequest] = []
+
+        def repair(self, request: QueryRepairRequest) -> QueryPlan:
+            self.requests.append(request)
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT SUM(amount) AS total_amount FROM orders",
+            )
+
+    path = tmp_path / "orders.csv"
+    pd.DataFrame({"amount": [10.0, 20.0, 30.0]}).to_csv(path, index=False)
+
+    repairer = StubRepairer()
+
+    result = VeriSight(
+        planner=FailingPlanner(),
+        repairer=repairer,
+    ).ask(
+        [path],
+        "What is the total order amount?",
+    )
+
+    assert result.columns == ("total_amount",)
+    assert result.rows == ((60.0,),)
+
+    assert len(repairer.requests) == 1
+    assert repairer.requests[0].failed_sql == ("SELECT SUM(missing_amount) FROM orders")
+
+
+def test_public_ask_does_not_repair_successful_sql(tmp_path: Path) -> None:
+    """Successful queries must not invoke the repairer."""
+
+    repairer = MagicMock()
+
+    path = tmp_path / "orders.csv"
+    pd.DataFrame({"amount": [10.0, 20.0, 30.0]}).to_csv(path, index=False)
+
+    result = VeriSight(
+        planner=StubQueryPlanner(),
+        repairer=repairer,
+    ).ask(
+        [path],
+        "What is the total order amount?",
+    )
+
+    assert result.rows == ((3, 60.0),)
+    repairer.repair.assert_not_called()
+
+
+def test_public_ask_repairs_with_default_gemini_client(
+    tmp_path: Path,
+) -> None:
+    """The default Gemini repairer is initialized only after failure."""
+
+    path = tmp_path / "orders.csv"
+    pd.DataFrame({"amount": [10.0, 20.0, 30.0]}).to_csv(path, index=False)
+
+    generated_client = MagicMock()
+    generated_client.generate.return_value = (
+        "SELECT SUM(amount) AS total_amount FROM orders"
+    )
+
+    settings = Settings(
+        gemini_api_key="test-api-key",
+        gemini_model="test-model",
+    )
+
+    class FailingPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT SUM(missing_amount) FROM orders",
+            )
+
+    with patch(
+        "verisight.service.GeminiTextGenerationClient",
+        return_value=generated_client,
+    ) as client_class:
+        result = VeriSight(
+            settings=settings,
+            planner=FailingPlanner(),
+        ).ask(
+            [path],
+            "What is the total order amount?",
+        )
+
+    assert result.rows == ((60.0,),)
+    client_class.assert_called_once()
+    generated_client.generate.assert_called_once()
+
+
+def test_public_ask_does_not_retry_failed_repaired_sql(
+    tmp_path: Path,
+) -> None:
+    """A repaired query receives no second repair attempt."""
+
+    class FailingPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT missing_amount FROM orders",
+            )
+
+    class FailingRepairer:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def repair(self, request: QueryRepairRequest) -> QueryPlan:
+            self.calls += 1
+            return QueryPlan(
+                question=request.question,
+                sql="SELECT another_missing_column FROM orders",
+            )
+
+    path = tmp_path / "orders.csv"
+    pd.DataFrame({"amount": [10.0, 20.0]}).to_csv(path, index=False)
+
+    repairer = FailingRepairer()
+
+    with pytest.raises(QueryRuntimeError):
+        VeriSight(
+            planner=FailingPlanner(),
+            repairer=repairer,
+        ).ask(
+            [path],
+            "Calculate the total.",
+        )
+
+    assert repairer.calls == 1
+
+
+def test_lazy_gemini_repairer_rejects_missing_credentials() -> None:
+    """A lazy repairer cannot generate SQL without credentials."""
+
+    settings = Settings(gemini_api_key=None)
+    repairer = _LazyGeminiQueryRepairer(settings)
+
+    request = MagicMock()
+
+    with pytest.raises(
+        QueryPlanningError,
+        match="Gemini SQL repair requires configured credentials.",
+    ):
+        repairer.repair(request)
+
+
+def test_lazy_gemini_repairer_reuses_initialized_client() -> None:
+    """Repeated repairs reuse the existing generative repairer."""
+
+    settings = Settings(
+        gemini_api_key="test-api-key",
+        gemini_model="test-model",
+    )
+
+    repairer = _LazyGeminiQueryRepairer(settings)
+
+    request = MagicMock()
+    expected_plan = MagicMock(spec=QueryPlan)
+
+    generated_client = MagicMock()
+    generated_client.generate.return_value = (
+        "SELECT COUNT(*) AS order_count FROM orders"
+    )
+
+    with (
+        patch(
+            "verisight.service.GeminiTextGenerationClient",
+            return_value=generated_client,
+        ) as client_class,
+        patch("verisight.service.GenerativeQueryRepairer") as repairer_class,
+    ):
+        repairer_instance = repairer_class.return_value
+        repairer_instance.repair.return_value = expected_plan
+
+        first_result = repairer.repair(request)
+        second_result = repairer.repair(request)
+
+    assert first_result is expected_plan
+    assert second_result is expected_plan
+
+    client_class.assert_called_once()
+    repairer_class.assert_called_once_with(generated_client)
+
+    assert repairer_instance.repair.call_count == 2
+    repairer_instance.repair.assert_any_call(request)
