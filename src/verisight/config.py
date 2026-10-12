@@ -54,7 +54,7 @@ class Settings(BaseSettings):
         gt=0,
     )
 
-    gemini_api_key: str | None = None
+    gemini_api_key: str | None = Field(default=None, repr=False)
 
     gemini_model: str = "gemini-3.1-flash-lite"
 

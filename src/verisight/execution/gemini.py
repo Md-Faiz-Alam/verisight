@@ -110,29 +110,37 @@ class GeminiTextGenerationClient:
                     contents=prompt,
                 )
             except Exception as exc:
-                if not _is_retryable(exc) or attempt == self._max_retries:
-                    raise GeminiGenerationError(
-                        "Gemini text generation failed."
-                    ) from exc
+                retryable = _is_retryable(exc)
+                should_retry = retryable and attempt < self._max_retries
 
-                delay = min(
-                    self._retry_base_delay_seconds * (2**attempt),
-                    8.0,
-                )
-                self._sleep(delay)
-                continue
+                # Leave the exception handler before raising an application
+                # error so the raw SDK exception is not its __context__.
+                if should_retry:
+                    delay = min(
+                        self._retry_base_delay_seconds * (2**attempt),
+                        8.0,
+                    )
+                    self._sleep(delay)
+                    continue
+            else:
+                try:
+                    text = response.text
+                except (AttributeError, ValueError):
+                    # Raise outside this handler for the same reason.
+                    pass
+                else:
+                    if text is None or not text.strip():
+                        raise GeminiGenerationError(
+                            "Gemini returned an empty text response."
+                        )
 
-            try:
-                text = response.text
-            except (AttributeError, ValueError) as exc:
+                    return text
+
                 raise GeminiGenerationError(
                     "Gemini returned an unusable text response."
-                ) from exc
+                )
 
-            if text is None or not text.strip():
-                raise GeminiGenerationError("Gemini returned an empty text response.")
-
-            return text
+            raise GeminiGenerationError("Gemini text generation failed.")
 
         raise AssertionError(
             "Gemini retry loop ended unexpectedly."

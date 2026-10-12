@@ -243,7 +243,8 @@ def test_wraps_provider_failures(error: Exception) -> None:
     ) as exc_info:
         client.generate("Generate SQL.")
 
-    assert exc_info.value.__cause__ is error
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__context__ is None
     assert sdk_client.models.calls == [("test-model", "Generate SQL.")]
 
 
@@ -260,7 +261,8 @@ def test_wraps_response_text_extraction_failure() -> None:
     ) as exc_info:
         client.generate("Generate SQL.")
 
-    assert isinstance(exc_info.value.__cause__, ValueError)
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__context__ is None
 
 
 def test_generation_error_is_application_error() -> None:
@@ -317,7 +319,8 @@ def test_retry_limit_is_enforced() -> None:
     ) as exc_info:
         client.generate("Generate SQL.")
 
-    assert exc_info.value.__cause__ is errors_sequence[-1]
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__context__ is None
     assert len(sdk_client.models.calls) == 3
     assert delays == [1.0, 2.0]
 
@@ -550,3 +553,39 @@ def test_unusable_response_is_not_retried() -> None:
         match="Gemini returned an unusable text response.",
     ):
         client.generate("Generate SQL.")
+
+
+def test_provider_error_does_not_expose_api_key() -> None:
+    secret = "synthetic-gemini-secret-123456"
+
+    client = GeminiTextGenerationClient(
+        api_key=secret,
+        model="test-model",
+        client=FailingGeminiClient(
+            RuntimeError(f"Provider rejected API key: {secret}")
+        ),
+        max_retries=0,
+    )
+
+    with pytest.raises(GeminiGenerationError) as exc_info:
+        client.generate("Generate SQL.")
+
+    error = exc_info.value
+
+    assert secret not in str(error)
+    assert error.__cause__ is None
+    assert error.__context__ is None
+
+
+def test_response_extraction_failure_has_no_raw_context() -> None:
+    client = GeminiTextGenerationClient(
+        api_key="synthetic-test-key",
+        model="test-model",
+        client=BrokenResponseGeminiClient(),
+    )
+
+    with pytest.raises(GeminiGenerationError) as exc_info:
+        client.generate("Generate SQL.")
+
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__context__ is None

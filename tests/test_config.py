@@ -259,3 +259,15 @@ def test_settings_reject_invalid_gemini_reliability_options(
 
     with pytest.raises(ValidationError):
         SettingsWithoutEnvFile()
+
+
+def test_gemini_api_key_is_hidden_from_settings_repr() -> None:
+    secret = "synthetic-gemini-secret-123456"
+
+    settings = SettingsWithoutEnvFile(
+        gemini_api_key=secret,
+    )
+
+    assert settings.gemini_api_key == secret
+    assert secret not in repr(settings)
+    assert "gemini_api_key=" not in repr(settings)
