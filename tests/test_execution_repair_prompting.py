@@ -59,7 +59,8 @@ def test_builds_query_repair_prompt() -> None:
     assert "FAILED SQL:" in prompt
     assert "AVG(missing_value)" in prompt
     assert "RUNTIME ERROR:" in prompt
-    assert 'Referenced column "missing_value"' in prompt
+    assert "SQL binder error." in prompt
+    assert 'Referenced column "missing_value"' not in prompt
     assert "RELATION measurements" in prompt
     assert "- value | float | float64 | nullable=false" in prompt
 
@@ -179,7 +180,8 @@ def test_repair_prompt_preserves_complete_schema() -> None:
         assert f"- column_{index} | float | float64 | nullable=true" in prompt
 
     assert request.failed_sql in prompt
-    assert request.error in prompt
+    assert "SQL execution failed." in prompt
+    assert request.error not in prompt
 
 
 def test_repair_prompt_rejects_oversized_schema() -> None:
@@ -240,3 +242,65 @@ def test_repair_prompt_budget_includes_failure_details(
 
     with pytest.raises(PromptBudgetExceededError):
         QueryRepairPromptBuilder(max_prompt_chars=100).build(request)
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        ("Binder Error: sensitive diagnostic", "SQL binder error."),
+        ("Catalog Error: sensitive diagnostic", "SQL catalog error."),
+        ("Parser Error: sensitive diagnostic", "SQL parser error."),
+        ("Conversion Error: sensitive diagnostic", "SQL conversion error."),
+        ("Type Error: sensitive diagnostic", "SQL type error."),
+        ("Out of Range Error: sensitive diagnostic", "SQL out_of_range error."),
+        ("binder error: sensitive diagnostic", "SQL binder error."),
+        ("Unexpected database failure", "SQL execution failed."),
+    ],
+)
+def test_repair_prompt_exposes_only_safe_error_category(
+    error: str,
+    expected: str,
+) -> None:
+    original = _make_request()
+
+    request = QueryRepairRequest(
+        question=original.question,
+        failed_sql=original.failed_sql,
+        error=error,
+        context=original.context,
+    )
+
+    prompt = QueryRepairPromptBuilder().build(request)
+
+    assert f"RUNTIME ERROR:\n{expected}\n" in prompt
+    assert error not in prompt
+    assert "sensitive diagnostic" not in prompt
+
+
+def test_repair_prompt_does_not_expose_sensitive_runtime_details() -> None:
+    original = _make_request()
+
+    secret = "super-secret-database-token"
+    private_path = "C:/private/credentials/database.env"
+
+    request = QueryRepairRequest(
+        question=original.question,
+        failed_sql=original.failed_sql,
+        error=(
+            "Binder Error: failed to bind query. "
+            f"Credential: {secret}. "
+            f"File: {private_path}"
+        ),
+        context=original.context,
+    )
+
+    prompt = QueryRepairPromptBuilder().build(request)
+
+    assert "SQL binder error." in prompt
+    assert secret not in prompt
+    assert private_path not in prompt
+    assert request.error not in prompt
+
+    # The original request remains unchanged for internal consumers.
+    assert secret in request.error
+    assert private_path in request.error

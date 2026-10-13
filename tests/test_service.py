@@ -365,6 +365,7 @@ def test_verisight_builds_gemini_planner_from_settings() -> None:
     settings = Settings(
         gemini_api_key="test-api-key",
         gemini_model="test-model",
+        allow_llm_data_disclosure=True,
     )
 
     with patch("verisight.service.GeminiTextGenerationClient") as client_class:
@@ -431,6 +432,7 @@ def test_default_gemini_planner_can_answer_question(
     settings = Settings(
         gemini_api_key="test-api-key",
         gemini_model="test-model",
+        allow_llm_data_disclosure=True,
     )
 
     with patch(
@@ -763,6 +765,7 @@ def test_public_investigate_builds_default_gemini_components(
     settings = Settings(
         gemini_api_key="test-api-key",
         gemini_model="test-model",
+        allow_llm_data_disclosure=True,
     )
 
     with patch(
@@ -853,6 +856,7 @@ def test_default_gemini_investigator_can_request_observe_and_synthesize(
     settings = Settings(
         gemini_api_key="test-api-key",
         gemini_model="test-model",
+        allow_llm_data_disclosure=True,
     )
 
     with patch(
@@ -1045,6 +1049,7 @@ def test_public_ask_repairs_with_default_gemini_client(
     settings = Settings(
         gemini_api_key="test-api-key",
         gemini_model="test-model",
+        allow_llm_data_disclosure=True,
     )
 
     class FailingPlanner:
@@ -1121,7 +1126,8 @@ def test_lazy_gemini_repairer_rejects_missing_credentials() -> None:
 
     with pytest.raises(
         QueryPlanningError,
-        match="Gemini SQL repair requires configured credentials.",
+        match="Gemini SQL repair requires configured credentials."
+        "and explicit LLM data-disclosure permission.",
     ):
         repairer.repair(request)
 
@@ -1132,6 +1138,7 @@ def test_lazy_gemini_repairer_reuses_initialized_client() -> None:
     settings = Settings(
         gemini_api_key="test-api-key",
         gemini_model="test-model",
+        allow_llm_data_disclosure=True,
     )
 
     repairer = _LazyGeminiQueryRepairer(settings)
@@ -1165,3 +1172,44 @@ def test_lazy_gemini_repairer_reuses_initialized_client() -> None:
 
     assert repairer_instance.repair.call_count == 2
     repairer_instance.repair.assert_any_call(request)
+
+
+def test_gemini_client_requires_explicit_data_disclosure_permission() -> None:
+    """Configured credentials alone must not enable external generation."""
+
+    settings = Settings(
+        gemini_api_key="test-api-key",
+        allow_llm_data_disclosure=False,
+    )
+
+    with patch("verisight.service.GeminiTextGenerationClient") as client_class:
+        service = VeriSight(settings=settings)
+
+        assert service._planner is None
+        assert service._repairer is None
+
+        assert VeriSight._build_gemini_planner(settings) is None
+        assert VeriSight._build_gemini_investigator(settings) is None
+        assert VeriSight._build_gemini_synthesizer(settings) is None
+
+        client_class.assert_not_called()
+
+
+def test_lazy_gemini_repairer_requires_disclosure_permission() -> None:
+    """Lazy SQL repair must not bypass the disclosure policy."""
+
+    settings = Settings(
+        gemini_api_key="test-api-key",
+        allow_llm_data_disclosure=False,
+    )
+
+    repairer = _LazyGeminiQueryRepairer(settings)
+
+    with patch("verisight.service.GeminiTextGenerationClient") as client_class:
+        with pytest.raises(
+            QueryPlanningError,
+            match="Gemini SQL repair requires configured credentials.",
+        ):
+            repairer.repair(MagicMock())
+
+        client_class.assert_not_called()

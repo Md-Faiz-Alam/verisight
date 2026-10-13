@@ -49,6 +49,7 @@ class _LazyGeminiQueryRepairer:
             if client is None:
                 raise QueryPlanningError(
                     "Gemini SQL repair requires configured credentials."
+                    "and explicit LLM data-disclosure permission."
                 )
 
             self._repairer = GenerativeQueryRepairer(client)
@@ -91,10 +92,15 @@ class VeriSight:
 
     @staticmethod
     def _build_generation_available(settings: Settings) -> bool:
-        """Check whether Gemini credentials are configured."""
+        """Check whether Gemini credentials and disclosure permission exist."""
 
         api_key = settings.gemini_api_key
-        return api_key is not None and bool(api_key.strip())
+
+        return (
+            settings.allow_llm_data_disclosure
+            and api_key is not None
+            and bool(api_key.strip())
+        )
 
     @staticmethod
     def _build_generation_client(
@@ -102,10 +108,11 @@ class VeriSight:
     ) -> GeminiTextGenerationClient | None:
         """Build a Gemini generation client when credentials are configured."""
 
-        api_key = settings.gemini_api_key
-
-        if api_key is None or not api_key.strip():
+        if not VeriSight._build_generation_available(settings):
             return None
+
+        api_key = settings.gemini_api_key
+        assert api_key is not None
 
         return GeminiTextGenerationClient(
             api_key=api_key,

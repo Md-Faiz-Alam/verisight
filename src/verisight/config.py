@@ -56,6 +56,8 @@ class Settings(BaseSettings):
 
     gemini_api_key: str | None = Field(default=None, repr=False)
 
+    allow_llm_data_disclosure: bool = False
+
     gemini_model: str = "gemini-3.1-flash-lite"
 
     gemini_request_timeout_seconds: float = Field(

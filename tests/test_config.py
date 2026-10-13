@@ -30,6 +30,7 @@ def test_settings_have_expected_defaults() -> None:
     assert settings.max_query_execution_seconds == 30.0
     assert settings.max_query_temp_storage_mb == 1_024
     assert settings.gemini_api_key is None
+    assert settings.allow_llm_data_disclosure is False
     assert settings.gemini_model == "gemini-3.1-flash-lite"
     assert settings.gemini_request_timeout_seconds == 30.0
     assert settings.gemini_max_retries == 2
@@ -79,6 +80,10 @@ def test_settings_load_prefixed_environment_variables(
         "VERISIGHT_GEMINI_MODEL",
         "test-model",
     )
+    monkeypatch.setenv(
+        "VERISIGHT_ALLOW_LLM_DATA_DISCLOSURE",
+        "true",
+    )
 
     settings = SettingsWithoutEnvFile()
 
@@ -91,6 +96,7 @@ def test_settings_load_prefixed_environment_variables(
     assert settings.max_query_execution_seconds == 45.5
     assert settings.max_query_temp_storage_mb == 256
     assert settings.gemini_api_key == "test-api-key"
+    assert settings.allow_llm_data_disclosure is True
     assert settings.gemini_model == "test-model"
 
 
@@ -271,3 +277,17 @@ def test_gemini_api_key_is_hidden_from_settings_repr() -> None:
     assert settings.gemini_api_key == secret
     assert secret not in repr(settings)
     assert "gemini_api_key=" not in repr(settings)
+
+
+@pytest.mark.parametrize("value", ["invalid", "sometimes", ""])
+def test_settings_reject_invalid_llm_disclosure_permission(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+) -> None:
+    monkeypatch.setenv(
+        "VERISIGHT_ALLOW_LLM_DATA_DISCLOSURE",
+        value,
+    )
+
+    with pytest.raises(ValidationError):
+        SettingsWithoutEnvFile()

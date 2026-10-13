@@ -1,8 +1,27 @@
 """Prompt construction for analytical query repair."""
 
+import re
+
 from verisight.execution.formatting import QueryContextFormatter
 from verisight.execution.prompt_budget import PromptBudget
 from verisight.execution.repair import QueryRepairRequest
+
+
+def _safe_repair_diagnostic(error: str) -> str:
+    """Return a bounded diagnostic category without raw runtime details."""
+
+    match = re.match(
+        r"^(Binder|Catalog|Parser|Conversion|Type|Out of Range) Error:",
+        error,
+        flags=re.IGNORECASE,
+    )
+
+    if match is None:
+        return "SQL execution failed."
+
+    category = match.group(1).lower().replace(" ", "_")
+
+    return f"SQL {category} error."
 
 
 class QueryRepairPromptBuilder:
@@ -18,6 +37,7 @@ class QueryRepairPromptBuilder:
         """Build a repair prompt from a failed analytical query."""
 
         context = self._context_formatter.format(request.context)
+        safe_error = _safe_repair_diagnostic(request.error)
 
         prompt = (
             "You are an analytical SQL repairer for VeriSight.\n\n"
@@ -64,7 +84,7 @@ class QueryRepairPromptBuilder:
             "FAILED SQL:\n"
             f"{request.failed_sql}\n\n"
             "RUNTIME ERROR:\n"
-            f"{request.error}\n"
+            f"{safe_error}\n"
         )
 
         return self._prompt_budget.enforce(prompt)

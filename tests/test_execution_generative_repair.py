@@ -56,7 +56,8 @@ def test_generative_repairer_builds_prompt_from_request() -> None:
 
     assert "ORIGINAL QUESTION:\nCompare values across groups." in prompt
     assert "FAILED SQL:\nSELECT missing_column FROM observations" in prompt
-    assert 'Referenced column "missing_column"' in prompt
+    assert "RUNTIME ERROR:\nSQL binder error." in prompt
+    assert 'Referenced column "missing_column"' not in prompt
 
 
 def test_generative_repairer_parses_fenced_sql_response() -> None:
