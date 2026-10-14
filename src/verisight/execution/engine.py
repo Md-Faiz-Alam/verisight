@@ -121,6 +121,8 @@ class DuckDBExecutor:
             database=":memory:",
             config={
                 "enable_external_access": "false",
+                "autoload_known_extensions": "false",
+                "autoinstall_known_extensions": "false",
                 "memory_limit": f"{self._memory_limit_mb}MB",
                 "max_temp_directory_size": (f"{self._temp_storage_limit_mb}MB"),
             },

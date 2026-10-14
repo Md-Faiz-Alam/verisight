@@ -441,6 +441,35 @@ def test_executor_connection_disables_external_access(
             ).fetchall()
 
 
+def test_executor_connection_disables_automatic_extensions() -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame({"order_id": [1, 2]}),
+    )
+
+    executor = DuckDBExecutor()
+
+    with executor._connection(dataset) as connection:
+        settings = dict(
+            connection.execute(
+                """
+                SELECT name, value
+                FROM duckdb_settings()
+                WHERE name IN (
+                    'autoload_known_extensions',
+                    'autoinstall_known_extensions'
+                )
+                """
+            ).fetchall()
+        )
+
+    assert settings == {
+        "autoload_known_extensions": "false",
+        "autoinstall_known_extensions": "false",
+    }
+
+
 def test_executor_rejects_non_positive_result_limit() -> None:
     with pytest.raises(
         ValueError,
