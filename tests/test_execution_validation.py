@@ -1,4 +1,7 @@
+from unittest.mock import patch
+
 import pytest
+from sqlglot.errors import ParseError
 
 from verisight.execution.exceptions import (
     QueryExecutionError,
@@ -7,6 +10,7 @@ from verisight.execution.exceptions import (
 from verisight.execution.validation import (
     AnalyticalQueryValidator,
     _mask_sql_literals_and_comments,
+    validate_dataset_relations,
 )
 
 
@@ -246,3 +250,66 @@ def test_rejects_quoted_external_access_functions(
         match="External data access is not allowed",
     ):
         AnalyticalQueryValidator().validate(query)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ParseError("SQL parsing failed"),
+        ValueError("SQL scope analysis failed"),
+    ],
+)
+def test_dataset_relation_validation_rejects_sql_analysis_errors(
+    error: Exception,
+) -> None:
+    with (
+        patch(
+            "verisight.execution.validation.sqlglot.parse_one",
+            side_effect=error,
+        ),
+        pytest.raises(
+            QueryValidationError,
+            match="Dataset access is not allowed: SQL analysis failed",
+        ),
+    ):
+        validate_dataset_relations(
+            "SELECT * FROM orders",
+            frozenset({"orders"}),
+        )
+
+
+def test_dataset_relation_validation_rejects_unresolved_scopes() -> None:
+    with (
+        patch(
+            "verisight.execution.validation.traverse_scope",
+            return_value=[],
+        ),
+        pytest.raises(
+            QueryValidationError,
+            match="Dataset access is not allowed: SQL scopes could not be resolved",
+        ),
+    ):
+        validate_dataset_relations(
+            "SELECT * FROM orders",
+            frozenset({"orders"}),
+        )
+
+
+def test_dataset_relation_validation_rejects_unsupported_source() -> None:
+    class UnsupportedScope:
+        selected_sources = {"unsupported": (None, object())}
+
+    with (
+        patch(
+            "verisight.execution.validation.traverse_scope",
+            return_value=[UnsupportedScope()],
+        ),
+        pytest.raises(
+            QueryValidationError,
+            match="Dataset access is not allowed: unsupported SQL source",
+        ),
+    ):
+        validate_dataset_relations(
+            "SELECT * FROM orders",
+            frozenset({"orders"}),
+        )

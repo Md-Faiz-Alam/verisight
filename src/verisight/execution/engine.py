@@ -13,7 +13,10 @@ from verisight.execution.exceptions import (
     QueryTimeoutError,
 )
 from verisight.execution.models import QueryResult, QueryRow
-from verisight.execution.validation import AnalyticalQueryValidator
+from verisight.execution.validation import (
+    AnalyticalQueryValidator,
+    validate_dataset_relations,
+)
 from verisight.ingestion.models import LoadedDataset
 
 
@@ -56,6 +59,11 @@ class DuckDBExecutor:
         """Execute a query against dataset relations."""
 
         self._query_validator.validate(query)
+        allowed_relations = frozenset(
+            table.relation_name.lower() for table in dataset.tables
+        )
+
+        validate_dataset_relations(query, allowed_relations)
 
         try:
             with self._connection(dataset) as connection:

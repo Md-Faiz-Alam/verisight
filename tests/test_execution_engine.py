@@ -289,6 +289,245 @@ def test_unknown_relation_raises_query_runtime_error() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT name, value FROM duckdb_settings() LIMIT 3",
+        "SELECT table_name FROM duckdb_tables() LIMIT 3",
+        "SELECT * FROM information_schema.tables LIMIT 3",
+    ],
+)
+def test_rejects_internal_metadata_access(query: str) -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2],
+            }
+        ),
+    )
+
+    with pytest.raises(
+        QueryValidationError,
+        match="Dataset access is not allowed",
+    ):
+        DuckDBExecutor().execute(dataset, query)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        """
+        WITH hidden AS (
+            SELECT * FROM duckdb_settings()
+        )
+        SELECT * FROM hidden
+        """,
+        """
+        SELECT *
+        FROM orders
+        WHERE EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+        )
+        """,
+        """
+        SELECT *
+        FROM orders
+        JOIN (
+            SELECT * FROM duckdb_tables()
+        ) AS hidden
+        ON TRUE
+        """,
+        """
+        SELECT *
+        FROM (
+            SELECT * FROM information_schema.tables
+        ) AS hidden
+        """,
+    ],
+)
+def test_rejects_nested_internal_metadata_access(query: str) -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2],
+            }
+        ),
+    )
+
+    with pytest.raises(
+        QueryValidationError,
+        match="Dataset access is not allowed",
+    ):
+        DuckDBExecutor().execute(dataset, query)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT current_setting('enable_external_access')",
+        "SELECT current_database()",
+        "SELECT version()",
+        "SELECT current_schema()",
+        """
+        SELECT order_id,
+               current_setting('memory_limit') AS internal_setting
+        FROM orders
+        """,
+    ],
+)
+def test_rejects_scalar_metadata_functions(query: str) -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2],
+            }
+        ),
+    )
+
+    with pytest.raises(
+        QueryValidationError,
+        match="Dataset access is not allowed",
+    ):
+        DuckDBExecutor().execute(dataset, query)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT current_catalog()",
+        "SELECT current_user",
+        "SELECT session_user",
+        "SELECT current_catalog() FROM orders",
+        "SELECT current_user FROM orders",
+    ],
+)
+def test_rejects_additional_metadata_expressions(query: str) -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame(
+            {
+                "order_id": [1, 2],
+            }
+        ),
+    )
+
+    with pytest.raises(
+        QueryValidationError,
+        match="Dataset access is not allowed",
+    ):
+        DuckDBExecutor().execute(dataset, query)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT * FROM UNNEST([1, 2, 3]) AS t(value)",
+        "SELECT * FROM (VALUES (1), (2)) AS t(value)",
+    ],
+)
+def test_allows_safe_inline_table_expressions(query: str) -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame({"order_id": [1, 2]}),
+    )
+
+    result = DuckDBExecutor().execute(dataset, query)
+
+    assert result.rows
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        """
+        SELECT *
+        FROM UNNEST(
+            [current_setting('memory_limit')]
+        ) AS t(value)
+        """,
+        """
+        SELECT *
+        FROM (
+            VALUES (current_setting('memory_limit'))
+        ) AS t(value)
+        """,
+        """
+        SELECT *
+        FROM UNNEST(
+            (SELECT [name] FROM duckdb_settings() LIMIT 1)
+        ) AS t(value)
+        """,
+    ],
+)
+def test_rejects_metadata_access_inside_inline_tables(
+    query: str,
+) -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame({"order_id": [1, 2]}),
+    )
+
+    with pytest.raises(
+        QueryValidationError,
+        match="Dataset access is not allowed",
+    ):
+        DuckDBExecutor().execute(dataset, query)
+
+
+def test_rejects_unsupported_inline_table_expression() -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame({"order_id": [1, 2]}),
+    )
+
+    query = """
+        SELECT *
+        FROM LATERAL (
+            SELECT 1 AS value
+        ) AS t
+    """
+
+    with pytest.raises(
+        QueryValidationError,
+        match="Dataset access is not allowed: unsupported inline table",
+    ):
+        DuckDBExecutor().execute(dataset, query)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT * FROM main.generate_series(1, 3)",
+        "SELECT * FROM memory.main.generate_series(1, 3)",
+    ],
+)
+def test_rejects_schema_qualified_generate_series(
+    query: str,
+) -> None:
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame({"order_id": [1, 2]}),
+    )
+
+    with pytest.raises(
+        QueryValidationError,
+        match="Dataset access is not allowed: schema-qualified table function",
+    ):
+        DuckDBExecutor().execute(dataset, query)
+
+
 def test_validation_error_is_query_execution_error() -> None:
     error = QueryValidationError("Invalid query")
 

@@ -3,8 +3,15 @@
 import re
 
 import duckdb
+import sqlglot
+from sqlglot import exp
+from sqlglot.errors import ParseError
+from sqlglot.optimizer.scope import Scope, ScopeType, traverse_scope
 
-from verisight.execution.exceptions import QueryValidationError
+from verisight.execution.exceptions import (
+    QueryRuntimeError,
+    QueryValidationError,
+)
 
 
 def _blocked_function_pattern(name: str) -> re.Pattern[str]:
@@ -199,4 +206,101 @@ class AnalyticalQueryValidator:
             if pattern.search(masked_query):
                 raise QueryValidationError(
                     "External data access is not allowed in analytical queries."
+                )
+
+
+_BLOCKED_SCALAR_METADATA_FUNCTIONS = frozenset(
+    {
+        "current_setting",
+        "version",
+    }
+)
+
+
+def validate_dataset_relations(
+    query: str,
+    allowed_relations: frozenset[str],
+) -> None:
+    """Restrict SQL relation sources to registered dataset tables."""
+
+    try:
+        expression = sqlglot.parse_one(
+            query,
+            read="duckdb",
+            error_level="RAISE",
+        )
+
+        scopes = list(traverse_scope(expression))
+    except (ParseError, ValueError) as exc:
+        raise QueryValidationError(
+            "Dataset access is not allowed: SQL analysis failed."
+        ) from exc
+
+    if not scopes:
+        raise QueryValidationError(
+            "Dataset access is not allowed: SQL scopes could not be resolved."
+        )
+
+    for function in expression.find_all(exp.Func):
+        if isinstance(
+            function,
+            (
+                exp.CurrentCatalog,
+                exp.CurrentDatabase,
+                exp.CurrentSchema,
+                exp.CurrentUser,
+                exp.SessionUser,
+            ),
+        ):
+            raise QueryValidationError(
+                "Dataset access is not allowed: internal metadata function."
+            )
+
+        if (
+            isinstance(function, exp.Anonymous)
+            and function.name.lower() in _BLOCKED_SCALAR_METADATA_FUNCTIONS
+        ):
+            raise QueryValidationError(
+                "Dataset access is not allowed: internal metadata function."
+            )
+
+    for scope in scopes:
+        for _, source in scope.selected_sources.values():
+            if isinstance(source, Scope):
+                if source.scope_type == ScopeType.UDTF and not isinstance(
+                    source.expression,
+                    (exp.Unnest, exp.Values),
+                ):
+                    raise QueryValidationError(
+                        "Dataset access is not allowed: unsupported inline table."
+                    )
+                continue
+
+            if not isinstance(source, exp.Table):
+                raise QueryValidationError(
+                    "Dataset access is not allowed: unsupported SQL source."
+                )
+
+            if isinstance(source.this, exp.GenerateSeries):
+                if source.db or source.catalog:
+                    raise QueryValidationError(
+                        "Dataset access is not allowed: "
+                        "schema-qualified table function."
+                    )
+                continue
+
+            if not isinstance(source.this, exp.Identifier):
+                raise QueryValidationError(
+                    "Dataset access is not allowed: unauthorized table function."
+                )
+
+            if source.db or source.catalog:
+                raise QueryValidationError(
+                    "Dataset access is not allowed: schema-qualified relation."
+                )
+
+            if source.name.lower() not in allowed_relations:
+                raise QueryRuntimeError(
+                    "Analytical query execution failed: "
+                    f"relation '{source.name}' is not registered."
                 )
