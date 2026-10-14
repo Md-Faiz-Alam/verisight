@@ -96,6 +96,7 @@ def test_rejects_non_select_statements(query: str) -> None:
         "SELECT * FROM read_text('data.txt')",
         "SELECT * FROM read_ndjson('data.ndjson')",
         "SELECT * FROM read_ndjson_auto('data.ndjson')",
+        "SELECT * FROM read_csv/**/('data.csv')",
     ],
 )
 def test_rejects_external_access_from_select(query: str) -> None:
@@ -185,6 +186,32 @@ def test_masks_unterminated_single_quoted_literal_preserving_newline() -> None:
     masked = _mask_sql_literals_and_comments(query)
 
     assert masked == "SELECT          \n         "
+
+
+def test_nested_block_comment_does_not_trigger_external_access_block() -> None:
+    query = "SELECT 1 /* outer /* inner */ read_csv('data.csv') */"
+
+    AnalyticalQueryValidator().validate(query)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT 1 /* outer /* inner */ outer */",
+        "SELECT 1 /* outer\n/* inner */\nouter */",
+        "SELECT 1 /* outer /* inner */",
+    ],
+)
+def test_masks_nested_block_comments(query: str) -> None:
+    masked = _mask_sql_literals_and_comments(query)
+
+    expected = "SELECT 1" + "".join(
+        character if character in "\r\n" else " "
+        for character in query[len("SELECT 1") :]
+    )
+
+    assert masked == expected
+    assert len(masked) == len(query)
 
 
 def test_masks_unterminated_block_comment_preserving_newline() -> None:

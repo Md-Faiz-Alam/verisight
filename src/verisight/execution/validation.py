@@ -119,12 +119,24 @@ def _mask_block_comment(
     characters: list[str],
     start: int,
 ) -> int:
-    """Mask one SQL block comment."""
+    """Mask nested SQL block comments while preserving newlines."""
 
     index = start
     length = len(characters)
+    depth = 0
 
     while index < length:
+        if (
+            characters[index] == "/"
+            and index + 1 < length
+            and characters[index + 1] == "*"
+        ):
+            characters[index] = " "
+            characters[index + 1] = " "
+            depth += 1
+            index += 2
+            continue
+
         if (
             characters[index] == "*"
             and index + 1 < length
@@ -132,7 +144,13 @@ def _mask_block_comment(
         ):
             characters[index] = " "
             characters[index + 1] = " "
-            return index + 2
+            depth -= 1
+            index += 2
+
+            if depth == 0:
+                return index
+
+            continue
 
         if characters[index] not in "\r\n":
             characters[index] = " "

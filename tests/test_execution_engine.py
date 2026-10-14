@@ -370,6 +370,31 @@ def test_executor_cannot_read_external_text_file(
         )
 
 
+def test_executor_rejects_implicit_external_file_scan(
+    tmp_path: Path,
+) -> None:
+    secret_path = tmp_path / "secret.csv"
+    secret_path.write_text(
+        "secret\nverisight-secret-value\n",
+        encoding="utf-8",
+    )
+
+    dataset = _make_dataset(
+        name="Orders",
+        relation_name="orders",
+        data=pd.DataFrame({"order_id": [1, 2]}),
+    )
+
+    escaped_path = secret_path.as_posix().replace("'", "''")
+
+    query = f"SELECT * FROM '{escaped_path}'"
+
+    with pytest.raises(
+        (QueryValidationError, QueryRuntimeError),
+    ):
+        DuckDBExecutor().execute(dataset, query)
+
+
 def test_executor_connection_disables_external_access(
     tmp_path: Path,
 ) -> None:
