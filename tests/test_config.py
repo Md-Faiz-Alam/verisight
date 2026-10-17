@@ -1,4 +1,6 @@
+import json
 from pathlib import Path
+from typing import Literal
 
 import pytest
 from pydantic import ValidationError
@@ -291,3 +293,56 @@ def test_settings_reject_invalid_llm_disclosure_permission(
 
     with pytest.raises(ValidationError):
         SettingsWithoutEnvFile()
+
+
+@pytest.mark.parametrize("mode", ["python", "json"])
+def test_gemini_api_key_is_excluded_from_model_dump(
+    mode: Literal["python", "json"],
+) -> None:
+    secret = "synthetic-serialization-secret"
+    settings = SettingsWithoutEnvFile(
+        gemini_api_key=secret,
+        gemini_model="test-model",
+    )
+
+    dumped = settings.model_dump(mode=mode)
+
+    assert "gemini_api_key" not in dumped
+    assert secret not in repr(dumped)
+    assert dumped["gemini_model"] == "test-model"
+    assert settings.gemini_api_key == secret
+
+
+def test_gemini_api_key_is_excluded_from_json_serialization() -> None:
+    secret = "synthetic-json-secret"
+    settings = SettingsWithoutEnvFile(
+        gemini_api_key=secret,
+        gemini_model="test-model",
+    )
+
+    serialized = settings.model_dump_json()
+    dumped = json.loads(serialized)
+
+    assert secret not in serialized
+    assert "gemini_api_key" not in dumped
+    assert dumped["gemini_model"] == "test-model"
+
+
+def test_explicit_serialization_include_does_not_expose_gemini_api_key() -> None:
+    settings = SettingsWithoutEnvFile(gemini_api_key="synthetic-include-secret")
+
+    assert settings.model_dump(include={"gemini_api_key"}) == {}
+    assert json.loads(settings.model_dump_json(include={"gemini_api_key"})) == {}
+
+
+def test_environment_api_key_remains_usable_but_is_not_serialized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret = "synthetic-environment-secret"
+    monkeypatch.setenv("VERISIGHT_GEMINI_API_KEY", secret)
+
+    settings = SettingsWithoutEnvFile()
+
+    assert settings.gemini_api_key == secret
+    assert "gemini_api_key" not in settings.model_dump()
+    assert secret not in settings.model_dump_json()

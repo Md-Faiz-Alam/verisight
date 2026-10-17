@@ -54,7 +54,7 @@ class Settings(BaseSettings):
         gt=0,
     )
 
-    gemini_api_key: str | None = Field(default=None, repr=False)
+    gemini_api_key: str | None = Field(default=None, repr=False, exclude=True)
 
     allow_llm_data_disclosure: bool = False
 
