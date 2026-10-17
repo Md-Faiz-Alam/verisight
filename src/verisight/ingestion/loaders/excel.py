@@ -45,7 +45,12 @@ class ExcelLoader:
                             "Excel workbook contains a non-string sheet name."
                         )
 
-                    data = workbook.parse(sheet_name=sheet_name)
+                    data = workbook.parse(
+                        sheet_name=sheet_name,
+                        dtype=object,
+                        keep_default_na=False,
+                        na_values=[""],
+                    ).infer_objects()
 
                     tables.append(
                         LoadedTable(

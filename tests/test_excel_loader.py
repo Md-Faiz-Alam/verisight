@@ -1,8 +1,10 @@
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
+from verisight import VeriSight
 from verisight.config import Settings
 from verisight.ingestion.exceptions import (
     DataLoadError,
@@ -169,7 +171,7 @@ def test_excel_loader_wraps_sheet_parse_failure(
         ) -> None:
             return None
 
-        def parse(self, sheet_name: str) -> pd.DataFrame:
+        def parse(self, sheet_name: str, **kwargs: object) -> pd.DataFrame:
             raise ValueError(f"Could not parse {sheet_name}")
 
     monkeypatch.setattr(
@@ -209,7 +211,7 @@ def test_excel_loader_closes_workbook_after_loading(
             nonlocal closed
             closed = True
 
-        def parse(self, sheet_name: str) -> pd.DataFrame:
+        def parse(self, sheet_name: str, **kwargs: object) -> pd.DataFrame:
             return pd.DataFrame({"id": [1, 2]})
 
     monkeypatch.setattr(
@@ -248,7 +250,7 @@ def test_excel_loader_rejects_non_string_sheet_name(
         ) -> None:
             return None
 
-        def parse(self, sheet_name: str) -> pd.DataFrame:
+        def parse(self, sheet_name: str, **kwargs: object) -> pd.DataFrame:
             pytest.fail("Invalid worksheet name must not be parsed.")
 
     monkeypatch.setattr(
@@ -262,3 +264,90 @@ def test_excel_loader_rejects_non_string_sheet_name(
         match="Excel workbook contains a non-string sheet name",
     ):
         ExcelLoader(Settings()).load(file_path)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        ["00123", "00456"],
+        ["NA", "N/A", "NULL", "null", "NaN", "None"],
+        ["true", "false", "TRUE", "FALSE"],
+        ["1.50", "2.00", "1e3"],
+        ["9007199254740993", "123456789012345678901234567890"],
+    ],
+)
+def test_excel_loader_preserves_text_cells(tmp_path: Path, values: list[str]) -> None:
+    path = tmp_path / "text.xlsx"
+    pd.DataFrame({"value": values}).to_excel(path, index=False)
+
+    data = ExcelLoader(Settings()).load(path).tables[0].data
+
+    assert data["value"].tolist() == values
+    assert all(isinstance(value, str) for value in data["value"])
+    assert data["value"].isna().sum() == 0
+
+
+def test_excel_loader_preserves_native_cell_types(tmp_path: Path) -> None:
+    path = tmp_path / "typed.xlsx"
+    expected = pd.DataFrame(
+        {
+            "count": [1, 2],
+            "amount": [1.5, 2.75],
+            "active": [True, False],
+            "date": [datetime(2026, 1, 1), datetime(2026, 1, 2)],
+        }
+    )
+    expected.to_excel(path, index=False)
+
+    data = ExcelLoader(Settings()).load(path).tables[0].data
+
+    pd.testing.assert_frame_equal(data, expected)
+
+
+def test_excel_loader_distinguishes_blank_cells_from_na_text(tmp_path: Path) -> None:
+    path = tmp_path / "missing.xlsx"
+    pd.DataFrame(
+        {
+            "row_id": [1, 2, 3],
+            "label": ["NA", None, "00123"],
+            "amount": [1.5, None, 2.5],
+            "date": [datetime(2026, 1, 1), None, datetime(2026, 1, 3)],
+        }
+    ).to_excel(path, index=False)
+
+    data = ExcelLoader(Settings()).load(path).tables[0].data
+
+    assert data["label"].iloc[0] == "NA"
+    assert data["label"].iloc[2] == "00123"
+    for column in ("label", "amount", "date"):
+        assert data[column].isna().tolist() == [False, True, False]
+    assert data["amount"].iloc[0] == 1.5
+    assert data["amount"].iloc[2] == 2.5
+    assert data["date"].iloc[0] == pd.Timestamp("2026-01-01")
+    assert data["date"].iloc[2] == pd.Timestamp("2026-01-03")
+
+
+def test_excel_loader_preserves_mixed_numeric_and_text_cells(tmp_path: Path) -> None:
+    path = tmp_path / "mixed.xlsx"
+    pd.DataFrame({"value": [123, "00123", "123"]}).to_excel(path, index=False)
+
+    data = ExcelLoader(Settings()).load(path).tables[0].data
+
+    assert data["value"].tolist() == [123, "00123", "123"]
+    assert isinstance(data["value"].iloc[0], int)
+    assert isinstance(data["value"].iloc[2], str)
+
+
+def test_excel_text_values_survive_sql_execution(tmp_path: Path) -> None:
+    path = tmp_path / "customers.xlsx"
+    pd.DataFrame(
+        {"customer_id": ["00123", "00456"], "label": ["NA", "active"]}
+    ).to_excel(path, index=False, sheet_name="Customers")
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+
+    result = app.execute(
+        [path],
+        "SELECT customer_id, label FROM customers ORDER BY customer_id",
+    )
+
+    assert result.rows == (("00123", "NA"), ("00456", "active"))
