@@ -1,3 +1,4 @@
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -26,6 +27,7 @@ from verisight.execution.investigation_result import (
 )
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.execution.repair import QueryRepairRequest
+from verisight.ingestion.exceptions import FileValidationError
 from verisight.service import VeriSight, _LazyGeminiQueryRepairer
 
 
@@ -82,7 +84,15 @@ class StubInvestigationSynthesizer:
         return self.conclusion
 
 
-def test_analyzes_single_csv_file(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "path_factory",
+    [str, Path, lambda path: [path], lambda path: (path,), lambda path: iter([path])],
+    ids=["string", "path", "list", "tuple", "iterator"],
+)
+def test_analyzes_single_csv_file(
+    tmp_path: Path,
+    path_factory: Callable[[Path], str | Path | Iterable[str | Path]],
+) -> None:
     path = tmp_path / "orders.csv"
 
     pd.DataFrame(
@@ -92,7 +102,7 @@ def test_analyzes_single_csv_file(tmp_path: Path) -> None:
         }
     ).to_csv(path, index=False)
 
-    result = VeriSight().analyze([path])
+    result = VeriSight().analyze(path_factory(path))
 
     assert isinstance(result, DatasetAnalysisResult)
     assert result.analysis.schema.table_count == 1
@@ -195,13 +205,42 @@ def test_analyzes_with_explicit_settings(tmp_path: Path) -> None:
     assert result.analysis.profile.table_count == 1
 
 
-def test_empty_input_produces_empty_analysis_result() -> None:
-    result = VeriSight().analyze([])
+@pytest.mark.parametrize("operation", ["analyze", "execute", "ask", "investigate"])
+@pytest.mark.parametrize(
+    "paths_factory",
+    [list, tuple, lambda: iter(())],
+    ids=["list", "tuple", "iterator"],
+)
+def test_public_operations_reject_empty_input(
+    operation: str,
+    paths_factory: Callable[[], Iterable[str | Path]],
+) -> None:
+    service = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+    paths = paths_factory()
+    operations: dict[str, Callable[[], object]] = {
+        "analyze": lambda: service.analyze(paths),
+        "execute": lambda: service.execute(paths, "SELECT 1"),
+        "ask": lambda: service.ask(paths, "Count the rows."),
+        "investigate": lambda: service.investigate(paths, "Inspect the data."),
+    }
 
-    assert result.analysis.schema.table_count == 0
-    assert result.analysis.profile.table_count == 0
-    assert result.issue_count == 0
-    assert result.insight_count == len(result.insights)
+    with pytest.raises(
+        FileValidationError,
+        match="At least one dataset file path is required",
+    ):
+        operations[operation]()
+
+
+@pytest.mark.parametrize("paths", ["", "   ", ["missing.csv", ""]])
+def test_public_analyze_rejects_blank_paths_before_loading(
+    paths: str | list[str],
+) -> None:
+    service = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+
+    with pytest.raises(
+        FileValidationError, match="Dataset file paths must not be blank"
+    ):
+        service.analyze(paths)
 
 
 def test_verisight_is_available_from_package_root() -> None:
@@ -210,7 +249,15 @@ def test_verisight_is_available_from_package_root() -> None:
     assert PublicVeriSight is VeriSight
 
 
-def test_executes_query_against_single_csv_file(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "path_factory",
+    [str, Path, lambda path: [path], lambda path: (path,), lambda path: iter([path])],
+    ids=["string", "path", "list", "tuple", "iterator"],
+)
+def test_executes_query_against_single_csv_file(
+    tmp_path: Path,
+    path_factory: Callable[[Path], str | Path | Iterable[str | Path]],
+) -> None:
     path = tmp_path / "orders.csv"
 
     pd.DataFrame(
@@ -221,7 +268,7 @@ def test_executes_query_against_single_csv_file(tmp_path: Path) -> None:
     ).to_csv(path, index=False)
 
     result = VeriSight().execute(
-        [path],
+        path_factory(path),
         """
         SELECT order_id, amount
         FROM orders
@@ -286,8 +333,14 @@ def test_executes_query_across_multiple_files(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "path_factory",
+    [str, Path, lambda path: [path], lambda path: (path,), lambda path: iter([path])],
+    ids=["string", "path", "list", "tuple", "iterator"],
+)
 def test_asks_natural_language_question_against_csv_file(
     tmp_path: Path,
+    path_factory: Callable[[Path], str | Path | Iterable[str | Path]],
 ) -> None:
     path = tmp_path / "orders.csv"
 
@@ -299,7 +352,7 @@ def test_asks_natural_language_question_against_csv_file(
     ).to_csv(path, index=False)
 
     result = VeriSight(planner=StubQueryPlanner()).ask(
-        [path],
+        path_factory(path),
         "How many orders are there and what is the total amount?",
     )
 
@@ -453,8 +506,14 @@ def test_default_gemini_planner_can_answer_question(
     generated_client.generate.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    "path_factory",
+    [str, Path, lambda path: [path], lambda path: (path,), lambda path: iter([path])],
+    ids=["string", "path", "list", "tuple", "iterator"],
+)
 def test_public_investigate_runs_autonomous_analysis(
     tmp_path: Path,
+    path_factory: Callable[[Path], str | Path | Iterable[str | Path]],
 ) -> None:
     path = tmp_path / "orders.csv"
 
@@ -490,7 +549,7 @@ def test_public_investigate_runs_autonomous_analysis(
     )
 
     result = service.investigate(
-        [path],
+        path_factory(path),
         "What can we learn about these orders?",
     )
 

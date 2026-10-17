@@ -30,6 +30,8 @@ from verisight.execution.planning import QueryPlan, QueryPlanner
 from verisight.execution.repair import QueryRepairer, QueryRepairRequest
 from verisight.execution.service import AnalyticalExecutionService
 from verisight.execution.synthesis import InvestigationSynthesizer
+from verisight.ingestion.exceptions import FileValidationError
+from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.service import DatasetLoader
 
 
@@ -164,25 +166,41 @@ class VeriSight:
 
         return GenerativeInvestigationSynthesizer(client)
 
+    def _load_dataset(
+        self,
+        paths: str | Path | Iterable[str | Path],
+    ) -> LoadedDataset:
+        """Normalize public path inputs and require at least one file path."""
+
+        normalized = (paths,) if isinstance(paths, (str, Path)) else tuple(paths)
+
+        if not normalized:
+            raise FileValidationError("At least one dataset file path is required.")
+
+        if any(isinstance(path, str) and not path.strip() for path in normalized):
+            raise FileValidationError("Dataset file paths must not be blank.")
+
+        return self._dataset_loader.load(normalized)
+
     def analyze(
         self,
-        paths: Iterable[str | Path],
+        paths: str | Path | Iterable[str | Path],
     ) -> DatasetAnalysisResult:
         """Load and analyze one or more dataset files."""
 
-        dataset = self._dataset_loader.load(paths)
+        dataset = self._load_dataset(paths)
         analysis = self._dataset_analyzer.analyze(dataset)
 
         return self._result_builder.build(analysis)
 
     def execute(
         self,
-        paths: Iterable[str | Path],
+        paths: str | Path | Iterable[str | Path],
         query: str,
     ) -> QueryResult:
         """Execute a read-only analytical query against dataset files."""
 
-        dataset = self._dataset_loader.load(paths)
+        dataset = self._load_dataset(paths)
 
         execution_service = AnalyticalExecutionService(
             dataset,
@@ -196,12 +214,12 @@ class VeriSight:
 
     def ask(
         self,
-        paths: Iterable[str | Path],
+        paths: str | Path | Iterable[str | Path],
         question: str,
     ) -> QueryResult:
         """Answer a natural-language analytical question against dataset files."""
 
-        dataset = self._dataset_loader.load(paths)
+        dataset = self._load_dataset(paths)
 
         execution_service = AnalyticalExecutionService(
             dataset,
@@ -217,14 +235,14 @@ class VeriSight:
 
     def investigate(
         self,
-        paths: Iterable[str | Path],
+        paths: str | Path | Iterable[str | Path],
         question: str,
         *,
         max_steps: int = 5,
     ) -> InvestigationResult:
         """Run a bounded autonomous investigation against dataset files."""
 
-        dataset = self._dataset_loader.load(paths)
+        dataset = self._load_dataset(paths)
 
         analysis = self._dataset_analyzer.analyze(dataset)
         analysis_result = self._result_builder.build(analysis)
