@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from verisight import VeriSight
 from verisight.config import Settings
 from verisight.ingestion.exceptions import (
     DataLoadError,
@@ -600,3 +601,85 @@ def test_csv_type_inference_updates_input_dataframe_in_place() -> None:
     assert converted is data
     assert data["quantity"].tolist() == [1, 2]
     assert data["code"].tolist() == ["001", "002"]
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        "123456789012345678901234567890",
+        "+123456789012345678901234567890",
+        "-123456789012345678901234567890",
+        "18446744073709551616",
+        "-9223372036854775808",
+        "9007199254740992",
+        "-9007199254740992",
+        pytest.param("9" * 5000, id="5000-digit-identifier"),
+    ],
+)
+def test_csv_loader_preserves_oversized_integer_identifiers(
+    tmp_path: Path,
+    identifier: str,
+) -> None:
+    path = tmp_path / "identifiers.csv"
+    path.write_text(
+        f"account_id,name\n{identifier},Alice\n,Bob\n42,Charlie\n",
+        encoding="utf-8",
+    )
+
+    table = CsvLoader(Settings()).load(path)
+
+    assert table.row_count == 3
+    assert table.data.loc[0, "account_id"] == identifier
+    assert isinstance(table.data.loc[0, "account_id"], str)
+    assert pd.isna(table.data.loc[1, "account_id"])
+    assert table.data.loc[2, "account_id"] == "42"
+
+
+@pytest.mark.parametrize("with_missing", [False, True])
+def test_csv_loader_keeps_safe_boundary_integers_exact(
+    tmp_path: Path,
+    with_missing: bool,
+) -> None:
+    path = tmp_path / "measurements.csv"
+    content = (
+        "value,label\n"
+        "9007199254740991,maximum\n"
+        "-9007199254740991,minimum\n"
+        "+9007199254740991,positive\n"
+        "99,small\n"
+        "0,zero\n"
+    )
+    if with_missing:
+        content += ",missing\n"
+    path.write_text(content, encoding="utf-8")
+
+    table = CsvLoader(Settings()).load(path)
+
+    assert table.data["value"].iloc[:5].tolist() == [
+        9007199254740991,
+        -9007199254740991,
+        9007199254740991,
+        99,
+        0,
+    ]
+    assert pd.api.types.is_integer_dtype(table.data["value"])
+    if with_missing:
+        assert str(table.data["value"].dtype) == "Int64"
+        assert pd.isna(table.data["value"].iloc[5])
+
+
+def test_csv_oversized_identifier_survives_sql_execution(tmp_path: Path) -> None:
+    path = tmp_path / "accounts.csv"
+    identifier = "123456789012345678901234567890"
+    path.write_text(
+        f"account_id,name\n{identifier},Alice\n,Bob\n",
+        encoding="utf-8",
+    )
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+
+    result = app.execute(
+        [path],
+        "SELECT account_id FROM accounts WHERE account_id IS NOT NULL",
+    )
+
+    assert result.rows == ((identifier,),)

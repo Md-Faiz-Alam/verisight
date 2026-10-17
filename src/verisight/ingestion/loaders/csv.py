@@ -207,9 +207,13 @@ class CsvLoader(BaseTableLoader):
                 if bool(has_leading_zero):
                     continue
 
-                integers = pd.to_numeric(values, errors="raise")
+                limit = str(_MAX_SAFE_FLOAT_INTEGER)
+                digit_counts = unsigned.str.len()
+                exceeds_safe_range = digit_counts.gt(len(limit)) | (
+                    digit_counts.eq(len(limit)) & unsigned.gt(limit)
+                )
 
-                if bool(integers.abs().gt(_MAX_SAFE_FLOAT_INTEGER).any()):
+                if bool(exceeds_safe_range.any()):
                     continue
 
                 numeric = pd.to_numeric(series, errors="raise")
