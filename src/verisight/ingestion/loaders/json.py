@@ -12,6 +12,11 @@ from verisight.ingestion.loaders.base import BaseTableLoader
 from verisight.ingestion.models import LoadedTable
 from verisight.ingestion.validation import validate_file
 
+_MIN_INT64 = -(2**63)
+_MAX_INT64 = 2**63 - 1
+_MAX_UINT64 = 2**64 - 1
+_MAX_SAFE_FLOAT_INTEGER = 2**53 - 1
+
 
 class JsonLoader(BaseTableLoader):
     """Load tabular JSON files into VeriSight."""
@@ -68,7 +73,7 @@ class JsonLoader(BaseTableLoader):
         """Convert a supported JSON structure into a DataFrame."""
 
         if isinstance(payload, dict):
-            return pd.DataFrame([payload])
+            return JsonLoader._records_to_dataframe([payload])
 
         if isinstance(payload, list):
             if not payload:
@@ -77,6 +82,51 @@ class JsonLoader(BaseTableLoader):
             if not all(isinstance(item, dict) for item in payload):
                 raise DataLoadError(f"JSON array must contain objects: {path}")
 
-            return pd.DataFrame(payload)
+            return JsonLoader._records_to_dataframe(payload)
 
         raise DataLoadError(f"JSON root must be an object or array of objects: {path}")
+
+    @staticmethod
+    def _records_to_dataframe(records: list[dict[str, Any]]) -> pd.DataFrame:
+        """Infer columns without first coercing source integers to floats."""
+
+        columns = dict.fromkeys(key for record in records for key in record)
+
+        return pd.DataFrame(
+            {
+                column: JsonLoader._to_series(
+                    [record.get(column) for record in records]
+                )
+                for column in columns
+            },
+            index=range(len(records)),
+        )
+
+    @staticmethod
+    def _to_series(values: list[Any]) -> pd.Series:
+        """Preserve exact integers, including nullable and mixed columns."""
+
+        non_null = [value for value in values if value is not None]
+
+        if non_null and all(type(value) is int for value in non_null):
+            minimum = min(non_null)
+            maximum = max(non_null)
+            has_null = len(non_null) != len(values)
+
+            if minimum >= _MIN_INT64 and maximum <= _MAX_INT64:
+                dtype = "Int64" if has_null else "int64"
+                return pd.Series(values, dtype=dtype)
+
+            if minimum >= 0 and maximum <= _MAX_UINT64:
+                dtype = "UInt64" if has_null else "uint64"
+                return pd.Series(values, dtype=dtype)
+
+            return pd.Series(values, dtype=object)
+
+        if any(
+            type(value) is int and abs(value) > _MAX_SAFE_FLOAT_INTEGER
+            for value in non_null
+        ):
+            return pd.Series(values, dtype=object)
+
+        return pd.Series(values)
