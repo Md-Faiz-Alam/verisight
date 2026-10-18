@@ -172,7 +172,17 @@ class VeriSight:
     ) -> LoadedDataset:
         """Normalize public path inputs and require at least one file path."""
 
-        normalized = (paths,) if isinstance(paths, (str, Path)) else tuple(paths)
+        normalized: tuple[str | Path, ...]
+        if isinstance(paths, (str, Path)):
+            normalized = (paths,)
+        else:
+            try:
+                path_iterator = iter(paths)
+            except TypeError as exc:
+                raise FileValidationError(
+                    "Dataset input must be a file path or an iterable of file paths."
+                ) from exc
+            normalized = tuple(path_iterator)
 
         if not normalized:
             raise FileValidationError("At least one dataset file path is required.")

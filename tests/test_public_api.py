@@ -1,6 +1,8 @@
 """Tests for the framework-independent public operation boundary."""
 
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -14,6 +16,7 @@ from verisight.execution.exceptions import (
     QueryValidationError,
 )
 from verisight.execution.prompt_budget import PromptBudget
+from verisight.ingestion.exceptions import FileValidationError
 from verisight.public_api import run_public_operation
 
 
@@ -156,3 +159,45 @@ def test_public_boundary_classifies_escaping_prompt_budget_error() -> None:
     assert result.error is not None
     assert result.error.code is ErrorCode.PROMPT_BUDGET_EXCEEDED
     assert "private-prompt-content" not in repr(result)
+
+
+@pytest.mark.parametrize("operation", ["analyze", "execute", "ask", "investigate"])
+@pytest.mark.parametrize("invalid_input", [None, 42, True, 1.5, object()])
+def test_public_workflows_reject_non_iterable_dataset_input(
+    operation: str, invalid_input: Any
+) -> None:
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+    operations: dict[str, Callable[[], object]] = {
+        "analyze": lambda: app.analyze(invalid_input),
+        "execute": lambda: app.execute(invalid_input, "SELECT 1"),
+        "ask": lambda: app.ask(invalid_input, "Count the rows"),
+        "investigate": lambda: app.investigate(invalid_input, "Count the rows"),
+    }
+
+    with pytest.raises(FileValidationError, match="file path or an iterable"):
+        operations[operation]()
+
+    result = run_public_operation(operations[operation])
+
+    assert result.succeeded is False
+    assert result.value is None
+    assert result.error is not None
+    assert result.error.code is ErrorCode.FILE_VALIDATION_ERROR
+
+
+def test_public_boundary_keeps_iterator_execution_bug_as_internal_error() -> None:
+    class BrokenPaths:
+        def __iter__(self) -> Iterator[str]:
+            return self
+
+        def __next__(self) -> str:
+            raise TypeError("private iterator implementation detail")
+
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+
+    result = run_public_operation(lambda: app.analyze(BrokenPaths()))
+
+    assert result.succeeded is False
+    assert result.error is not None
+    assert result.error.code is ErrorCode.INTERNAL_ERROR
+    assert "private iterator" not in repr(result)
