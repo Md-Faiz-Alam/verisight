@@ -73,7 +73,6 @@ def test_rejects_empty_response(response: str) -> None:
     [
         "not json",
         '{"action":',
-        ('```json\n{"action":"finish","reasoning":"Done.","question":null}\n```'),
     ],
 )
 def test_rejects_invalid_json(response: str) -> None:
@@ -282,3 +281,63 @@ def test_accepts_escaped_json_field_content() -> None:
     assert decision.action is InvestigationAction.INVESTIGATE
     assert decision.reasoning == 'Compare revenue for "North" and "South".'
     assert decision.question == "What is revenue by region?\nInclude totals."
+
+
+@pytest.mark.parametrize("label", ["json", "JSON", ""])
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+@pytest.mark.parametrize("action", ["finish", "investigate"])
+def test_accepts_single_complete_json_fence(
+    label: str, newline: str, action: str
+) -> None:
+    payload = json.dumps(
+        {
+            "action": action,
+            "reasoning": "Check the evidence.",
+            "question": "How many rows?" if action == "investigate" else None,
+        }
+    )
+    response = f"  ```{label}{newline}{payload}{newline}```  "
+    parser = InvestigationResponseParser()
+
+    assert parser.parse(response) == parser.parse(payload)
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "Here is the result:\n```json\n{payload}\n```",
+        "```json\n{payload}\n```\nExplanation follows.",
+        "```json\n{payload}\n```\n```json\n{payload}\n```",
+        "```python\n{payload}\n```",
+        "```json\n{payload}",
+        "{payload}\n```",
+        "```json {payload}```",
+    ],
+)
+def test_rejects_ambiguous_or_incomplete_fences(template: str) -> None:
+    payload = '{"action":"finish","reasoning":"Done.","question":null}'
+
+    with pytest.raises(InvestigationError, match="invalid JSON"):
+        InvestigationResponseParser().parse(template.format(payload=payload))
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "",
+        '{"action":',
+        '{"action":"finish","reasoning":"Done.","question":null} {}',
+        '{"action":"finish","action":"investigate","reasoning":"Done.","question":null}',
+        '{"action":"finish","reasoning":"Done.","question":NaN}',
+        '{"action":"finish","reasoning":"Done.","question":Infinity}',
+        '{"action":"finish","reasoning":"Done.","question":-Infinity}',
+        "[]",
+        '{"action":"finish","reasoning":"Done."}',
+        '{"action":"finish","reasoning":"Done.","question":null,"extra":1}',
+        '{"action":"investigate","reasoning":"Done.","question":null}',
+        '{"action":"finish","reasoning":"","question":null}',
+    ],
+)
+def test_fences_do_not_bypass_json_or_decision_validation(payload: str) -> None:
+    with pytest.raises(InvestigationError):
+        InvestigationResponseParser().parse(f"```json\n{payload}\n```")

@@ -1,6 +1,7 @@
 """Parsing for autonomous investigation responses."""
 
 import json
+import re
 from typing import Any
 
 from verisight.execution.decisions import (
@@ -41,6 +42,14 @@ class InvestigationResponseParser:
 
         if not normalized:
             raise InvestigationError("Investigator returned an empty response.")
+
+        fenced = re.fullmatch(
+            r"```(?:json)?[ \t]*\r?\n(?P<payload>[\s\S]*?)\r?\n```",
+            normalized,
+            flags=re.IGNORECASE,
+        )
+        if fenced is not None:
+            normalized = fenced.group("payload")
 
         try:
             payload = json.loads(
