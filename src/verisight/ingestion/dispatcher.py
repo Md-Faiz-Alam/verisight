@@ -4,7 +4,10 @@ from pathlib import Path
 from typing import Protocol
 
 from verisight.config import Settings
-from verisight.ingestion.exceptions import UnsupportedFileTypeError
+from verisight.ingestion.exceptions import (
+    FileValidationError,
+    UnsupportedFileTypeError,
+)
 from verisight.ingestion.loaders.csv import CsvLoader
 from verisight.ingestion.loaders.excel import ExcelLoader
 from verisight.ingestion.loaders.json import JsonLoader
@@ -33,7 +36,16 @@ class FileLoader:
     def load(self, path: str | Path) -> IngestionResult:
         """Load a supported file using its registered loader."""
 
-        file_path = Path(path).expanduser()
+        try:
+            file_path = Path(path).expanduser()
+        except TypeError as exc:
+            raise FileValidationError(
+                "Dataset file path must be a string or path."
+            ) from exc
+
+        if file_path.is_dir():
+            raise FileValidationError(f"Path is not a file: {file_path}")
+
         extension = file_path.suffix.lower()
 
         try:
