@@ -217,3 +217,108 @@ def test_known_answer_investigation_pipeline(
     assert serialized["verified_claims"][0]["verification"]["status"] == verdict.value
     assert serialized["observations"][0]["sql"] == sql
     assert serialized["narrative_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("scenario", "wrong_sql", "wrong_answer"),
+    [
+        pytest.param(
+            SCENARIOS[0],
+            "SELECT SUM(cents) AS metric FROM ledger",
+            "11049",
+            id="missing-posted-filter",
+        ),
+        pytest.param(
+            SCENARIOS[2],
+            "SELECT SUM(lines.quantity * prices.unit_price) AS metric "
+            "FROM lines CROSS JOIN prices",
+            "180",
+            id="cross-join-inflation",
+        ),
+        pytest.param(
+            SCENARIOS[3],
+            "SELECT 100.0 * SUM(defective) / COUNT(*) AS metric FROM inspections",
+            "20",
+            id="unknown-outcomes-in-denominator",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "use_wrong_query", [False, True], ids=["control", "adversarial"]
+)
+def test_numeric_support_does_not_establish_analytical_correctness(
+    tmp_path: Path,
+    scenario: Scenario,
+    wrong_sql: str,
+    wrong_answer: str,
+    use_wrong_query: bool,
+) -> None:
+    """The external oracle detects errors that cell-value verification cannot."""
+    paths = []
+    for filename, content in scenario.files:
+        path = tmp_path / filename
+        path.write_text(content, encoding="utf-8")
+        paths.append(path)
+
+    sql = wrong_sql if use_wrong_query else scenario.sql
+    reported = wrong_answer if use_wrong_query else scenario.answer
+    client = ControlledClient(
+        json.dumps(
+            {
+                "conclusion": f"The requested metric is {reported}.",
+                "claims": [
+                    {
+                        "operation": "value",
+                        "expected": reported,
+                        "left": {
+                            "observation_index": 0,
+                            "row_index": 0,
+                            "column": "metric",
+                        },
+                        "right": None,
+                    }
+                ],
+            }
+        )
+    )
+    planner = FixedPlanner(sql)
+    with patch(
+        "verisight.execution.structured_synthesis.GeminiTextGenerationClient",
+        return_value=client,
+    ) as provider:
+        result = VeriSight(
+            settings=Settings(
+                gemini_api_key="synthetic-benchmark-key",
+                allow_llm_data_disclosure=True,
+            ),
+            planner=planner,
+            investigator=OneQueryInvestigator(),
+        ).investigate(paths, scenario.question, max_steps=1)
+
+    provider.assert_called_once()
+    assert planner.calls == 1
+    assert len(client.prompts) == 1
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.observation_count == 1
+    observation = result.observations[0]
+    assert observation.sql == sql
+    assert observation.result.columns == ("metric",)
+    assert observation.result.row_count == 1
+    actual = Decimal(str(observation.result.rows[0][0]))
+    assert actual == Decimal(reported)
+    assert len(result.verified_claims) == 1
+    verification = result.verified_claims[0].verification
+    assert verification.status is VerificationStatus.SUPPORTED
+    assert verification.actual == actual
+
+    # This benchmark oracle is independent of the claim and executed query.
+    # It is not a semantic-verification feature of the application.
+    agrees_with_known_answer = actual == Decimal(scenario.answer)
+    assert agrees_with_known_answer is (not use_wrong_query)
+    assert result.narrative_verified is False
+    assert result.verification_scope == "referenced_numeric_values_only"
+
+    serialized = json.loads(json.dumps(to_jsonable(result)))
+    assert serialized["verified_claims"][0]["verification"]["status"] == "supported"
+    assert serialized["observations"][0]["sql"] == sql
+    assert serialized["narrative_verified"] is False
