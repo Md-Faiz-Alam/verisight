@@ -1,5 +1,8 @@
+import re
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 import pandas as pd
 import pytest
@@ -351,3 +354,101 @@ def test_excel_text_values_survive_sql_execution(tmp_path: Path) -> None:
     )
 
     assert result.rows == (("00123", "NA"), ("00456", "active"))
+
+
+def _write_exact_numeric_workbook(path: Path, literals: list[str | None]) -> None:
+    """Write exact worksheet numbers without Excel-writer float rounding."""
+    pd.DataFrame(
+        {"value": [1] * len(literals), "row_id": range(len(literals))}
+    ).to_excel(path, index=False, sheet_name="Numbers")
+    original = path.read_bytes()
+    with ZipFile(BytesIO(original)) as source, ZipFile(path, "w") as target:
+        for entry in source.infolist():
+            content = source.read(entry.filename)
+            if entry.filename == "xl/worksheets/sheet1.xml":
+                for row, literal in enumerate(literals, start=2):
+                    pattern = rb'<c r="A' + str(row).encode() + rb'"[^>]*>.*?</c>'
+                    replacement = (
+                        b""
+                        if literal is None
+                        else f'<c r="A{row}" t="n"><v>{literal}</v></c>'.encode()
+                    )
+                    content, count = re.subn(pattern, replacement, content)
+                    assert count == 1
+            target.writestr(entry, content)
+
+
+@pytest.mark.parametrize(
+    ("number", "dtype"),
+    [
+        (42, "int64"),
+        (9007199254740993, "int64"),
+        (-9007199254740993, "int64"),
+        (-(2**63), "int64"),
+        (2**63 - 1, "int64"),
+        (2**63, "uint64"),
+        (2**64 - 1, "uint64"),
+        (-(2**63) - 1, "object"),
+        (2**64, "object"),
+    ],
+)
+@pytest.mark.parametrize("with_missing", [False, True])
+def test_excel_loader_preserves_exact_numeric_cells(
+    tmp_path: Path, number: int, dtype: str, with_missing: bool
+) -> None:
+    path = tmp_path / "numbers.xlsx"
+    literals: list[str | None] = [str(number), "0"]
+    if with_missing:
+        literals.append(None)
+    _write_exact_numeric_workbook(path, literals)
+
+    data = ExcelLoader(Settings()).load(path).tables[0].data
+
+    assert int(data["value"].iloc[0]) == number
+    assert data["value"].iloc[1] == 0
+    expected_dtype = dtype
+    if with_missing and dtype != "object":
+        expected_dtype = "UInt64" if dtype == "uint64" else "Int64"
+    assert str(data["value"].dtype) == expected_dtype
+    if with_missing:
+        assert pd.isna(data["value"].iloc[2])
+
+
+@pytest.mark.parametrize("number", [9007199254740993, -9007199254740993])
+def test_excel_loader_preserves_large_integer_beside_fraction(
+    tmp_path: Path, number: int
+) -> None:
+    path = tmp_path / "mixed-numbers.xlsx"
+    _write_exact_numeric_workbook(path, [str(number), "1.5", None])
+
+    values = ExcelLoader(Settings()).load(path).tables[0].data["value"]
+
+    assert values.dtype == object
+    assert type(values.iloc[0]) is int
+    assert values.iloc[0] == number
+    assert values.iloc[1] == 1.5
+    assert pd.isna(values.iloc[2])
+
+
+def test_excel_loader_preserves_all_blank_column(tmp_path: Path) -> None:
+    path = tmp_path / "blanks.xlsx"
+    _write_exact_numeric_workbook(path, [None, None])
+
+    data = ExcelLoader(Settings()).load(path).tables[0].data
+
+    assert data.shape == (2, 2)
+    assert data["value"].isna().all()
+
+
+@pytest.mark.parametrize("number", [9007199254740993, -(2**63), 2**64 - 1])
+def test_excel_nullable_integer_survives_sql_execution(
+    tmp_path: Path, number: int
+) -> None:
+    path = tmp_path / "numbers.xlsx"
+    _write_exact_numeric_workbook(path, [str(number), None])
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+
+    result = app.execute([path], "SELECT value FROM numbers ORDER BY row_id")
+
+    assert result.rows == ((number,), (None,))
+    assert type(result.rows[0][0]) is int

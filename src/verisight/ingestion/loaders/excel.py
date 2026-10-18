@@ -50,7 +50,9 @@ class ExcelLoader:
                         dtype=object,
                         keep_default_na=False,
                         na_values=[""],
-                    ).infer_objects()
+                    )
+                    for column in data.columns:
+                        data[column] = _infer_column(data[column])
 
                     tables.append(
                         LoadedTable(
@@ -75,3 +77,23 @@ class ExcelLoader:
             source=metadata,
             tables=tables,
         )
+
+
+def _infer_column(series: pd.Series) -> pd.Series:
+    """Infer native types without routing exact integers through floats."""
+    values = series.dropna().tolist()
+    integers = [value for value in values if type(value) is int]
+
+    if integers and len(integers) == len(values):
+        minimum = min(integers)
+        maximum = max(integers)
+        has_missing = bool(series.isna().any())
+        if minimum >= -(2**63) and maximum <= 2**63 - 1:
+            return series.astype("Int64" if has_missing else "int64")
+        if minimum >= 0 and maximum <= 2**64 - 1:
+            return series.astype("UInt64" if has_missing else "uint64")
+        return series
+
+    if any(abs(value) > 2**53 - 1 for value in integers):
+        return series
+    return series.infer_objects()
