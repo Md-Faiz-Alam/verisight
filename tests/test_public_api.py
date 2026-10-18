@@ -1,5 +1,6 @@
 """Tests for the framework-independent public operation boundary."""
 
+import logging
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -201,3 +202,68 @@ def test_public_boundary_keeps_iterator_execution_bug_as_internal_error() -> Non
     assert result.error is not None
     assert result.error.code is ErrorCode.INTERNAL_ERROR
     assert "private iterator" not in repr(result)
+
+
+def test_public_operation_logs_unexpected_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def failing_operation() -> int:
+        raise ZeroDivisionError("Sensitive calculation details")
+
+    with caplog.at_level(logging.ERROR, logger="verisight.public_api"):
+        result = run_public_operation(failing_operation)
+
+    assert result.succeeded is False
+    assert result.error is not None
+    assert result.error.code is ErrorCode.INTERNAL_ERROR
+
+    records = [
+        record for record in caplog.records if record.name == "verisight.public_api"
+    ]
+
+    assert len(records) == 1
+    assert records[0].levelno == logging.ERROR
+    assert records[0].getMessage() == (
+        "Unexpected public operation failure: ZeroDivisionError"
+    )
+    assert records[0].exc_info is None
+    assert "Sensitive calculation details" not in caplog.text
+
+
+def test_public_operation_does_not_log_expected_errors(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def failing_operation() -> int:
+        raise QueryValidationError("Sensitive SQL contents")
+
+    with caplog.at_level(logging.ERROR, logger="verisight.public_api"):
+        result = run_public_operation(failing_operation)
+
+    assert result.error is not None
+    assert result.error.code is ErrorCode.QUERY_VALIDATION_ERROR
+    assert not [
+        record for record in caplog.records if record.name == "verisight.public_api"
+    ]
+
+
+def test_public_operation_logs_no_exception_details(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    secret = "private-api-key-123"
+
+    def failing_operation() -> int:
+        try:
+            raise ValueError(f"Credential: {secret}")
+        except ValueError as exc:
+            raise RuntimeError(f"Dataset value: {secret}") from exc
+
+    with caplog.at_level(logging.ERROR, logger="verisight.public_api"):
+        result = run_public_operation(failing_operation)
+
+    assert result.error is not None
+    assert result.error.code is ErrorCode.INTERNAL_ERROR
+    assert secret not in repr(result)
+    assert secret not in caplog.text
+    assert "Credential:" not in caplog.text
+    assert "Dataset value:" not in caplog.text
+    assert "RuntimeError" in caplog.text

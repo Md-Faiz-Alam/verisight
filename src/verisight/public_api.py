@@ -4,9 +4,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from verisight.error_reporting import PublicErrorReport, to_public_error
+from verisight.error_reporting import ErrorCode, PublicErrorReport, to_public_error
+from verisight.logging import get_logger
 
 T = TypeVar("T")
+
+_logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,13 +31,20 @@ def run_public_operation(
 ) -> PublicOperationResult[T]:
     """Execute an operation and convert failures to safe reports.
 
-    Existing internal exception handling remains unchanged.
+    Unexpected failures are logged using only their exception type.
+    Raw messages and tracebacks may contain confidential information.
     """
 
     try:
         value = operation()
     except Exception as exc:
         report = to_public_error(exc)
+
+        if report.code is ErrorCode.INTERNAL_ERROR:
+            _logger.error(
+                "Unexpected public operation failure: %s",
+                type(exc).__name__,
+            )
 
         return PublicOperationResult(error=report)
 
