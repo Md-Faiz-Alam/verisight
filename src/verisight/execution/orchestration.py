@@ -20,7 +20,7 @@ from verisight.execution.investigation_result import (
 from verisight.execution.investigator import Investigator
 from verisight.execution.observations import QueryObservation
 from verisight.execution.prompt_budget import PromptBudgetExceededError
-from verisight.execution.synthesis import InvestigationSynthesizer
+from verisight.execution.synthesis import InvestigationSynthesizer, StructuredSynthesis
 
 
 class InvestigationOrchestrator:
@@ -75,13 +75,22 @@ class InvestigationOrchestrator:
                     return self._incomplete(state, reason=reason)
 
                 try:
-                    conclusion = self._synthesizer.synthesize(state)
+                    synthesis = self._synthesizer.synthesize(state)
                 except (PromptBudgetExceededError, IncompleteEvidenceError):
                     return self._incomplete(state)
 
                 return InvestigationResult(
                     question=state.question,
-                    conclusion=conclusion,
+                    conclusion=(
+                        synthesis.conclusion
+                        if isinstance(synthesis, StructuredSynthesis)
+                        else synthesis
+                    ),
+                    generated_claims=(
+                        synthesis.claims
+                        if isinstance(synthesis, StructuredSynthesis)
+                        else ()
+                    ),
                     analysis=state.analysis,
                     observations=state.observations,
                 )

@@ -28,6 +28,12 @@ class InvestigationResult:
     analysis: DatasetAnalysisResult
     observations: tuple[QueryObservation, ...] = ()
     status: InvestigationStatus = InvestigationStatus.COMPLETE
+    generated_claims: tuple[NumericalClaim, ...] = ()
+    narrative_verified: bool = field(default=False, init=False)
+    verified_claims: tuple["VerifiedNumericalClaim", ...] = field(init=False)
+    verification_scope: str = field(
+        default="referenced_numeric_values_only", init=False
+    )
 
     def __post_init__(self) -> None:
         """Validate investigation result invariants."""
@@ -37,6 +43,12 @@ class InvestigationResult:
 
         if not self.conclusion.strip():
             raise ValueError("Investigation conclusion must not be empty.")
+
+        object.__setattr__(
+            self,
+            "verified_claims",
+            self.verify_claims(self.generated_claims).verified_claims,
+        )
 
     @property
     def observation_count(self) -> int:
