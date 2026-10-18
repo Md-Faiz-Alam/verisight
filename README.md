@@ -1,38 +1,75 @@
+
 # VeriSight
 
-VeriSight is an autonomous, evidence-backed AI data analyst.
+**Autonomous AI Data Analyst — a Python analytical engine built around deterministic execution, controlled AI investigation, and traceable evidence.**
 
-The project is being built as a layered data-analysis system that can ingest structured data, infer schemas, profile datasets, detect deterministic data-quality issues, and produce structured analytical summaries and insights.
+VeriSight ingests structured datasets, interprets schemas, profiles data, identifies quality issues, executes analytical SQL, and supports AI-assisted investigations.
 
-The current implementation focuses on a reliable deterministic analysis foundation. Higher-level analytical execution, verification, reporting, APIs, and AI-assisted analysis will build on top of this foundation.
+The project's central design principle is:
 
-## Current Status
+> AI may plan and interpret analytical work, but deterministic components must validate and execute its queries.
 
-VeriSight currently provides the core deterministic data-analysis pipeline:
+VeriSight is under active development. Its analytical engine is implemented, but real-world analytical reliability and deterministic verification of generated conclusions are not yet established.
 
-- structured file ingestion
-- dataset normalization
-- schema inference
-- column and table profiling
-- missing-value analysis
-- duplicate-row analysis
-- deterministic data-quality rules
-- deterministic analytical summaries
-- deterministic analytical insights
-- immutable structured evidence
-- JSON-safe domain serialization
-- unified analysis results
-- high-level Python analysis facade
+## Project Status
 
-The project is under active development and does not yet expose a public CLI, HTTP API, or user interface.
+VeriSight is currently an advanced engineering prototype and Python library.
+
+### Implemented
+
+- CSV, Excel, and JSON ingestion
+- File validation and conservative type inference
+- Dataset and SQL-relation normalization
+- Schema inference
+- Numeric, text, and datetime profiling
+- Missing-value and duplicate analysis
+- Deterministic data-quality findings
+- Structured summaries and analytical insights
+- Immutable evidence models
+- DuckDB analytical SQL execution
+- SQL validation and registered-dataset access restrictions
+- Query resource and result limits
+- Gemini-assisted natural-language query planning
+- Bounded SQL repair
+- Autonomous investigation orchestration
+- Investigation decisions using structured JSON output
+- Evidence-bearing query observations
+- Prompt budgeting and context management
+- Generative analytical synthesis
+- Complete and incomplete investigation statuses
+- Public Python facade
+- Automated regression and integration tests
+
+### Not yet established or implemented
+
+- Deterministic verification of claims in generated conclusions
+- Structured claim-to-observation references in final conclusions
+- A benchmark demonstrating analytical correctness across representative tasks
+- Comprehensive real-provider end-to-end evaluation
+- A public command-line interface
+- An HTTP API
+- An interactive user interface
+- A reporting or visualization product
+
+**Important:** Having evidence-bearing observations does not guarantee that every statement in a generated conclusion is supported by those observations.
 
 ## Requirements
 
 - Python 3.11 or newer
+- Supported operating system for the project dependencies
+- Gemini API credentials for default AI-assisted workflows
+- Explicit permission to disclose analytical context to an external LLM
+
+Deterministic dataset analysis and direct SQL execution do not require Gemini credentials.
 
 ## Installation
 
-Clone the repository and create a virtual environment.
+Clone the repository:
+
+```powershell
+git clone https://github.com/Md-Faiz-Alam/verisight.git
+cd verisight
+```
 
 ### Windows PowerShell
 
@@ -52,101 +89,216 @@ python -m pip install --upgrade pip
 pip install -e ".[dev]"
 ```
 
-The development dependencies include:
+The development dependencies include pytest, pytest-cov, Ruff, mypy, and pandas type stubs.
 
-- pytest
-- pytest-cov
-- Ruff
-- mypy
-- pandas type stubs
+## Python API
 
-## Quick Start
+The public facade exposes four primary operations:
 
-VeriSight exposes a high-level Python API for deterministic dataset analysis.
+| Operation | Purpose | Gemini required by default? |
+| --- | --- | --- |
+| `analyze()` | Deterministic profiling, quality analysis, summaries, and insights | No |
+| `execute()` | Execute validated analytical SQL against loaded data | No |
+| `ask()` | Generate and execute SQL from a natural-language question | Yes |
+| `investigate()` | Run a bounded autonomous analytical investigation | Yes |
+
+Custom planner, investigator, repairer, and synthesizer components can be supplied through dependency injection where supported.
+
+### 1. Analyze a dataset
 
 ```python
 from verisight import VeriSight
 
-result = VeriSight().analyze(["data/customers.csv"])
+result = VeriSight().analyze("data/orders.csv")
 
 print(result.summary)
 print(result.insights)
 ```
 
-`VeriSight.analyze()` accepts one or more supported file paths and returns a complete `DatasetAnalysisResult`.
+The result is a `DatasetAnalysisResult`.
 
-The public facade coordinates the deterministic pipeline:
+It provides access to deterministic dataset analysis, structured summaries, insights, and quality findings.
 
-```text
-Files
-  |
-  v
-VeriSight
-  |
-  v
-Dataset Loading
-  |
-  v
-Dataset Analysis
-  |
-  v
-Result Construction
-  |
-  v
-DatasetAnalysisResult
+### 2. Execute analytical SQL
+
+```python
+from verisight import VeriSight
+
+result = VeriSight().execute(
+    "data/orders.csv",
+    """
+    SELECT
+        COUNT(*) AS order_count
+    FROM orders
+    """,
+)
+
+print(result.columns)
+print(result.rows)
 ```
 
-The lower-level ingestion, analysis, and result-building components remain separate internal contracts and can still be used directly when finer-grained control is required.
+The source file `orders.csv` is registered under the normalized SQL relation name `orders`.
+
+SQL is validated before execution. Queries are restricted to supported analytical constructs and authorized dataset relations.
+
+### 3. Ask a natural-language question
+
+```python
+from verisight import VeriSight
+
+result = VeriSight().ask(
+    "data/orders.csv",
+    "How many orders are in the dataset?",
+)
+
+print(result.columns)
+print(result.rows)
+```
+
+With the default configuration, `ask()` requires a configured Gemini provider and explicit LLM data-disclosure permission.
+
+The AI generates an analytical query. VeriSight then validates and executes it through its controlled SQL engine.
+
+Successful execution is not proof that the generated SQL correctly interpreted the user's question.
+
+### 4. Run an autonomous investigation
+
+```python
+from verisight import VeriSight
+
+result = VeriSight().investigate(
+    "data/orders.csv",
+    "Investigate the distribution of order amounts.",
+    max_steps=5,
+)
+
+print(result.status)
+print(result.conclusion)
+
+for observation in result.observations:
+    print(observation.question)
+    print(observation.sql)
+    print(observation.result.columns)
+    print(observation.result.rows)
+```
+
+An investigation can plan analytical questions, execute queries, collect observations, and generate a conclusion.
+
+Investigation execution is bounded. The orchestration layer includes checks for repeated questions, unsuccessful queries, and incomplete investigations.
+
+The returned `InvestigationResult` includes:
+
+- `question`
+- `conclusion`
+- `analysis`
+- `observations`
+- `status`
+
+It also exposes `observation_count`.
+
+The `status` is either `complete` or `incomplete`.
+
+An `incomplete` result must not be interpreted as a verified analytical conclusion.
+
+The public result does not yet expose complete repair history or structured verification results for each claim.
+
+## Gemini Configuration
+
+VeriSight uses the Google Gen AI SDK.
+
+Configuration is loaded through `Settings`, using environment variables prefixed with `VERISIGHT_`.
+
+Create a local `.env` file based on `.env.example`.
+
+For example:
+
+```dotenv
+VERISIGHT_GEMINI_API_KEY=your-api-key
+VERISIGHT_GEMINI_MODEL=your-supported-model
+VERISIGHT_ALLOW_LLM_DATA_DISCLOSURE=true
+```
+
+Use a Gemini model available to your API account.
+
+Never commit a real API key, disclose it in an issue, or include it in test fixtures.
+
+### Data-disclosure permission
+
+Setting an API key alone does not authorize AI-assisted access to dataset context.
+
+The default Gemini workflows also require:
+
+```dotenv
+VERISIGHT_ALLOW_LLM_DATA_DISCLOSURE=true
+```
+
+Enable this only for datasets whose analytical context may be sent to the configured external model provider.
+
+VeriSight should not be treated as a guarantee that sensitive or regulated data remains local when external generation is enabled.
+
+### Structured investigation output
+
+The Gemini-backed investigator requests JSON responses using a defined decision schema.
+
+Its decisions contain:
+
+- `action`: `investigate` or `finish`
+- `reasoning`: a string
+- `question`: a string or `null`
+
+VeriSight applies its own response validation after receiving the model output.
+
+SQL planning, SQL repair, and narrative synthesis continue to use text generation rather than the investigator's JSON response schema.
 
 ## Supported Data Sources
 
 ### CSV
 
-VeriSight supports CSV ingestion with:
+CSV ingestion supports:
 
-- comma, semicolon, tab, and pipe delimiter detection
-- quoted fields
-- UTF-8
-- UTF-8 with BOM
-- UTF-16 with little-endian BOM
-- UTF-16 with big-endian BOM
-- Windows-1252 fallback
-- Latin-1 fallback when Windows-1252 cannot decode the source
-- preservation of empty fields as missing values
-- preservation of significant leading zeros
-- protection against unsafe conversion of long integer identifiers
-- deterministic inference of numeric and boolean values
+- Comma, semicolon, tab, and pipe delimiter detection
+- Quoted fields
+- UTF-8 and UTF-8 with BOM
+- UTF-16 with recognized BOM
+- Windows-1252 and Latin-1 fallbacks
+- Missing-value handling
+- Conservative inference of numeric and boolean values
+- Preservation of significant leading-zero identifiers
+- Protection against unsafe large-integer coercion
 
-UTF-16 input is supported when a recognized UTF-16 BOM is present.
-
-BOM-less input containing NUL bytes is rejected instead of being silently interpreted as ordinary CSV text. UTF-32 input with a recognized BOM is also rejected because UTF-32 is not currently a supported CSV encoding.
-
-These checks prefer an explicit load failure over silently returning corrupted columns or values.
+Unsupported or ambiguous input may be rejected rather than silently reinterpreted.
 
 ### Excel
 
-Excel workbooks are supported through the Excel ingestion subsystem.
+Excel ingestion supports workbook formats handled by the configured `openpyxl` and `xlrd` dependencies.
 
-Workbook sheets are normalized into individual VeriSight tables.
+Workbook sheets are represented as tables.
 
-The project includes support for Excel formats handled by the configured `openpyxl` and `xlrd` dependencies.
+The ingestion layer uses conservative handling for text, native values, missing values, and large integers.
+
+Excel's own numeric-storage limitations still apply. VeriSight cannot reconstruct digits already lost when a workbook was created.
 
 ### JSON
 
-JSON files are supported through the JSON ingestion subsystem and normalized into VeriSight table structures.
+JSON ingestion normalizes supported JSON records into tables.
+
+The loader includes handling for:
+
+- Integral values
+- Large and unsigned integers
+- Nullable integers
+- Nullable booleans
+- Mixed values where safe coercion would lose precision
+
+Unsupported JSON structures may produce explicit loading errors.
 
 ## Dataset Normalization
 
-Files are normalized into a common dataset representation.
+VeriSight represents supported source data as a collection of tables.
 
-Each table maintains both:
+Each table has a display name and a normalized relation name used for SQL execution.
 
-- a display name
-- a deterministic relation name
-
-Relation names are sanitized for downstream analytical use and made unique within a dataset.
-
-For example, duplicate table names are assigned deterministic relation identities such as:
+For example, repeated normalized names may become:
 
 ```text
 sales
@@ -154,422 +306,262 @@ sales_2
 sales_3
 ```
 
-Relation-name normalization currently handles unsafe identifier characters, names beginning with digits, empty normalized names, duplicate relation identities, and the reserved names explicitly defined by the ingestion subsystem.
+Normalization provides consistent identities across ingestion, profiling, and query execution.
 
-The reserved-name set is intentionally explicit rather than a claim to cover every keyword used by every possible downstream SQL engine.
+The set of reserved relation names is defined by the implementation and is not a universal SQL-keyword catalog.
 
-## Schema Inference
+## Deterministic Profiling
 
-VeriSight infers logical schemas from loaded tables.
+Profiling operates on inferred logical schemas.
 
-The inferred schema is used by the profiling layer rather than allowing each profiler to independently reinterpret the source data.
+Supported measurements include:
 
-This provides a consistent contract between ingestion, profiling, quality analysis, and later analytical layers.
+- Row and column counts
+- Non-missing and missing counts
+- Distinct counts and ratios
+- Numeric minimum, maximum, mean, median, and standard deviation
+- Text length and frequency statistics
+- Datetime ranges and spans
+- Missing-value patterns
+- Duplicate rows and duplicate groups
 
-## Data Profiling
-
-VeriSight generates deterministic profiles for datasets, tables, and columns.
-
-Column profiling includes structural measurements such as:
-
-- row count
-- non-missing count
-- missing count
-- missing ratio
-- distinct count
-- distinct ratio
-
-Type-specific profiling is available for supported logical types.
-
-### Numeric Profiling
-
-Numeric columns can include statistics such as:
-
-- minimum
-- maximum
-- mean
-- median
-- standard deviation
-
-### Text Profiling
-
-Text columns can include statistics such as:
-
-- minimum length
-- maximum length
-- mean length
-- empty-string count
-- empty-string ratio
-- most frequent value
-- most frequent value count
-- most frequent value ratio
-
-### Datetime Profiling
-
-Datetime columns can include statistics such as:
-
-- earliest value
-- latest value
-- time span
-- timezone information
-
-### Missing-Value Analysis
-
-Table-level missing-value statistics include:
-
-- total cell count
-- missing cell count
-- missing cell ratio
-- rows containing missing values
-- fully missing rows
-- columns containing missing values
-
-### Duplicate Analysis
-
-Table-level duplicate statistics include:
-
-- duplicate row count
-- duplicate row ratio
-- duplicate-group row count
-- duplicate-group row ratio
-
-These statistics are represented canonically in the table profile and reused by downstream analysis.
+These measurements form part of the evidence available to downstream analytical components.
 
 ## Data-Quality Analysis
 
-VeriSight currently detects deterministic data-quality findings including:
+Deterministic quality checks identify issues such as:
 
-- missing values
-- entirely missing columns
-- fully missing rows
-- duplicate rows
-- empty strings
-- constant columns
-- high-cardinality columns
+- Missing values
+- Entirely missing columns
+- Fully missing rows
+- Duplicate rows
+- Empty strings
+- Constant columns
+- High-cardinality columns
 
-Quality findings include structured metadata such as:
+Findings contain structured metadata, including severity, affected scope, counts, ratios, and supporting evidence where applicable.
 
-- issue type
-- severity
-- scope
-- table identity
-- relation identity
-- optional column identity
-- affected count
-- affected ratio
-- human-readable message
-- structured evidence
+## Analytical SQL Execution
 
-Quality rules operate on the canonical profiling results rather than independently recomputing dataset statistics.
+VeriSight uses DuckDB for analytical SQL execution.
 
-## Evidence Model
+The execution subsystem includes:
 
-VeriSight uses a shared evidence contract for structured analytical evidence.
+- Read-only analytical query validation
+- Registered-dataset relation restrictions
+- SQLGlot-based relation analysis
+- Explicit handling of supported SQL constructs
+- Rejection of unauthorized SQL sources
+- External-access restrictions
+- Disabled automatic extension installation and loading
+- Configurable memory and execution limits
+- Result-row limits
+- Query execution error handling
 
-Evidence supports:
+These controls provide defense in depth.
 
-- strings
-- integers
-- finite floating-point values
-- booleans
-- `None`
-- nested mappings with string keys
-- nested sequences
-- NumPy scalar inputs that can be normalized to supported Python scalar values
+They are not a guarantee of complete isolation against every hostile SQL input, resource-exhaustion scenario, or future engine vulnerability.
 
-Evidence is validated and recursively snapshotted into immutable structures.
+A separate threat model and isolation assessment would be required before deployment into a hostile multi-user environment.
 
-Nested mappings become immutable mappings, while nested sequences become tuples. NumPy scalar values are normalized to their corresponding Python scalar values.
+## AI-Assisted Analytical Workflow
 
-The evidence contract rejects unsupported values that could make downstream behavior ambiguous, including:
-
-- binary `bytes` and `bytearray` values
-- non-string mapping keys
-- non-finite floating-point values such as `NaN` and positive or negative infinity
-- unsupported object types
-
-This prevents downstream consumers from accidentally modifying evidence after an issue or insight has been created.
-
-### JSON-Safe Serialization
-
-VeriSight provides an explicit JSON-safe serialization boundary for deterministic domain results.
-
-Use `to_jsonable()` to convert supported VeriSight values, including complete analysis results, into ordinary JSON-compatible Python values:
-
-```python
-import json
-
-from verisight.serialization import to_jsonable
-
-jsonable_result = to_jsonable(result)
-payload = json.dumps(jsonable_result, allow_nan=False)
-```
-
-The serializer recursively handles dataclasses, enums, paths, mappings, sequences, NumPy scalar values, temporal values, decimal values, and supported missing-value representations.
-
-Datetime and date values are represented using ISO 8601 strings. Timedeltas are represented using ISO 8601 duration strings. Finite `Decimal` values are serialized as strings so their exact decimal representation is preserved.
-
-Pandas missing values such as `pd.NA` and `pd.NaT`, along with non-finite floating-point or decimal values that reach the serialization boundary, are represented as JSON `null`.
-
-Binary values and mappings with non-string keys remain unsupported and raise an explicit error.
-
-Immutable analytical evidence remains a separate internal contract. `evidence_to_jsonable()` delegates JSON conversion to the shared serializer while preserving the evidence-specific API:
-
-```python
-from verisight.evidence import evidence_to_jsonable
-
-jsonable_evidence = evidence_to_jsonable(issue.evidence)
-```
-
-The returned structures are independent mutable JSON-compatible representations. Modifying them does not mutate the immutable analytical evidence or result objects stored by VeriSight.
-
-## Analysis Pipeline
-
-The current deterministic pipeline can be represented conceptually as:
+The implemented analytical workflow consists of several components:
 
 ```text
-Files
-  |
-  v
-Ingestion
-  |
-  v
-Normalized Dataset
-  |
-  v
-Schema Inference
-  |
-  v
-Profiling
-  |
-  v
-Data-Quality Rules
-  |
-  v
-Dataset Analysis
-  |
-  +--> Summary
-  |
-  +--> Insights
-  |
-  v
-Unified Analysis Result
+Input datasets
+      |
+      v
+Ingestion and schema inference
+      |
+      v
+Profiling and quality analysis
+      |
+      v
+Analytical question
+      |
+      v
+AI query planning
+      |
+      v
+SQL validation and controlled execution
+      |
+      v
+Query observations
+      |
+      v
+Bounded investigation and recovery
+      |
+      v
+Evidence-aware synthesis
+      |
+      v
+InvestigationResult
 ```
 
-The analysis layer preserves deterministic ordering and relation identities throughout the pipeline.
+AI-generated SQL is not executed without passing the applicable validation and execution controls.
 
-## Analytical Summaries and Insights
+The investigation system includes bounded steps, failure handling, duplicate-question detection, and prompt-budget controls.
 
-VeriSight can build a unified deterministic result from a dataset analysis.
+The generative conclusion is not yet subjected to a separate deterministic claim-verification stage.
 
-A `DatasetAnalysisResult` contains:
+## Evidence and Serialization
 
-- the underlying dataset analysis
-- an analytical summary
-- generated analytical insights
+VeriSight defines shared structured evidence contracts.
 
-Current insight categories include:
+Evidence can contain supported scalar values and nested collections.
 
-- dataset structure
-- table structure
-- data quality
+It is normalized and frozen to prevent unintended mutation.
 
-Insights preserve structured evidence and table/relation identity so that later consumers can reason about findings without parsing human-readable messages.
+Serialization provides JSON-compatible representations of supported domain models.
 
-## Project Structure
+Analytical query observations retain the associated question, executed SQL, and structured result.
 
-```text
-src/verisight/
-├── analysis/
-│   ├── insights.py
-│   ├── models.py
-│   ├── result.py
-│   ├── service.py
-│   └── summary.py
-├── ingestion/
-│   ├── loaders/
-│   │   ├── base.py
-│   │   ├── csv.py
-│   │   ├── excel.py
-│   │   └── json.py
-│   ├── dispatcher.py
-│   ├── exceptions.py
-│   ├── models.py
-│   ├── schema.py
-│   ├── service.py
-│   └── validation.py
-├── profiling/
-│   ├── column.py
-│   ├── dataset.py
-│   ├── duplicates.py
-│   ├── missing.py
-│   ├── models.py
-│   └── table.py
-├── quality/
-│   ├── models.py
-│   └── rules.py
-├── config.py
-├── evidence.py
-├── exceptions.py
-├── logging.py
-├── serialization.py
-└── service.py
-```
+At present, the public investigation conclusion remains free-form text rather than a collection of individually verified claims.
 
-Additional architecture and development documentation is available under `docs/`.
+## Error Handling
 
-```text
-docs/
-├── architecture.md
-└── development.md
-```
+VeriSight uses domain-specific exceptions and a public error-reporting boundary.
 
-## Development Quality Gates
+Errors may represent:
 
-The project uses Ruff for formatting and linting, mypy in strict mode for static type checking, and pytest for testing.
+- Invalid or unsupported inputs
+- Dataset loading problems
+- Configuration problems
+- Query validation failures
+- Query execution failures
+- Prompt-budget failures
+- Investigation failures
+- Unexpected internal failures
 
-Run the complete development quality gate with:
+Public error reporting is designed to avoid exposing sensitive provider details through ordinary error messages.
+
+Error codes should be interpreted according to the implemented public error contract.
+
+## Engineering Quality
+
+The project uses:
+
+- Ruff formatting
+- Ruff linting
+- Strict mypy checking
+- Pytest
+- Statement and branch coverage
+
+The established quality gate is:
 
 ```powershell
 ruff format .
-
 ruff format --check .
 ruff check .
 mypy src tests
-
 pytest --cov=verisight --cov-report=term-missing --cov-fail-under=100
 ```
 
-The current verified deterministic-foundation baseline passes:
+### Latest verified local baseline
 
-```text
-406 tests passed
-969 statements
-208 branches
-100% test coverage
-```
+The quality gate reported for the Gemini structured-output commit:
 
-The coverage configuration enables branch coverage.
+| Measurement | Result |
+| --- | --- |
+| Python | 3.11.9 |
+| Tests | 1,357 passed |
+| Production statements | 2,339 |
+| Missing statements | 0 |
+| Production branches | 604 |
+| Partial branches | 0 |
+| Coverage | 100% |
+| Ruff | Passed |
+| Mypy | Passed |
 
-## Design Principles
+The structured-output implementation was committed as `f7685a8` on October 18, 2026.
 
-VeriSight is being developed around several core principles.
+A separate live smoke test using a synthetic analytical question successfully exercised Gemini structured JSON generation and VeriSight's investigation parser.
 
-### Deterministic Before Generative
-
-Structural analysis, profiling, quality detection, and evidence generation are deterministic.
-
-Future AI capabilities should consume these verified structures rather than replace them with ungrounded inference.
-
-### Evidence-Backed Analysis
-
-Analytical findings should carry structured evidence that downstream systems can inspect, verify, serialize, and present.
-
-Immutable internal evidence and JSON-safe serialization representations are intentionally separate contracts.
-
-### Stable Domain Contracts
-
-Core models such as loaded datasets, schemas, profiles, quality findings, summaries, insights, and evidence are designed as explicit contracts between system layers.
-
-### Preserve Source Meaning
-
-Ingestion avoids unsafe type conversion when doing so could change the meaning of source data, including significant leading zeros and large identifier-like integers.
-
-When an unsupported encoding pattern could otherwise result in silent corruption, ingestion prefers a clear failure.
-
-### Immutable Analytical Results
-
-Core analytical models use immutable representations where appropriate so downstream processing cannot silently alter previously generated findings.
-
-### Deterministic Identity
-
-Display names and analytical relation identities are kept separate so duplicate or unsafe source names do not create ambiguity downstream.
-
-## Testing
-
-The test suite covers the ingestion, schema, profiling, quality, evidence, and analysis layers.
-
-It includes robustness and integration tests for areas such as:
-
-- CSV parsing, delimiters, and encodings
-- schema inference
-- ingestion normalization
-- numeric profiling
-- datetime profiling
-- text profiling
-- missing values
-- duplicate rows
-- messy datasets
-- data-quality rules
-- immutable and serializable evidence
-- deterministic analysis
-- analytical summaries and insights
-
-The project currently maintains a 100% coverage requirement for statements and configured branches.
+These results establish the tested behaviors and a working provider interaction. They do not establish complete analytical correctness or production readiness.
 
 ## Known Limitations
 
-VeriSight is still under active development. Several behaviors are intentionally deferred rather than being handled through aggressive inference.
+1. There is no independently verified analytical-accuracy benchmark.
+2. Final free-text conclusions are not yet deterministically checked against source observations.
+3. The public investigation result does not include structured claim-level verification.
+4. The current live Gemini test does not cover the complete ingestion-to-synthesis workflow.
+5. Large datasets may require additional performance and resource-isolation work.
+6. SQL safety restrictions are not a substitute for process or infrastructure isolation.
+7. Some ambiguous source representations cannot be reconstructed without additional metadata.
+8. There is no public CLI, HTTP API, dashboard, or visualization interface.
+9. Generated conclusions may contain incorrect interpretations or unsupported claims.
 
-### Datetime Strings
+## Development Roadmap
 
-String columns containing datetime-like values are not automatically treated as datetime columns in every ingestion path.
+The immediate sequence is:
 
-Datetime profiling currently operates on data that has already been represented with an appropriate datetime type.
+### 1. Documentation reconciliation
 
-More aggressive datetime-string inference is deferred because ambiguous date formats can change source meaning.
+Align this README, the architecture guide, development instructions, and the authoritative roadmap with implemented source code.
 
-### Currency and Percentage Columns
+### 2. Deterministic claim verification
 
-Text values such as currency amounts or percentages are not automatically normalized into numeric values.
+Introduce structured analytical claims and explicit evidence references.
 
-Examples include values such as:
+Verify numerical statements against returned observations wherever they can be checked deterministically.
 
-```text
-$1,250.00
-€99.50
-42%
-```
+Distinguish supported, contradicted, and unverifiable claims.
 
-Automatic normalization of these formats requires explicit parsing rules for symbols, locale conventions, separators, and scaling semantics.
+This feature is planned, not implemented.
 
-### Nullable Booleans in JSON and Excel
+### 3. Analytical acceptance evaluation
 
-Boolean inference behavior is not yet fully normalized across CSV, JSON, and Excel ingestion.
+Build a small benchmark of representative datasets and questions with known answers.
 
-In particular, nullable boolean columns originating from JSON or Excel may not receive the same inferred representation as equivalent CSV input.
+Evaluate:
 
-### Quantiles and Top-N Statistics
+- SQL correctness
+- Analytical answer correctness
+- Numerical claim accuracy
+- Evidence coverage
+- Unsupported-claim frequency
+- Correct incomplete-result behavior
+- Failure recovery
 
-Quantile summaries and top-N value-frequency analysis are not yet part of the current deterministic profiling contract.
+### 4. Correct verified analytical failures
 
-These statistics are intentionally deferred to Phase 5, where richer analytical execution can introduce them with explicit semantics, stable result models, and appropriate evidence.
+Use benchmark results to prioritize improvements to planning, execution, investigation, synthesis, and verification.
 
-### CSV Performance
+### 5. Product interface and deployment
 
-CSV ingestion currently prioritizes source fidelity, defensive encoding handling, and deterministic type inference over maximum throughput.
+Evaluate CLI, HTTP API, reporting, visualization, and user-interface requirements after the core analytical workflow has been measured.
 
-The loader may perform multiple passes or full-content checks during encoding detection and type inference. This is acceptable for the current development stage but is not intended to represent the final large-file performance architecture.
+See `docs/roadmap.md` for the canonical development roadmap once its reconciliation is complete.
 
-These limitations are documented explicitly so future improvements can address them without weakening the current deterministic contracts.
+## Development Documentation
 
-## Roadmap
+- `docs/architecture.md` — implementation architecture and boundaries
+- `docs/development.md` — engineering standards and development workflow
+- `docs/roadmap.md` — planned canonical roadmap
 
-The deterministic analysis foundation and high-level Python analysis facade are now implemented.
+## Dataset Attribution
 
-The next development work is expected to build additional higher-level capabilities on top of these contracts, including:
+The repository's local development datasets have included the Bank Marketing dataset associated with:
 
-- analytical execution
-- DuckDB-backed querying
-- verification
-- reporting
-- future API integration
-- AI-assisted analytical workflows
+**Moro, S., Cortez, P., and Rita, P. (2014).** *A Data-Driven Approach to Predict the Success of Bank Telemarketing.* Decision Support Systems, 62, 22–31.
 
-These capabilities remain future work and are not part of the current implementation.
+Dataset source: [UCI Machine Learning Repository — Bank Marketing](https://archive.ics.uci.edu/dataset/222/bank+marketing).
 
-The existing deterministic contracts and public analysis facade are intended to remain the foundation beneath these higher-level layers rather than being replaced by them.
+Check the dataset's current licensing and attribution requirements before redistribution.
+
+Local datasets are not part of the standard source-code commit workflow. Do not accidentally stage private or unrelated data.
 
 ## License
 
-VeriSight is licensed under the MIT License. See `LICENSE` for the full license text.
+VeriSight is distributed under the MIT License.
+
+See [LICENSE](LICENSE).
+
+## Project Direction
+
+VeriSight's next objective is not to add more independent analytical subsystems.
+
+It is to establish that the existing engine can produce **correct, traceable, evidence-supported conclusions** on representative real-world analytical tasks.
+
+Deterministic claim verification and measurable analytical reliability are the next major product-development priorities.
