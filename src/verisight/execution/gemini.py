@@ -2,7 +2,8 @@
 
 import time
 from collections.abc import Callable
-from typing import Protocol
+from dataclasses import dataclass
+from typing import Literal, Protocol
 
 import httpx
 from google import genai
@@ -10,9 +11,31 @@ from google.genai import errors, types
 
 from verisight.exceptions import VeriSightError
 
+GenerationStage = Literal["investigator", "structured_synthesis", "text_generation"]
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderFailureDiagnostics:
+    """Allowlisted metadata only; never retain an SDK exception or request."""
+
+    http_status: int | None
+    retryable: bool
+    attempts: int
+    stage: GenerationStage
+    call_number: int
+
 
 class GeminiGenerationError(VeriSightError):
     """Raised when Gemini cannot provide a usable text response."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        diagnostics: ProviderFailureDiagnostics | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.diagnostics = diagnostics
 
 
 class GeminiTransientError(GeminiGenerationError):
@@ -56,6 +79,17 @@ def _is_retryable(error: Exception) -> bool:
     )
 
 
+def _generation_stage(schema: dict[str, object] | None) -> GenerationStage:
+    """Infer a coarse stage from response fields, never from prompt contents."""
+    properties = schema.get("properties") if schema is not None else None
+    if isinstance(properties, dict):
+        if "claims" in properties:
+            return "structured_synthesis"
+        if "action" in properties:
+            return "investigator"
+    return "text_generation"
+
+
 class GeminiTextGenerationClient:
     """Generate text with bounded retries for transient Gemini failures."""
 
@@ -86,6 +120,8 @@ class GeminiTextGenerationClient:
         if not 0 < retry_base_delay_seconds < float("inf"):
             raise ValueError("Gemini retry delay must be finite and positive.")
 
+        self._stage: GenerationStage = _generation_stage(response_json_schema)
+        self._call_number = 0
         self._model = model
         self._max_retries = max_retries
         self._retry_base_delay_seconds = retry_base_delay_seconds
@@ -117,6 +153,7 @@ class GeminiTextGenerationClient:
         if not prompt.strip():
             raise ValueError("Generation prompt must not be empty.")
 
+        self._call_number += 1
         for attempt in range(self._max_retries + 1):
             try:
                 if self._response_config is None:
@@ -131,6 +168,7 @@ class GeminiTextGenerationClient:
                         config=self._response_config,
                     )
             except Exception as exc:
+                http_status = exc.code if isinstance(exc, errors.APIError) else None
                 retryable = _is_retryable(exc)
                 should_retry = retryable and attempt < self._max_retries
 
@@ -151,21 +189,52 @@ class GeminiTextGenerationClient:
                     pass
                 else:
                     if text is None or not text.strip():
-                        raise GeminiGenerationError(
-                            "Gemini returned an empty text response."
+                        raise self._failure(
+                            "Gemini returned an empty text response.",
+                            attempts=attempt + 1,
                         )
 
                     return text
 
-                raise GeminiGenerationError(
-                    "Gemini returned an unusable text response."
+                raise self._failure(
+                    "Gemini returned an unusable text response.",
+                    attempts=attempt + 1,
                 )
 
             if retryable:
-                raise GeminiTransientError("Gemini is temporarily unavailable.")
+                raise self._failure(
+                    "Gemini is temporarily unavailable.",
+                    attempts=attempt + 1,
+                    http_status=http_status,
+                    retryable=True,
+                )
 
-            raise GeminiGenerationError("Gemini text generation failed.")
+            raise self._failure(
+                "Gemini text generation failed.",
+                attempts=attempt + 1,
+                http_status=http_status,
+            )
 
         raise AssertionError(
             "Gemini retry loop ended unexpectedly."
         )  # pragma: no cover
+
+    def _failure(
+        self,
+        message: str,
+        *,
+        attempts: int,
+        http_status: int | None = None,
+        retryable: bool = False,
+    ) -> GeminiGenerationError:
+        error_type = GeminiTransientError if retryable else GeminiGenerationError
+        return error_type(
+            message,
+            diagnostics=ProviderFailureDiagnostics(
+                http_status=http_status,
+                retryable=retryable,
+                attempts=attempts,
+                stage=self._stage,
+                call_number=self._call_number,
+            ),
+        )
