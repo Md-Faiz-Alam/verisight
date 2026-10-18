@@ -10,6 +10,19 @@ from verisight.execution.decisions import (
 )
 from verisight.execution.exceptions import InvestigationError
 
+# This provider-facing schema narrows generation, but the parser below remains
+# the authoritative validator for decision invariants and strict JSON syntax.
+INVESTIGATION_DECISION_JSON_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "properties": {
+        "action": {"type": "string", "enum": ["investigate", "finish"]},
+        "reasoning": {"type": "string"},
+        "question": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+    "required": ["action", "reasoning", "question"],
+    "additionalProperties": False,
+}
+
 
 def _reject_duplicate_fields(
     pairs: list[tuple[str, Any]],

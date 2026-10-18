@@ -22,6 +22,9 @@ from verisight.execution.generative_repair import GenerativeQueryRepairer
 from verisight.execution.generative_synthesis import (
     GenerativeInvestigationSynthesizer,
 )
+from verisight.execution.investigation_parsing import (
+    INVESTIGATION_DECISION_JSON_SCHEMA,
+)
 from verisight.execution.investigation_result import InvestigationResult
 from verisight.execution.investigator import Investigator
 from verisight.execution.models import QueryResult
@@ -50,7 +53,7 @@ class _LazyGeminiQueryRepairer:
 
             if client is None:
                 raise QueryPlanningError(
-                    "Gemini SQL repair requires configured credentials."
+                    "Gemini SQL repair requires configured credentials "
                     "and explicit LLM data-disclosure permission."
                 )
 
@@ -107,6 +110,8 @@ class VeriSight:
     @staticmethod
     def _build_generation_client(
         settings: Settings,
+        *,
+        response_json_schema: dict[str, object] | None = None,
     ) -> GeminiTextGenerationClient | None:
         """Build a Gemini generation client when credentials are configured."""
 
@@ -122,6 +127,7 @@ class VeriSight:
             request_timeout_seconds=settings.gemini_request_timeout_seconds,
             max_retries=settings.gemini_max_retries,
             retry_base_delay_seconds=settings.gemini_retry_base_delay_seconds,
+            response_json_schema=response_json_schema,
         )
 
     @classmethod
@@ -145,7 +151,10 @@ class VeriSight:
     ) -> Investigator | None:
         """Build the default Gemini-backed analytical investigator."""
 
-        client = cls._build_generation_client(settings)
+        client = cls._build_generation_client(
+            settings,
+            response_json_schema=INVESTIGATION_DECISION_JSON_SCHEMA,
+        )
 
         if client is None:
             return None
@@ -173,6 +182,7 @@ class VeriSight:
         """Normalize public path inputs and require at least one file path."""
 
         normalized: tuple[str | Path, ...]
+
         if isinstance(paths, (str, Path)):
             normalized = (paths,)
         else:
@@ -182,6 +192,7 @@ class VeriSight:
                 raise FileValidationError(
                     "Dataset input must be a file path or an iterable of file paths."
                 ) from exc
+
             normalized = tuple(path_iterator)
 
         if not normalized:

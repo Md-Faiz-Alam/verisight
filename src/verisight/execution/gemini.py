@@ -26,6 +26,7 @@ class _GeminiModels(Protocol):
         *,
         model: str,
         contents: str,
+        config: types.GenerateContentConfig | None = None,
     ) -> _GeminiResponse: ...
 
 
@@ -64,6 +65,7 @@ class GeminiTextGenerationClient:
         max_retries: int = 2,
         retry_base_delay_seconds: float = 1.0,
         sleep: Callable[[float], None] = time.sleep,
+        response_json_schema: dict[str, object] | None = None,
     ) -> None:
         if not api_key.strip():
             raise ValueError("Gemini API key must not be empty.")
@@ -84,6 +86,14 @@ class GeminiTextGenerationClient:
         self._max_retries = max_retries
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._sleep = sleep
+        self._response_config = (
+            types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_json_schema=response_json_schema,
+            )
+            if response_json_schema is not None
+            else None
+        )
 
         self._client = (
             client
@@ -105,10 +115,17 @@ class GeminiTextGenerationClient:
 
         for attempt in range(self._max_retries + 1):
             try:
-                response = self._client.models.generate_content(
-                    model=self._model,
-                    contents=prompt,
-                )
+                if self._response_config is None:
+                    response = self._client.models.generate_content(
+                        model=self._model,
+                        contents=prompt,
+                    )
+                else:
+                    response = self._client.models.generate_content(
+                        model=self._model,
+                        contents=prompt,
+                        config=self._response_config,
+                    )
             except Exception as exc:
                 retryable = _is_retryable(exc)
                 should_retry = retryable and attempt < self._max_retries

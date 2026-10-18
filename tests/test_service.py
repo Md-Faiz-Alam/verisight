@@ -21,6 +21,9 @@ from verisight.execution.exceptions import (
 )
 from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation_parsing import (
+    INVESTIGATION_DECISION_JSON_SCHEMA,
+)
 from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
@@ -430,6 +433,7 @@ def test_verisight_builds_gemini_planner_from_settings() -> None:
         request_timeout_seconds=30.0,
         max_retries=2,
         retry_base_delay_seconds=1.0,
+        response_json_schema=None,
     )
 
     assert isinstance(service._planner, GenerativeQueryPlanner)
@@ -858,6 +862,7 @@ def test_public_investigate_builds_default_gemini_components(
         "request_timeout_seconds": 30.0,
         "max_retries": 2,
         "retry_base_delay_seconds": 1.0,
+        "response_json_schema": INVESTIGATION_DECISION_JSON_SCHEMA,
     }
     assert client_class.call_args_list[1].kwargs == {
         "api_key": "test-api-key",
@@ -865,6 +870,7 @@ def test_public_investigate_builds_default_gemini_components(
         "request_timeout_seconds": 30.0,
         "max_retries": 2,
         "retry_base_delay_seconds": 1.0,
+        "response_json_schema": None,
     }
 
     investigator_client.generate.assert_called_once()
@@ -1185,8 +1191,8 @@ def test_lazy_gemini_repairer_rejects_missing_credentials() -> None:
 
     with pytest.raises(
         QueryPlanningError,
-        match="Gemini SQL repair requires configured credentials."
-        "and explicit LLM data-disclosure permission.",
+        match=r"Gemini SQL repair requires configured credentials "
+        r"and explicit LLM data-disclosure permission\.",
     ):
         repairer.repair(request)
 

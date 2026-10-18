@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-from google.genai import errors
+from google.genai import errors, types
 
 from verisight.exceptions import VeriSightError
 from verisight.execution.gemini import (
@@ -34,9 +34,39 @@ class StubGeminiModels:
         *,
         model: str,
         contents: str,
+        config: types.GenerateContentConfig | None = None,
     ) -> StubGeminiResponse:
         self.calls.append((model, contents))
         return StubGeminiResponse(self._response_text)
+
+
+class ConfiguredGeminiModels:
+    """Record provider configuration passed for structured responses."""
+
+    def __init__(self, response_text: str) -> None:
+        self._response_text = response_text
+        self.calls: list[tuple[str, str, types.GenerateContentConfig | None]] = []
+
+    def generate_content(
+        self,
+        *,
+        model: str,
+        contents: str,
+        config: types.GenerateContentConfig | None = None,
+    ) -> StubGeminiResponse:
+        self.calls.append((model, contents, config))
+        return StubGeminiResponse(self._response_text)
+
+
+class ConfiguredGeminiClient:
+    """SDK stub exposing the structured-response configuration."""
+
+    def __init__(self, response_text: str) -> None:
+        self._models = ConfiguredGeminiModels(response_text)
+
+    @property
+    def models(self) -> ConfiguredGeminiModels:
+        return self._models
 
 
 class StubGeminiClient:
@@ -62,6 +92,7 @@ class FailingGeminiModels:
         *,
         model: str,
         contents: str,
+        config: types.GenerateContentConfig | None = None,
     ) -> StubGeminiResponse:
         self.calls.append((model, contents))
         raise self.error
@@ -94,6 +125,7 @@ class BrokenResponseGeminiModels:
         *,
         model: str,
         contents: str,
+        config: types.GenerateContentConfig | None = None,
     ) -> BrokenGeminiResponse:
         return BrokenGeminiResponse()
 
@@ -121,6 +153,7 @@ class SequencedGeminiModels:
         *,
         model: str,
         contents: str,
+        config: types.GenerateContentConfig | None = None,
     ) -> StubGeminiResponse:
         self.calls.append((model, contents))
 
@@ -159,6 +192,29 @@ def test_generates_text_with_configured_model() -> None:
 
     assert result == "SELECT COUNT(*) FROM orders"
     assert sdk_client.models.calls == [("test-model", "Generate SQL.")]
+
+
+def test_requests_gemini_structured_json_when_schema_is_configured() -> None:
+    schema: dict[str, object] = {
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+        "required": ["answer"],
+    }
+    sdk_client = ConfiguredGeminiClient('{"answer":"ready"}')
+    client = GeminiTextGenerationClient(
+        api_key="test-api-key",
+        model="test-model",
+        client=sdk_client,
+        response_json_schema=schema,
+    )
+
+    assert client.generate("Return structured JSON.") == '{"answer":"ready"}'
+    assert len(sdk_client.models.calls) == 1
+    model, prompt, config = sdk_client.models.calls[0]
+    assert (model, prompt) == ("test-model", "Return structured JSON.")
+    assert config is not None
+    assert config.response_mime_type == "application/json"
+    assert config.response_json_schema == schema
 
 
 @pytest.mark.parametrize("api_key", ["", " ", "\n\t"])
