@@ -13,6 +13,7 @@ from verisight.ingestion.exceptions import (
 )
 from verisight.ingestion.loaders.base import BaseTableLoader
 from verisight.ingestion.loaders.json import JsonLoader
+from verisight.ingestion.schema import LogicalType, SchemaInferer
 
 
 def test_json_loader_implements_base_loader() -> None:
@@ -299,7 +300,7 @@ def test_mixed_columns_preserve_large_integer(tmp_path: Path, other: Any) -> Non
 
 @pytest.mark.parametrize(
     "values",
-    [[1.5, None], [1, 1.5], [True, False], [True, None], [None, None], ["NA", "00123"]],
+    [[1.5, None], [1, 1.5], [True, False], [None, None], ["NA", "00123"]],
 )
 def test_other_column_inference_remains_compatible(
     tmp_path: Path, values: list[Any]
@@ -326,3 +327,81 @@ def test_nullable_large_integer_remains_exact_through_sql(tmp_path: Path) -> Non
     )
 
     assert result.rows == ((9007199254740993,),)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        [True, None],
+        [False, None],
+        [None, True, False],
+        [True, False, None],
+        [True, False],
+    ],
+)
+def test_json_boolean_columns_have_boolean_schema(
+    tmp_path: Path, values: list[bool | None]
+) -> None:
+    path = tmp_path / "flags.json"
+    path.write_text(
+        json.dumps([{"active": value} for value in values]), encoding="utf-8"
+    )
+
+    table = JsonLoader(Settings()).load(path)
+    missing_count = values.count(None)
+    expected_dtype = "boolean" if missing_count else "bool"
+    pd.testing.assert_series_equal(
+        table.data["active"], pd.Series(values, name="active", dtype=expected_dtype)
+    )
+    column = SchemaInferer().infer_table(table).columns[0]
+    assert column.logical_type is LogicalType.BOOLEAN
+    assert column.nullable is (missing_count > 0)
+    assert column.missing_count == missing_count
+
+
+def test_json_missing_boolean_key_preserves_row_order(tmp_path: Path) -> None:
+    data = _load_records(tmp_path, [{}, {"active": False}, {"active": True}])
+
+    pd.testing.assert_series_equal(
+        data["active"],
+        pd.Series([None, False, True], name="active", dtype="boolean"),
+    )
+
+
+@pytest.mark.parametrize("other", [0, 1, 1.5, "false", {"nested": True}, [False]])
+def test_json_mixed_boolean_column_preserves_original_types(
+    tmp_path: Path, other: Any
+) -> None:
+    data = _load_records(tmp_path, [{"value": True}, {"value": other}, {"value": None}])
+
+    assert data["value"].dtype == object
+    assert data["value"].iloc[0] is True
+    assert type(data["value"].iloc[1]) is type(other)
+    assert data["value"].iloc[1] == other
+    assert data["value"].iloc[2] is None
+
+
+def test_json_nullable_booleans_survive_sql_execution(tmp_path: Path) -> None:
+    path = tmp_path / "flags.json"
+    path.write_text(
+        json.dumps(
+            [
+                {"row_id": 1, "active": True},
+                {"row_id": 2, "active": False},
+                {"row_id": 3, "active": None},
+                {"row_id": 4},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+
+    result = app.execute([path], "SELECT active FROM flags ORDER BY row_id")
+
+    assert result.rows == ((True,), (False,), (None,), (None,))
+    assert result.rows[0][0] is True
+    assert result.rows[1][0] is False
+
+    filtered = app.execute([path], "SELECT row_id FROM flags WHERE active IS TRUE")
+
+    assert filtered.rows == ((1,),)

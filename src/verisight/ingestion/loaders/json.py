@@ -104,9 +104,13 @@ class JsonLoader(BaseTableLoader):
 
     @staticmethod
     def _to_series(values: list[Any]) -> pd.Series:
-        """Preserve exact integers, including nullable and mixed columns."""
+        """Preserve booleans and exact integers, including nullable columns."""
 
         non_null = [value for value in values if value is not None]
+
+        if non_null and all(type(value) is bool for value in non_null):
+            boolean_dtype = "boolean" if len(non_null) != len(values) else "bool"
+            return pd.Series(values, dtype=boolean_dtype)
 
         if non_null and all(type(value) is int for value in non_null):
             minimum = min(non_null)
