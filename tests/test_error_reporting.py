@@ -17,6 +17,7 @@ from verisight.execution.exceptions import (
     QueryTimeoutError,
     QueryValidationError,
 )
+from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.ingestion.exceptions import (
     DataLoadError,
@@ -66,6 +67,11 @@ from verisight.ingestion.exceptions import (
             "Application configuration is unavailable or invalid.",
         ),
         (
+            GeminiTransientError("Sensitive provider details"),
+            ErrorCode.PROVIDER_UNAVAILABLE,
+            "The AI provider is temporarily unavailable.",
+        ),
+        (
             QueryValidationError("SELECT secret FROM private_table"),
             ErrorCode.QUERY_VALIDATION_ERROR,
             "The analytical query did not pass validation.",
@@ -94,6 +100,11 @@ from verisight.ingestion.exceptions import (
             InvestigationError("Sensitive investigation context"),
             ErrorCode.INVESTIGATION_ERROR,
             "The analytical investigation could not be completed.",
+        ),
+        (
+            GeminiGenerationError("Permanent provider failure"),
+            ErrorCode.INTERNAL_ERROR,
+            "An unexpected application error occurred.",
         ),
         (
             QueryExecutionError("Internal execution information"),
@@ -181,4 +192,29 @@ def test_ingestion_report_hides_chained_parser_details() -> None:
     assert report.code is ErrorCode.DATA_LOAD_ERROR
     assert secret not in repr(report)
     assert "/private/" not in repr(report)
+    assert error.__cause__ is original
+
+
+def test_transient_provider_report_hides_sensitive_details() -> None:
+    secret = "synthetic-private-provider-token"
+    error = GeminiTransientError(f"Provider timeout for token {secret}")
+
+    report = to_public_error(error)
+
+    assert report.code is ErrorCode.PROVIDER_UNAVAILABLE
+    assert report.message == "The AI provider is temporarily unavailable."
+    assert secret not in repr(report)
+    assert secret not in report.message
+
+
+def test_transient_provider_report_hides_chained_details() -> None:
+    secret = "synthetic-private-provider-token"
+    original = TimeoutError(f"Provider request contained {secret}")
+    error = GeminiTransientError("Temporary provider failure.")
+    error.__cause__ = original
+
+    report = to_public_error(error)
+
+    assert report.code is ErrorCode.PROVIDER_UNAVAILABLE
+    assert secret not in repr(report)
     assert error.__cause__ is original

@@ -5,7 +5,10 @@ from verisight.execution.decisions import (
     InvestigationDecision,
 )
 from verisight.execution.exceptions import InvestigationError
-from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.gemini import (
+    GeminiGenerationError,
+    GeminiTransientError,
+)
 from verisight.execution.generation import TextGenerationClient
 from verisight.execution.incomplete_evidence import (
     IncompleteEvidenceError,
@@ -50,6 +53,8 @@ class GenerativeInvestigator:
 
         try:
             response = self._client.generate(prompt)
+        except GeminiTransientError:
+            raise
         except GeminiGenerationError as exc:
             raise InvestigationError("Investigator text generation failed.") from exc
 

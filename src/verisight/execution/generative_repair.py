@@ -1,7 +1,7 @@
 """Generative implementation of analytical query repair."""
 
 from verisight.execution.exceptions import QueryPlanningError
-from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
 from verisight.execution.generation import TextGenerationClient
 from verisight.execution.parsing import QueryResponseParser
 from verisight.execution.planning import QueryPlan
@@ -26,6 +26,8 @@ class GenerativeQueryRepairer:
 
         try:
             response = self._client.generate(prompt)
+        except GeminiTransientError:
+            raise
         except GeminiGenerationError as exc:
             raise QueryPlanningError("Query repairer text generation failed.") from exc
 

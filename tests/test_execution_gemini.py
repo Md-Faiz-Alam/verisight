@@ -11,6 +11,7 @@ from verisight.exceptions import VeriSightError
 from verisight.execution.gemini import (
     GeminiGenerationError,
     GeminiTextGenerationClient,
+    GeminiTransientError,
     _is_retryable,
 )
 
@@ -179,6 +180,19 @@ class SequencedGeminiClient:
         return self._models
 
 
+def make_api_error(status_code: int) -> errors.APIError:
+    """Create a synthetic provider error without sensitive details."""
+
+    return errors.APIError(
+        code=status_code,
+        response_json={
+            "error": {
+                "message": "Synthetic provider failure",
+            }
+        },
+    )
+
+
 def test_generates_text_with_configured_model() -> None:
     sdk_client = StubGeminiClient("SELECT COUNT(*) FROM orders")
 
@@ -271,19 +285,37 @@ def test_rejects_empty_gemini_response(
     with pytest.raises(
         GeminiGenerationError,
         match="Gemini returned an empty text response.",
-    ):
+    ) as exc_info:
         client.generate("Generate SQL.")
+
+    assert not isinstance(exc_info.value, GeminiTransientError)
 
 
 @pytest.mark.parametrize(
-    "error",
+    ("error", "expected_type", "expected_message"),
     [
-        RuntimeError("Provider unavailable."),
-        TimeoutError("Request timed out."),
-        ConnectionError("Connection lost."),
+        (
+            RuntimeError("Provider unavailable."),
+            GeminiGenerationError,
+            "Gemini text generation failed.",
+        ),
+        (
+            TimeoutError("Request timed out."),
+            GeminiTransientError,
+            "Gemini is temporarily unavailable.",
+        ),
+        (
+            ConnectionError("Connection lost."),
+            GeminiTransientError,
+            "Gemini is temporarily unavailable.",
+        ),
     ],
 )
-def test_wraps_provider_failures(error: Exception) -> None:
+def test_wraps_provider_failures(
+    error: Exception,
+    expected_type: type[GeminiGenerationError],
+    expected_message: str,
+) -> None:
     sdk_client = FailingGeminiClient(error)
 
     client = GeminiTextGenerationClient(
@@ -294,11 +326,12 @@ def test_wraps_provider_failures(error: Exception) -> None:
     )
 
     with pytest.raises(
-        GeminiGenerationError,
-        match="Gemini text generation failed.",
+        expected_type,
+        match=expected_message,
     ) as exc_info:
         client.generate("Generate SQL.")
 
+    assert type(exc_info.value) is expected_type
     assert exc_info.value.__cause__ is None
     assert exc_info.value.__context__ is None
     assert sdk_client.models.calls == [("test-model", "Generate SQL.")]
@@ -317,12 +350,18 @@ def test_wraps_response_text_extraction_failure() -> None:
     ) as exc_info:
         client.generate("Generate SQL.")
 
+    assert type(exc_info.value) is GeminiGenerationError
     assert exc_info.value.__cause__ is None
     assert exc_info.value.__context__ is None
 
 
 def test_generation_error_is_application_error() -> None:
     assert issubclass(GeminiGenerationError, VeriSightError)
+
+
+def test_transient_error_preserves_generation_error_compatibility() -> None:
+    assert issubclass(GeminiTransientError, GeminiGenerationError)
+    assert issubclass(GeminiTransientError, VeriSightError)
 
 
 def test_retries_transient_failure_then_succeeds() -> None:
@@ -370,8 +409,8 @@ def test_retry_limit_is_enforced() -> None:
     )
 
     with pytest.raises(
-        GeminiGenerationError,
-        match="Gemini text generation failed.",
+        GeminiTransientError,
+        match="Gemini is temporarily unavailable.",
     ) as exc_info:
         client.generate("Generate SQL.")
 
@@ -392,9 +431,10 @@ def test_permanent_failure_is_not_retried() -> None:
         sleep=delays.append,
     )
 
-    with pytest.raises(GeminiGenerationError):
+    with pytest.raises(GeminiGenerationError) as exc_info:
         client.generate("Generate SQL.")
 
+    assert type(exc_info.value) is GeminiGenerationError
     assert len(sdk_client.models.calls) == 1
     assert delays == []
 
@@ -409,7 +449,7 @@ def test_zero_retries_attempts_once() -> None:
         max_retries=0,
     )
 
-    with pytest.raises(GeminiGenerationError):
+    with pytest.raises(GeminiTransientError):
         client.generate("Generate SQL.")
 
     assert len(sdk_client.models.calls) == 1
@@ -511,14 +551,7 @@ def test_classifies_provider_status_codes(
     status_code: int,
     expected: bool,
 ) -> None:
-    error = errors.APIError(
-        code=status_code,
-        response_json={
-            "error": {
-                "message": "Provider failure",
-            }
-        },
-    )
+    error = make_api_error(status_code)
 
     assert _is_retryable(error) is expected
 
@@ -542,6 +575,81 @@ def test_classifies_transport_failures_as_retryable(
 
 def test_classifies_unexpected_failure_as_non_retryable() -> None:
     assert _is_retryable(RuntimeError("Unexpected failure.")) is False
+
+
+@pytest.mark.parametrize("status_code", [429, 500, 503, 599])
+def test_retryable_api_error_becomes_transient_after_retries(
+    status_code: int,
+) -> None:
+    sdk_client = FailingGeminiClient(make_api_error(status_code))
+    delays: list[float] = []
+
+    client = GeminiTextGenerationClient(
+        api_key="test-api-key",
+        model="test-model",
+        client=sdk_client,
+        max_retries=2,
+        sleep=delays.append,
+    )
+
+    with pytest.raises(
+        GeminiTransientError,
+        match="Gemini is temporarily unavailable.",
+    ) as exc_info:
+        client.generate("Generate SQL.")
+
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__context__ is None
+    assert len(sdk_client.models.calls) == 3
+    assert delays == [1.0, 2.0]
+
+
+@pytest.mark.parametrize("status_code", [400, 401, 403, 404])
+def test_permanent_api_error_is_not_transient(
+    status_code: int,
+) -> None:
+    sdk_client = FailingGeminiClient(make_api_error(status_code))
+    delays: list[float] = []
+
+    client = GeminiTextGenerationClient(
+        api_key="test-api-key",
+        model="test-model",
+        client=sdk_client,
+        sleep=delays.append,
+    )
+
+    with pytest.raises(
+        GeminiGenerationError,
+        match="Gemini text generation failed.",
+    ) as exc_info:
+        client.generate("Generate SQL.")
+
+    assert type(exc_info.value) is GeminiGenerationError
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__context__ is None
+    assert len(sdk_client.models.calls) == 1
+    assert delays == []
+
+
+def test_retries_api_error_then_succeeds() -> None:
+    sdk_client = SequencedGeminiClient(
+        [
+            make_api_error(503),
+            "SELECT 1",
+        ]
+    )
+    delays: list[float] = []
+
+    client = GeminiTextGenerationClient(
+        api_key="test-api-key",
+        model="test-model",
+        client=sdk_client,
+        sleep=delays.append,
+    )
+
+    assert client.generate("Generate SQL.") == "SELECT 1"
+    assert len(sdk_client.models.calls) == 2
+    assert delays == [1.0]
 
 
 def test_configures_sdk_timeout_and_single_attempt() -> None:
@@ -590,9 +698,10 @@ def test_empty_response_is_not_retried() -> None:
     with pytest.raises(
         GeminiGenerationError,
         match="Gemini returned an empty text response.",
-    ):
+    ) as exc_info:
         client.generate("Generate SQL.")
 
+    assert type(exc_info.value) is GeminiGenerationError
     assert len(sdk_client.models.calls) == 1
     assert delays == []
 
@@ -607,8 +716,10 @@ def test_unusable_response_is_not_retried() -> None:
     with pytest.raises(
         GeminiGenerationError,
         match="Gemini returned an unusable text response.",
-    ):
+    ) as exc_info:
         client.generate("Generate SQL.")
+
+    assert type(exc_info.value) is GeminiGenerationError
 
 
 def test_provider_error_does_not_expose_api_key() -> None:
@@ -624,6 +735,27 @@ def test_provider_error_does_not_expose_api_key() -> None:
     )
 
     with pytest.raises(GeminiGenerationError) as exc_info:
+        client.generate("Generate SQL.")
+
+    error = exc_info.value
+
+    assert secret not in str(error)
+    assert type(error) is GeminiGenerationError
+    assert error.__cause__ is None
+    assert error.__context__ is None
+
+
+def test_transient_error_does_not_expose_provider_detail() -> None:
+    secret = "synthetic-private-provider-detail"
+
+    client = GeminiTextGenerationClient(
+        api_key="synthetic-test-key",
+        model="test-model",
+        client=FailingGeminiClient(TimeoutError(f"Connection failed: {secret}")),
+        max_retries=0,
+    )
+
+    with pytest.raises(GeminiTransientError) as exc_info:
         client.generate("Generate SQL.")
 
     error = exc_info.value

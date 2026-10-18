@@ -1,11 +1,15 @@
+"""Tests for the generative analytical query planner."""
+
 import pytest
 
+from verisight.error_reporting import ErrorCode
 from verisight.execution.context import QueryContext
 from verisight.execution.exceptions import QueryPlanningError
-from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
 from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.execution.prompt_budget import PromptBudgetExceededError
+from verisight.public_api import run_public_operation
 
 
 class StubTextGenerationClient:
@@ -125,3 +129,46 @@ def test_generative_planner_preserves_unexpected_errors() -> None:
         match="Unexpected programming error.",
     ):
         planner.plan(request)
+
+
+def test_generative_planner_preserves_transient_provider_failure() -> None:
+    error = GeminiTransientError("Gemini is temporarily unavailable.")
+
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise error
+
+    planner = GenerativeQueryPlanner(FailingClient())
+
+    request = QueryRequest(
+        question="Count records.",
+        context=QueryContext(relations=()),
+    )
+
+    with pytest.raises(GeminiTransientError) as exc_info:
+        planner.plan(request)
+
+    assert exc_info.value is error
+    assert exc_info.value.__cause__ is None
+
+
+def test_generative_planner_reports_transient_failure_as_provider_unavailable() -> None:
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise GeminiTransientError("Sensitive Gemini provider details.")
+
+    planner = GenerativeQueryPlanner(FailingClient())
+
+    request = QueryRequest(
+        question="Count records.",
+        context=QueryContext(relations=()),
+    )
+
+    result = run_public_operation(lambda: planner.plan(request))
+
+    assert result.succeeded is False
+    assert result.value is None
+    assert result.error is not None
+    assert result.error.code is ErrorCode.PROVIDER_UNAVAILABLE
+    assert result.error.message == "The AI provider is temporarily unavailable."
+    assert "Sensitive Gemini provider details." not in repr(result)

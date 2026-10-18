@@ -1,16 +1,17 @@
+"""Tests for the generative autonomous investigator."""
+
 import pytest
 
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder
+from verisight.error_reporting import ErrorCode
 from verisight.execution.decisions import (
     InvestigationAction,
     InvestigationDecision,
 )
 from verisight.execution.exceptions import InvestigationError
-from verisight.execution.gemini import GeminiGenerationError
-from verisight.execution.generative_investigator import (
-    GenerativeInvestigator,
-)
+from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
+from verisight.execution.generative_investigator import GenerativeInvestigator
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.ingestion.schema import (
@@ -20,6 +21,7 @@ from verisight.ingestion.schema import (
     TableSchema,
 )
 from verisight.profiling.models import DatasetProfile
+from verisight.public_api import run_public_operation
 
 
 class StubTextGenerationClient:
@@ -239,3 +241,36 @@ def test_generative_investigator_preserves_unexpected_errors() -> None:
         match="Unexpected programming error.",
     ):
         investigator.decide(_build_state())
+
+
+def test_generative_investigator_preserves_transient_provider_failure() -> None:
+    error = GeminiTransientError("Gemini is temporarily unavailable.")
+
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise error
+
+    investigator = GenerativeInvestigator(FailingClient())
+
+    with pytest.raises(GeminiTransientError) as exc_info:
+        investigator.decide(_build_state())
+
+    assert exc_info.value is error
+    assert exc_info.value.__cause__ is None
+
+
+def test_generative_investigator_reports_transient_provider_unavailable() -> None:
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise GeminiTransientError("Sensitive provider context.")
+
+    investigator = GenerativeInvestigator(FailingClient())
+
+    result = run_public_operation(lambda: investigator.decide(_build_state()))
+
+    assert result.succeeded is False
+    assert result.value is None
+    assert result.error is not None
+    assert result.error.code is ErrorCode.PROVIDER_UNAVAILABLE
+    assert result.error.message == "The AI provider is temporarily unavailable."
+    assert "Sensitive provider context." not in repr(result)

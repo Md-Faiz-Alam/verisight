@@ -4,7 +4,7 @@ import json
 
 from verisight.evidence import evidence_to_jsonable, freeze_evidence
 from verisight.execution.exceptions import InvestigationError
-from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
 from verisight.execution.generation import TextGenerationClient
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_formatting import (
@@ -38,6 +38,8 @@ class GenerativeInvestigationSynthesizer:
 
         try:
             response = self._client.generate(prompt)
+        except GeminiTransientError:
+            raise
         except GeminiGenerationError as exc:
             raise InvestigationError(
                 "Investigation synthesis text generation failed."

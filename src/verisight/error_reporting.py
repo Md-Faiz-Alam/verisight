@@ -12,6 +12,7 @@ from verisight.execution.exceptions import (
     QueryTimeoutError,
     QueryValidationError,
 )
+from verisight.execution.gemini import GeminiTransientError
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.ingestion.exceptions import (
     DataLoadError,
@@ -38,6 +39,7 @@ class ErrorCode(StrEnum):
     QUERY_TIMEOUT_ERROR = "query_timeout_error"
     QUERY_PLANNING_ERROR = "query_planning_error"
     INVESTIGATION_ERROR = "investigation_error"
+    PROVIDER_UNAVAILABLE = "provider_unavailable"
     INTERNAL_ERROR = "internal_error"
 
 
@@ -96,6 +98,12 @@ def to_public_error(error: Exception) -> PublicErrorReport:
         return PublicErrorReport(
             code=ErrorCode.PROMPT_BUDGET_EXCEEDED,
             message="The analytical request exceeded the allowed prompt size.",
+        )
+
+    if isinstance(error, GeminiTransientError):
+        return PublicErrorReport(
+            code=ErrorCode.PROVIDER_UNAVAILABLE,
+            message="The AI provider is temporarily unavailable.",
         )
 
     if isinstance(error, QueryValidationError):

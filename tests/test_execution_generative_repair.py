@@ -1,12 +1,16 @@
+"""Tests for the generative analytical query repairer."""
+
 import pytest
 
+from verisight.error_reporting import ErrorCode
 from verisight.execution.context import QueryContext
 from verisight.execution.exceptions import QueryPlanningError
-from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
 from verisight.execution.generative_repair import GenerativeQueryRepairer
 from verisight.execution.planning import QueryPlan
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.repair import QueryRepairRequest
+from verisight.public_api import run_public_operation
 
 
 class StubTextGenerationClient:
@@ -124,3 +128,36 @@ def test_generative_repairer_preserves_unexpected_errors() -> None:
         match="Unexpected programming error.",
     ):
         repairer.repair(_make_request())
+
+
+def test_generative_repairer_preserves_transient_provider_failure() -> None:
+    error = GeminiTransientError("Gemini is temporarily unavailable.")
+
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise error
+
+    repairer = GenerativeQueryRepairer(FailingClient())
+
+    with pytest.raises(GeminiTransientError) as exc_info:
+        repairer.repair(_make_request())
+
+    assert exc_info.value is error
+    assert exc_info.value.__cause__ is None
+
+
+def test_generative_repairer_reports_transient_provider_unavailable() -> None:
+    class FailingClient:
+        def generate(self, prompt: str) -> str:
+            raise GeminiTransientError("Sensitive provider details.")
+
+    repairer = GenerativeQueryRepairer(FailingClient())
+
+    result = run_public_operation(lambda: repairer.repair(_make_request()))
+
+    assert result.succeeded is False
+    assert result.value is None
+    assert result.error is not None
+    assert result.error.code is ErrorCode.PROVIDER_UNAVAILABLE
+    assert result.error.message == "The AI provider is temporarily unavailable."
+    assert "Sensitive provider details." not in repr(result)

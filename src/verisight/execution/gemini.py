@@ -15,6 +15,10 @@ class GeminiGenerationError(VeriSightError):
     """Raised when Gemini cannot provide a usable text response."""
 
 
+class GeminiTransientError(GeminiGenerationError):
+    """Raised when a retryable Gemini request fails after retries."""
+
+
 class _GeminiResponse(Protocol):
     @property
     def text(self) -> str | None: ...
@@ -156,6 +160,9 @@ class GeminiTextGenerationClient:
                 raise GeminiGenerationError(
                     "Gemini returned an unusable text response."
                 )
+
+            if retryable:
+                raise GeminiTransientError("Gemini is temporarily unavailable.")
 
             raise GeminiGenerationError("Gemini text generation failed.")
 
