@@ -17,11 +17,49 @@ from verisight.execution.exceptions import (
     QueryTimeoutError,
     QueryValidationError,
 )
+from verisight.execution.prompt_budget import PromptBudgetExceededError
+from verisight.ingestion.exceptions import (
+    DataLoadError,
+    FileValidationError,
+    IngestionError,
+    TableValidationError,
+    UnsupportedFileTypeError,
+)
 
 
 @pytest.mark.parametrize(
     ("error", "expected_code", "expected_message"),
     [
+        (
+            UnsupportedFileTypeError("Sensitive input details"),
+            ErrorCode.UNSUPPORTED_FILE_TYPE,
+            "The dataset file type is not supported.",
+        ),
+        (
+            FileValidationError("Sensitive input details"),
+            ErrorCode.FILE_VALIDATION_ERROR,
+            "The dataset file input did not pass validation.",
+        ),
+        (
+            DataLoadError("Sensitive input details"),
+            ErrorCode.DATA_LOAD_ERROR,
+            "The dataset file could not be loaded.",
+        ),
+        (
+            TableValidationError("Sensitive input details"),
+            ErrorCode.TABLE_VALIDATION_ERROR,
+            "The dataset table structure did not pass validation.",
+        ),
+        (
+            IngestionError("Sensitive input details"),
+            ErrorCode.INGESTION_ERROR,
+            "The dataset could not be ingested.",
+        ),
+        (
+            PromptBudgetExceededError(max_prompt_chars=10, actual_prompt_chars=11),
+            ErrorCode.PROMPT_BUDGET_EXCEEDED,
+            "The analytical request exceeded the allowed prompt size.",
+        ),
         (
             ConfigurationError("secret=config-value"),
             ErrorCode.CONFIGURATION_ERROR,
@@ -130,3 +168,17 @@ def test_public_report_preserves_internal_exception() -> None:
     assert report.code == ErrorCode.QUERY_RUNTIME_ERROR
     assert "missing_amount" not in report.message
     assert "missing_amount" in str(error)
+
+
+def test_ingestion_report_hides_chained_parser_details() -> None:
+    secret = "private-customer-value"
+    original = ValueError(f"Parser failed at {secret}")
+    error = DataLoadError("Could not load /private/customer-data.csv")
+    error.__cause__ = original
+
+    report = to_public_error(error)
+
+    assert report.code is ErrorCode.DATA_LOAD_ERROR
+    assert secret not in repr(report)
+    assert "/private/" not in repr(report)
+    assert error.__cause__ is original

@@ -12,12 +12,26 @@ from verisight.execution.exceptions import (
     QueryTimeoutError,
     QueryValidationError,
 )
+from verisight.execution.prompt_budget import PromptBudgetExceededError
+from verisight.ingestion.exceptions import (
+    DataLoadError,
+    FileValidationError,
+    IngestionError,
+    TableValidationError,
+    UnsupportedFileTypeError,
+)
 
 
 class ErrorCode(StrEnum):
     """Stable identifiers for externally reported failures."""
 
     CONFIGURATION_ERROR = "configuration_error"
+    UNSUPPORTED_FILE_TYPE = "unsupported_file_type"
+    FILE_VALIDATION_ERROR = "file_validation_error"
+    DATA_LOAD_ERROR = "data_load_error"
+    TABLE_VALIDATION_ERROR = "table_validation_error"
+    INGESTION_ERROR = "ingestion_error"
+    PROMPT_BUDGET_EXCEEDED = "prompt_budget_exceeded"
     QUERY_VALIDATION_ERROR = "query_validation_error"
     QUERY_RUNTIME_ERROR = "query_runtime_error"
     QUERY_RESULT_LIMIT_ERROR = "query_result_limit_error"
@@ -46,6 +60,42 @@ def to_public_error(error: Exception) -> PublicErrorReport:
         return PublicErrorReport(
             code=ErrorCode.CONFIGURATION_ERROR,
             message="Application configuration is unavailable or invalid.",
+        )
+
+    if isinstance(error, UnsupportedFileTypeError):
+        return PublicErrorReport(
+            code=ErrorCode.UNSUPPORTED_FILE_TYPE,
+            message="The dataset file type is not supported.",
+        )
+
+    if isinstance(error, FileValidationError):
+        return PublicErrorReport(
+            code=ErrorCode.FILE_VALIDATION_ERROR,
+            message="The dataset file input did not pass validation.",
+        )
+
+    if isinstance(error, DataLoadError):
+        return PublicErrorReport(
+            code=ErrorCode.DATA_LOAD_ERROR,
+            message="The dataset file could not be loaded.",
+        )
+
+    if isinstance(error, TableValidationError):
+        return PublicErrorReport(
+            code=ErrorCode.TABLE_VALIDATION_ERROR,
+            message="The dataset table structure did not pass validation.",
+        )
+
+    if isinstance(error, IngestionError):
+        return PublicErrorReport(
+            code=ErrorCode.INGESTION_ERROR,
+            message="The dataset could not be ingested.",
+        )
+
+    if isinstance(error, PromptBudgetExceededError):
+        return PublicErrorReport(
+            code=ErrorCode.PROMPT_BUDGET_EXCEEDED,
+            message="The analytical request exceeded the allowed prompt size.",
         )
 
     if isinstance(error, QueryValidationError):
