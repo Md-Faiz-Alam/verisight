@@ -19,9 +19,6 @@ from verisight.execution.generative_investigator import (
     GenerativeInvestigator,
 )
 from verisight.execution.generative_repair import GenerativeQueryRepairer
-from verisight.execution.generative_synthesis import (
-    GenerativeInvestigationSynthesizer,
-)
 from verisight.execution.investigation_parsing import (
     INVESTIGATION_DECISION_JSON_SCHEMA,
 )
@@ -32,6 +29,9 @@ from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.planning import QueryPlan, QueryPlanner
 from verisight.execution.repair import QueryRepairer, QueryRepairRequest
 from verisight.execution.service import AnalyticalExecutionService
+from verisight.execution.structured_synthesis import (
+    StructuredInvestigationSynthesizer,
+)
 from verisight.execution.synthesis import InvestigationSynthesizer
 from verisight.ingestion.exceptions import FileValidationError
 from verisight.ingestion.models import LoadedDataset
@@ -166,14 +166,12 @@ class VeriSight:
         cls,
         settings: Settings,
     ) -> InvestigationSynthesizer | None:
-        """Build the default Gemini-backed investigation synthesizer."""
+        """Build the default Gemini-backed structured synthesizer."""
 
-        client = cls._build_generation_client(settings)
-
-        if client is None:
+        if not cls._build_generation_available(settings):
             return None
 
-        return GenerativeInvestigationSynthesizer(client)
+        return StructuredInvestigationSynthesizer.from_settings(settings)
 
     def _load_dataset(
         self,

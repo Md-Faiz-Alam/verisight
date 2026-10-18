@@ -8,6 +8,7 @@ import pytest
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.config import Settings
 from verisight.error_reporting import to_public_error
+from verisight.execution.claim_verification import VerificationStatus
 from verisight.execution.decisions import (
     InvestigationAction,
     InvestigationDecision,
@@ -819,11 +820,7 @@ def test_public_investigate_builds_default_gemini_components(
         '"reasoning":"The deterministic evidence is sufficient.",'
         '"question":null}'
     )
-
     synthesizer_client = MagicMock()
-    synthesizer_client.generate.return_value = (
-        "The available deterministic evidence supports the final conclusion."
-    )
 
     settings = Settings(
         gemini_api_key="test-api-key",
@@ -831,13 +828,16 @@ def test_public_investigate_builds_default_gemini_components(
         allow_llm_data_disclosure=True,
     )
 
-    with patch(
-        "verisight.service.GeminiTextGenerationClient",
-        side_effect=[
-            investigator_client,
-            synthesizer_client,
-        ],
-    ) as client_class:
+    with (
+        patch(
+            "verisight.service.GeminiTextGenerationClient",
+            return_value=investigator_client,
+        ) as investigator_class,
+        patch(
+            "verisight.execution.structured_synthesis.GeminiTextGenerationClient",
+            return_value=synthesizer_client,
+        ) as synthesizer_class,
+    ):
         result = VeriSight(
             settings=settings,
             planner=planner,
@@ -853,31 +853,34 @@ def test_public_investigate_builds_default_gemini_components(
         "No analytical conclusion has been established."
     )
     assert result.observation_count == 0
+    assert result.generated_claims == ()
+    assert result.verified_claims == ()
+    assert result.narrative_verified is False
 
-    assert client_class.call_count == 2
-
-    assert client_class.call_args_list[0].kwargs == {
-        "api_key": "test-api-key",
-        "model": "test-model",
-        "request_timeout_seconds": 30.0,
-        "max_retries": 2,
-        "retry_base_delay_seconds": 1.0,
-        "response_json_schema": INVESTIGATION_DECISION_JSON_SCHEMA,
-    }
-    assert client_class.call_args_list[1].kwargs == {
-        "api_key": "test-api-key",
-        "model": "test-model",
-        "request_timeout_seconds": 30.0,
-        "max_retries": 2,
-        "retry_base_delay_seconds": 1.0,
-        "response_json_schema": None,
-    }
+    investigator_class.assert_called_once_with(
+        api_key="test-api-key",
+        model="test-model",
+        request_timeout_seconds=30.0,
+        max_retries=2,
+        retry_base_delay_seconds=1.0,
+        response_json_schema=INVESTIGATION_DECISION_JSON_SCHEMA,
+    )
+    synthesizer_class.assert_called_once()
+    synthesis_config = synthesizer_class.call_args.kwargs
+    assert synthesis_config["api_key"] == "test-api-key"
+    assert synthesis_config["model"] == "test-model"
+    assert synthesis_config["request_timeout_seconds"] == 30.0
+    assert synthesis_config["max_retries"] == 2
+    assert synthesis_config["retry_base_delay_seconds"] == 1.0
+    schema = synthesis_config["response_json_schema"]
+    assert isinstance(schema, dict)
+    assert set(schema["required"]) == {"conclusion", "claims"}
+    assert schema["additionalProperties"] is False
 
     investigator_client.generate.assert_called_once()
     synthesizer_client.generate.assert_not_called()
 
     investigator_prompt = investigator_client.generate.call_args.args[0]
-
     assert (
         "You are the autonomous analytical investigator for VeriSight."
         in investigator_prompt
@@ -885,8 +888,19 @@ def test_public_investigate_builds_default_gemini_components(
     assert "What can we learn about these orders?" in investigator_prompt
 
 
+@pytest.mark.parametrize(
+    ("expected", "reference_index", "status"),
+    [
+        ("60", 0, VerificationStatus.SUPPORTED),
+        ("70", 0, VerificationStatus.CONTRADICTED),
+        ("60", 9, VerificationStatus.UNVERIFIABLE),
+    ],
+)
 def test_default_gemini_investigator_can_request_observe_and_synthesize(
     tmp_path: Path,
+    expected: str,
+    reference_index: int,
+    status: VerificationStatus,
 ) -> None:
     path = tmp_path / "orders.csv"
 
@@ -915,7 +929,12 @@ def test_default_gemini_investigator_can_request_observe_and_synthesize(
 
     synthesizer_client = MagicMock()
     synthesizer_client.generate.return_value = (
-        "The dataset contains three orders totaling 60."
+        '{"conclusion":"The dataset contains three orders totaling 60.",'
+        '"claims":[{"operation":"value","expected":"'
+        + expected
+        + '","left":{"observation_index":'
+        + str(reference_index)
+        + ',"row_index":0,"column":"total_amount"},"right":null}]}'
     )
 
     settings = Settings(
@@ -924,12 +943,15 @@ def test_default_gemini_investigator_can_request_observe_and_synthesize(
         allow_llm_data_disclosure=True,
     )
 
-    with patch(
-        "verisight.service.GeminiTextGenerationClient",
-        side_effect=[
-            investigator_client,
-            synthesizer_client,
-        ],
+    with (
+        patch(
+            "verisight.service.GeminiTextGenerationClient",
+            return_value=investigator_client,
+        ),
+        patch(
+            "verisight.execution.structured_synthesis.GeminiTextGenerationClient",
+            return_value=synthesizer_client,
+        ) as synthesizer_class,
     ):
         result = VeriSight(
             settings=settings,
@@ -939,11 +961,16 @@ def test_default_gemini_investigator_can_request_observe_and_synthesize(
             "What can we learn about these orders?",
         )
 
-    assert result.conclusion == ("The dataset contains three orders totaling 60.")
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.conclusion == "The dataset contains three orders totaling 60."
     assert result.observation_count == 1
+    assert len(result.generated_claims) == 1
+    assert len(result.verified_claims) == 1
+    assert result.verified_claims[0].verification.status is status
+    assert result.narrative_verified is False
+    assert result.verification_scope == "referenced_numeric_values_only"
 
     observation = result.observations[0]
-
     assert observation.question == "What is the total order amount?"
     assert observation.sql.strip() == (
         "SELECT\n"
@@ -951,34 +978,64 @@ def test_default_gemini_investigator_can_request_observe_and_synthesize(
         "                SUM(amount) AS total_amount\n"
         "            FROM orders"
     )
-    assert observation.result.columns == (
-        "order_count",
-        "total_amount",
-    )
+    assert observation.result.columns == ("order_count", "total_amount")
     assert observation.result.rows == ((3, 60.0),)
 
     assert investigator_client.generate.call_count == 2
     synthesizer_client.generate.assert_called_once()
+    synthesizer_class.assert_called_once()
+    assert synthesizer_class.call_args.kwargs["response_json_schema"] is not None
 
     first_prompt = investigator_client.generate.call_args_list[0].args[0]
     second_prompt = investigator_client.generate.call_args_list[1].args[0]
     synthesis_prompt = synthesizer_client.generate.call_args.args[0]
-
     assert "EXECUTED OBSERVATIONS\nNone" in first_prompt
-
     assert "EXECUTED OBSERVATIONS" in second_prompt
     assert "What is the total order amount?" in second_prompt
     assert "order_count" in second_prompt
     assert "total_amount" in second_prompt
-
-    assert (
-        "You are the analytical conclusion synthesizer for VeriSight."
-        in synthesis_prompt
-    )
-    assert "EXECUTED OBSERVATIONS" in synthesis_prompt
+    assert "VeriSight's structured investigation synthesizer" in synthesis_prompt
+    assert "INVESTIGATION STATE:" in synthesis_prompt
     assert "What is the total order amount?" in synthesis_prompt
     assert "order_count" in synthesis_prompt
     assert "total_amount" in synthesis_prompt
+
+
+def test_default_gemini_synthesis_rejects_plain_text(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "orders.csv"
+    pd.DataFrame({"order_id": [1], "amount": [10.0]}).to_csv(path, index=False)
+    investigator_client = MagicMock()
+    investigator_client.generate.side_effect = [
+        '{"action":"investigate","reasoning":"Measure data.",'
+        '"question":"What is the total order amount?"}',
+        '{"action":"finish","reasoning":"Evidence collected.","question":null}',
+    ]
+    synthesizer_client = MagicMock()
+    synthesizer_client.generate.return_value = "Unstructured conclusion."
+
+    with (
+        patch(
+            "verisight.service.GeminiTextGenerationClient",
+            return_value=investigator_client,
+        ),
+        patch(
+            "verisight.execution.structured_synthesis.GeminiTextGenerationClient",
+            return_value=synthesizer_client,
+        ),
+        pytest.raises(
+            InvestigationError, match="Structured synthesis response is invalid."
+        ),
+    ):
+        VeriSight(
+            settings=Settings(
+                gemini_api_key="test-api-key",
+                allow_llm_data_disclosure=True,
+            ),
+            planner=StubQueryPlanner(),
+        ).investigate(path, "Investigate orders.")
+    synthesizer_client.generate.assert_called_once()
 
 
 def test_public_investigate_rebuilds_missing_planner(
