@@ -2,7 +2,14 @@
 
 import math
 from dataclasses import dataclass
-from decimal import Decimal, DecimalException
+from decimal import (
+    Decimal,
+    DecimalException,
+    Inexact,
+    InvalidOperation,
+    Overflow,
+    localcontext,
+)
 from enum import StrEnum
 from typing import TypeAlias, cast
 
@@ -141,7 +148,7 @@ class NumericalClaimVerifier:
                 )
 
             try:
-                actual = left - right
+                actual = _subtract_exact(left, right)
             except DecimalException:
                 return ClaimVerificationResult(
                     status=VerificationStatus.UNVERIFIABLE,
@@ -152,7 +159,7 @@ class NumericalClaimVerifier:
                 )
 
         try:
-            difference = abs(actual - expected)
+            difference = _subtract_exact(actual, expected).copy_abs()
         except DecimalException:
             return ClaimVerificationResult(
                 status=VerificationStatus.UNVERIFIABLE,
@@ -237,3 +244,12 @@ def _decimal_number(value: object, *, name: str) -> Decimal:
         return Decimal(str(value))
 
     raise TypeError(f"{name} must be an int, float, or Decimal.")
+
+
+def _subtract_exact(left: Decimal, right: Decimal) -> Decimal:
+    """Fail closed if the active precision cannot represent the difference."""
+    with localcontext() as context:
+        context.traps[Inexact] = True
+        context.traps[InvalidOperation] = True
+        context.traps[Overflow] = True
+        return left - right
