@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from scripts.live_evaluation import score_result, summarize_number_audits
 
 from verisight import VeriSight
 from verisight.config import Settings
@@ -241,6 +242,20 @@ def test_known_answer_investigation_pipeline(
             "20",
             id="unknown-outcomes-in-denominator",
         ),
+        pytest.param(
+            SCENARIOS[1],
+            "SELECT ROUND(AVG(COALESCE(minutes, 0)), 2) AS metric "
+            "FROM visits WHERE state = 'completed'",
+            "13.33",
+            id="missing-waits-imputed-as-zero",
+        ),
+        pytest.param(
+            SCENARIOS[4],
+            "SELECT ROUND(100.0 * SUM(late) / COUNT(late), 2) AS metric "
+            "FROM deliveries",
+            "66.67",
+            id="cancelled-shipments-included",
+        ),
     ],
 )
 @pytest.mark.parametrize(
@@ -315,6 +330,26 @@ def test_numeric_support_does_not_establish_analytical_correctness(
     # It is not a semantic-verification feature of the application.
     agrees_with_known_answer = actual == Decimal(scenario.answer)
     assert agrees_with_known_answer is (not use_wrong_query)
+
+    # The evaluator must use the independent answer, not just a supported verdict.
+    report = score_result(result, scenario.answer)
+    assert report["outcome"] == (
+        "incorrect_numeric" if use_wrong_query else "correct_numeric"
+    )
+    assert report["expected"] == scenario.answer
+    assert report["actual"] == str(verification.actual)
+    assert report["verification_status"] == "supported"
+    assert report["narrative_number_count"] == 1
+    assert report["unlinked_number_count"] == 0
+    assert report["narrative_verified"] is False
+    assert summarize_number_audits({scenario.name: report}) == {
+        "audited_case_count": 1,
+        "unaudited_case_count": 0,
+        "detected_token_count": 1,
+        "unlinked_token_count": 0,
+        "cases_with_unlinked_tokens": 0,
+    }
+
     assert result.narrative_verified is False
     assert result.verification_scope == "referenced_numeric_values_only"
 
