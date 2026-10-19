@@ -1,227 +1,124 @@
 # VeriSight roadmap
 
-## Product objective
+## Objective and current evidence
 
-Build an autonomous investigator for unfamiliar structured tabular datasets that
-produces useful findings with inspectable evidence and explicit uncertainty.
+Build an investigator for unfamiliar structured tabular datasets that produces
+useful findings with inspectable evidence and explicit uncertainty. Completion
+is measured through acceptance criteria, not a percentage or an unsupported
+delivery estimate.
 
-Progress is measured through observable acceptance criteria, not a percentage
-of implementation completed.
+The implemented foundation includes ingestion, profiling, quality analysis,
+validated SQL, generation and repair, bounded investigation, structured synthesis,
+numerical verification, application-rendered claim statements, token audits,
+Unicode digit coverage, expected-failure evidence recovery, safe diagnostics,
+generation telemetry, and offline CI on Windows and Linux.
 
-## Implemented foundation
+Five synthetic live development fixtures and committed success/failure reports
+exist. Reports span different revisions and settings. They establish examples
+of working behavior and failures, not general accuracy or production readiness.
+Narrative verification remains false.
 
-- CSV, JSON, and Excel ingestion.
-- Schema inference, profiling, and data-quality analysis.
-- Validated SQL execution with configured resource limits.
-- Gemini-driven planning and query repair.
-- Bounded autonomous investigations.
-- Structured synthesis enabled by default for configured Gemini investigations.
-- Deterministic numerical claim verification.
-- Per-claim verdicts in investigation results.
-- Explicitly unverified narrative status.
-- Safe public error classification and provider diagnostics.
-- Deterministic verification benchmarks.
-- Opt-in live evaluation on three synthetic fixtures.
+## 1. Define controlled rounding
 
-These milestones establish implementation capability. They do not establish
-general analytical accuracy or production readiness.
-
-## Milestone 1: Preserve partial investigation evidence
-
-Current gap:
-
-Some synthesis and provider failures raise without returning the observations
-already collected.
+Structured claims currently use zero tolerance. Rounded values can be
+contradicted even when suitable for presentation.
 
 Required work:
 
-- Preserve observations when synthesis cannot complete.
-- Report incomplete status and a structured failure category.
-- Retain safe diagnostic context.
-- Define separate policies for provider retries and response-format repair.
-- Accept only explicitly supported response wrappers, if fence support is added.
-- Keep repair feedback sanitized and within prompt budgets.
+- Define application-controlled precision, units, and rounding mode.
+- Preserve exact evidence beside displayed values.
+- Distinguish exact support from support under an explicit rounding policy.
+- Prevent model-selected decimal places from widening acceptance arbitrarily.
 
-Acceptance criteria:
+Acceptance: boundary, negative, percentage, large-value, and incorrect-value
+cases pass independent tests. Floating-point differences are not broadly excused
+without a specified policy.
 
-- A failure after a successful query returns inspectable partial evidence.
-- Invalid synthesis cannot produce a complete, apparently verified report.
-- Retry behavior is bounded and tested.
-- Raw provider messages and private data do not leak into public reports.
+## 2. Expand independent correctness evaluation
 
-## Milestone 2: Link report statements to claims
-
-Current gap:
-
-A conclusion can contain a false number while its separate claim list contains
-a supported number. Empty claims also do not establish a trustworthy narrative.
+Current live fixtures are easy single-metric development cases with one
+analytical step each. They do not establish autonomous multi-step reasoning.
 
 Required work:
 
-- Introduce structured findings with explicit claim references.
-- Render quantitative statements from verified values where practical.
-- Distinguish verified quantities from interpretations and unresolved questions.
-- Report missing or invalid claim links.
+- Add independently specified joins, filters, nulls, duplicates, grain, units,
+  dates, rates, and insufficient-evidence questions.
+- Add multi-step and held-out cases across multiple domains.
+- Define a comparison baseline and release targets before held-out evaluation.
+- Record fixture identities and sufficient environment information.
+- Retain failures and report availability, correctness, completion, and latency
+  with explicit denominators.
 
-Number extraction may provide supplementary warnings. Matching numerical tokens
-alone must not certify narrative meaning.
+Bank Marketing questions can add depth but do not establish cross-domain
+generality. A clean-revision multi-case run is a reproducibility checkpoint,
+not proof of reliability. Pace provider calls based on actual limits; do not
+infer optimal settings from selected successful attempts.
 
-Acceptance criteria:
+Acceptance: answers are independent of generated SQL, every attempt is
+accounted for, and results can be reproduced and compared with a defined
+baseline. Missing claims do not automatically count as justified abstention.
 
-- Report consumers can identify the evidence behind each quantitative finding.
-- Contradicted and unverifiable claims remain visibly distinct.
-- An unlinked narrative is not presented as verified.
-- Changes in direction, units, scope, or denominator cannot be certified merely
-  because the same number appears in both text and evidence.
+## 3. Strengthen report meaning and provenance
 
-## Milestone 3: Define controlled rounding
-
-Current gap:
-
-Structured claims use exact comparison, so legitimate rounded presentations can
-receive `contradicted`.
-
-Required work:
-
-- Define an application-controlled rounding policy.
-- Specify supported precision, units, and rounding mode.
-- Preserve exact evidence alongside displayed values.
-- Distinguish exact support from rounded support.
-- Prevent model-selected decimal precision from silently widening acceptance.
-
-Acceptance criteria:
-
-- Correct rounded values are distinguished from exact matches.
-- Incorrect values remain rejected.
-- Boundary, negative, percentage, and large-number cases are tested.
-- The policy does not broadly excuse differences as floating-point noise.
-
-## Milestone 4: Expand and record evaluation
-
-Current position:
-
-The deterministic benchmark covers numerical and semantic-limit scenarios.
-The live evaluator has three known development fixtures and one analytical step
-per case.
+Claim-linked statements and token/digit diagnostics now exist. Semantic linkage
+between narrative assertions, claim identities, and analytical intent remains
+unestablished.
 
 Required work:
 
-- Expand to independently specified questions across multiple domains.
-- Add joins, filters, nulls, duplicates, rates, dates, and insufficient evidence.
-- Add multi-step investigations.
-- Separate development fixtures from held-out cases.
-- Record model, settings, source revision, fixture identity, and outcomes.
-- Retain failed runs.
-- Add a defined baseline.
-- Store reviewed synthetic evaluation reports in version control.
+- Represent findings with explicit claim references and analytical scope.
+- Separate measurements, interpretations, hypotheses, and unanswered questions.
+- Return bounded failed-attempt and repair history.
+- Decide whether `ask()` needs a richer return contract.
+- Evaluate unsupported formats and number words without silently guessing
+  their meaning.
 
-Bank Marketing questions may supplement evaluation, but one dataset does not
-establish domain generality.
+Acceptance: users can inspect the evidence and history behind findings;
+contradictions and partial results remain visible. Equal numbers or complete
+digit coverage cannot certify direction, units, causation, or denominator.
+Narrative error rates require independently labeled semantic evaluation.
 
-Measure separately:
+## 4. Improve unfamiliar-data handling and planning
 
-| Metric | Proposed denominator |
-| --- | --- |
-| Ground-truth numerical success | All attempted cases |
-| Successful investigation completion | All attempted cases |
-| Provider failure rate | All attempted cases |
-| Contradicted-claim rate | All submitted numerical claims |
-| Unverifiable-claim rate | All submitted numerical claims |
-| No-claims rate | All attempted cases |
+Required work includes nullable Excel boolean inference, identifier-quoting
+instructions, removal of private cross-object configuration in legacy synthesis,
+relationship discovery, semantic roles, units, schema ambiguity, useful competing
+hypotheses, and stopping rules for insufficient evidence.
 
-Also report conditional accuracy among scored answers, with its denominator.
-Do not hide missing answers or provider failures by reporting only that metric.
+Acceptance: targeted regressions preserve existing precision guarantees;
+unfamiliar schemas and ambiguous questions are handled or explicitly reported.
+Investigations avoid repeated or low-value queries and unsupported causal claims.
 
-Narrative hallucination requires its own labeled evaluation. Unmatched numerical
-tokens alone are not a sufficient definition.
+## 5. Deliver the end-user workflow
 
-Acceptance criteria:
+Build dataset onboarding, progress visibility, evidence navigation, partial
+failure presentation, and accessible report export.
 
-- Expected answers are independent of generated SQL.
-- Reports identify every attempted case and outcome.
-- No-claims responses are not automatically counted as justified abstentions.
-- Reproduction instructions and baseline definitions are committed.
-- Release thresholds are agreed before evaluating held-out cases.
+Acceptance: users can investigate supported datasets without editing Python,
+inspect SQL and observations, understand incomplete outcomes, and export a
+coherent report. Workflow completion is never presented as verified correctness.
 
-## Milestone 5: Improve provenance and data handling
+## 6. Establish operational readiness
 
-Remaining work:
+Offline CI is implemented. Remaining work includes reproducible dependency and
+deployment inputs, workload limits, cancellation, resource exhaustion, upload
+and isolation assessment, operational diagnostics, and recovery under realistic
+provider conditions.
 
-- Return failed investigation attempts and query repair history.
-- Decide whether `ask()` needs a richer result contract.
-- Correct nullable Excel boolean inference.
-- Add identifier-quoting guidance to planning and repair prompts.
-- Replace private cross-object configuration in legacy synthesis.
-- Evaluate schema ambiguity, relationship discovery, and units.
+Acceptance: deployment is repeatable; supported limits and failure behavior are
+documented and exercised. Local checks and CI do not replace operational tests.
 
-Acceptance criteria:
+## Release criteria and engineering standards
 
-- Each change has a targeted regression.
-- Existing ingestion precision guarantees remain intact.
-- New provenance does not disclose private exception contents.
-- Ambiguity is reported rather than silently resolved without evidence.
+An end-to-end release requires demonstrated unfamiliar-data workflows,
+inspectable material quantitative findings, independent benchmark targets,
+explicit narrative limitations, useful partial evidence, report export, and
+repeatable deployment.
 
-## Milestone 6: Deliver a usable investigation product
+Maintain strict typing, formatting/lint gates, statement and branch coverage,
+synthetic regression inputs, small reviewable changes, explicit staging, and
+documentation that matches implemented behavior. Keep local datasets and
+credentials out of routine commits.
 
-Required work:
-
-- Dataset onboarding.
-- Investigation progress.
-- Evidence navigation.
-- Clear partial-failure presentation.
-- Accessible report export.
-- Explicit separation of facts, interpretations, and unanswered questions.
-
-Acceptance criteria:
-
-- A user can investigate a supported dataset without editing Python code.
-- A user can inspect the SQL and evidence behind a finding.
-- Workflow completion cannot be confused with verified correctness.
-- Empty or failed investigations remain understandable.
-
-## Milestone 7: Establish operational readiness
-
-Required work:
-
-- Continuous integration for formatting, linting, types, and tests.
-- Repeatable installation and deployment.
-- Resource and cancellation testing.
-- Isolation and upload-security assessment.
-- Operational diagnostics without sensitive content.
-- Documented limits and recovery behavior.
-
-Acceptance criteria:
-
-- CI reproduces the required offline gate.
-- Deployment can be reproduced from documented inputs.
-- Resource exhaustion and provider failures have tested outcomes.
-- Supported workload limits are explicit.
-
-## Release criteria
-
-An end-to-end release requires evidence that:
-
-- Supported unfamiliar datasets can be analyzed through the intended user flow.
-- Analytical queries are executed within documented controls.
-- Material quantitative findings have inspectable verification status.
-- Narrative and semantic limitations remain explicit.
-- Independent benchmarks meet predefined targets.
-- Failures preserve useful evidence where available.
-- Reports and deployment are reproducible.
-
-No current test count or coverage percentage independently satisfies these
-criteria.
-
-## Engineering standards
-
-- Strict type checking.
-- Formatting and lint gates.
-- Statement and branch coverage requirements.
-- Synthetic regression tests.
-- Explicit file staging.
-- No accidental dataset or credential commits.
-- Small, reviewable milestones.
-- Documentation updated alongside behavior changes.
-
-The next runtime milestone is preservation of partial investigation evidence
-when synthesis or provider generation fails.
+See [Architecture](architecture.md) for current boundaries and
+[Development](development.md) for commands and evaluation practice.

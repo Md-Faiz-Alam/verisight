@@ -1,338 +1,210 @@
 # VeriSight architecture
 
-## Scope
+## Boundaries
 
-VeriSight separates deterministic data processing from generative investigation.
-Models propose queries and conclusions; application code validates queries,
-executes them, and checks submitted numerical claims.
+VeriSight separates deterministic data processing from generative proposals.
+Models propose decisions, SQL, conclusions, and numerical claims. Application
+code validates queries, executes them, and checks referenced numerical values.
 
-The current verification boundary is referenced numerical evidence.
-Narrative correctness and analytical semantics remain outside that boundary.
+Numerical support, analytical correctness, and narrative correctness are
+separate questions. The current verifier addresses the first.
 
-## Public facade
+## Facade and deterministic processing
 
-`VeriSight` in `src/verisight/service.py` provides:
+`VeriSight` in `src/verisight/service.py` exposes `analyze`, `execute`, `ask`,
+and `investigate`. Inputs accept a string path, a `Path`, or an iterable of
+either. Empty collections and invalid entries are rejected.
 
-| Operation | Responsibility |
+CSV, JSON, and Excel loaders validate supported inputs and produce loaded
+relations. Schema inference, profiling, and quality rules produce deterministic
+analysis. Loader precision protections do not establish source-data accuracy.
+Nullable Excel boolean inference remains a known gap.
+
+Planner, investigator, repairer, and synthesizer dependencies support injection
+for deterministic tests and alternative behavior.
+
+## SQL execution and investigation
+
+The analytical service builds query context, plans SQL, validates it, and uses
+DuckDB to execute against loaded dataset relations. The executor disables
+external access and automatic extension loading/installation. Configured limits
+cover result rows, query execution time, memory, and temporary storage.
+These controls are not a complete deployment security assessment.
+
+A runtime SQL failure can trigger one query repair. The returned `QueryExecution`
+contains the successful plan and result; it does not retain a complete repair
+history. `ask()` returns only `QueryResult`.
+
+The orchestrator tracks successful observations and internal failed attempts.
+`max_steps` limits analytical attempts, including failures. It does not cap
+provider requests. Repeated normalized questions and exhausted step budgets
+produce incomplete results.
+
+Ordinary query validation, execution, and nonprovider planning failures can be
+recorded internally so the investigator can choose another bounded attempt.
+The final result does not yet expose those internal failed-attempt records.
+
+## Structured synthesis
+
+The default configured synthesizer is `StructuredInvestigationSynthesizer`.
+It sends a compact provider JSON schema while retaining strict local Pydantic
+validation. The provider schema does not replace the local contract.
+
+Local validation rejects unknown fields, duplicate JSON keys, nonstandard
+non-finite constants, invalid reference structures, unsupported operations, and
+invalid expected-value formats. Expected numbers must be decimal strings.
+The response allows at most 50 claims and a bounded nonblank conclusion.
+
+Plain JSON and supported JSON fences are accepted. One response-format repair
+is allowed. Feedback contains original bounded evidence and an approved error
+category, not the rejected response or raw validation details. Each prompt
+must pass the character budget before generation.
+
+Provider failures bypass format repair; bounded provider retries apply
+independently to each generation call. Contradicted claims do not trigger
+format repair. Legacy injected synthesizers may return plain text without
+structured claims.
+
+## Numerical verification and rendered statements
+
+`NumericalClaimVerifier` resolves observation, row, and named-column references.
+Supported operations are `value` and `difference` (left minus right).
+Decimal-based arithmetic avoids float coercion. Unsuitable cells, ambiguous
+columns, invalid references, and unsafe required arithmetic fail closed.
+
+Verdicts are `supported`, `contradicted`, and `unverifiable`. The direct Python
+claim API accepts an absolute tolerance. Structured model-generated claims
+use zero tolerance and cannot supply their own comparison policy. Controlled
+presentation rounding remains unimplemented.
+
+`InvestigationResult` computes `verified_claims` and `quantitative_statements`
+from generated claims and observations. Each immutable `ClaimLinkedStatement`
+contains a zero-based claim index, the verified claim, and application-rendered
+text showing operation, expected value, evidence value, tolerance, and verdict.
+Human-readable claim labels start at 1.
+
+Evidence references lead to observation rows, columns, and executed SQL. Rendered
+statements do not certify the conclusion, infer units, or establish causation.
+`verify_claims()` can create a separate `InvestigationVerificationReport` whose
+indexes refer to its own submitted claim sequence.
+
+## Narrative tokens and digit coverage
+
+`find_narrative_numbers()` scans the conclusion for a limited ASCII numerical
+syntax. Supported forms include signed integers and decimals, leading-dot
+values, scientific notation, conventional comma grouping, and a percentage
+suffix. Percentages compare the printed value: `25%` can match `25`, not `0.25`.
+
+Each `NarrativeNumberToken` stores original text, Python string offsets
+(`start` inclusive, `end` exclusive), a parsed Decimal or null, and matching
+zero-based claim indexes. Matching uses exact expected claim values, independent
+of verdict or tolerance. Repeated occurrences remain separate.
+
+`unlinked_numbers` contains detected tokens without matching submitted claims.
+Tokens with rejected syntax or conversion limits remain unlinked. The lexer
+excludes or misses formats including identifiers, dates, ranges, ratios, glued
+units, scaled suffixes, Unicode minus, Unicode digits, and number words.
+Standalone years and numbered headings can still be detected.
+
+`narrative_digit_coverage` provides a separate backstop. It counts characters
+recognized by `str.isdigit()`, including Unicode digits, and checks whether
+they fall inside successfully parsed tokens from that same conclusion.
+
+| Field | Meaning |
 | --- | --- |
-| `analyze` | Load datasets and build deterministic analysis |
-| `execute` | Validate and execute supplied SQL |
-| `ask` | Plan and execute a natural-language analytical request |
-| `investigate` | Coordinate bounded investigation and synthesis |
+| `total_digit_count` | Number of digit characters, including repeated occurrences |
+| `parsed_digit_count` | Digit characters within tokens with parsed values |
+| `unparsed_digit_count` | Remaining digit characters |
+| `status` | `no_digits`, `all_digits_parsed`, or `unparsed_digits` |
 
-Inputs may be a string path, a `Path`, or an iterable of either.
-Input validation rejects empty collections and invalid entries.
+Rejected tokens count as unparsed. This backstop does not normalize Unicode,
+interpret suffixes, split ranges, or infer numerical meaning. An empty
+`unlinked_numbers` list can coexist with `unparsed_digits`.
 
-Planner, investigator, repairer, and synthesizer dependencies support controlled
-substitution in tests.
+`all_digits_parsed` establishes character coverage only. It does not certify
+signs, units, matching claims, or truth. `no_digits` does not exclude number
+words. Digit counts and unlinked tokens are not hallucination metrics without
+independent semantic labels.
 
-## Ingestion and deterministic analysis
+These derived fields are rebuilt during result construction, including
+`dataclasses.replace`, and included in serialization. The fixed fields remain
+`narrative_verified=False` and
+`verification_scope="referenced_numeric_values_only"`.
 
-The ingestion layer dispatches supported CSV, JSON, and Excel inputs to loaders.
-Validation checks file and table constraints before downstream analysis.
+## Partial results and failure contracts
 
-Schema inference, profiling, and quality rules produce structured analysis
-results. These deterministic results supply context for investigation.
+`complete` means the workflow reached synthesis completion. It does not mean
+all claims are supported or the analytical answer is correct.
 
-Preservation of source meaning is a contract: identifiers, missing values,
-large integers, and text values must not be silently reinterpreted.
-Known remaining gaps include nullable Excel boolean inference.
-
-## Analytical execution
-
-The execution layer separates planning, validation, execution, and repair.
-
-1. A planner produces an analytical SQL plan.
-2. Validation checks the query against supported operations and relations.
-3. DuckDB executes the validated query under configured resource limits.
-4. Eligible failures may enter query repair.
-5. Successful execution produces a `QueryResult`.
-
-SQL restrictions and resource controls reduce risk. They do not establish that
-a query answers the intended question or provide a general operating-system
-sandbox.
-
-`ask()` returns `QueryResult`. Its public return value does not include a full
-planning and repair audit trail.
-
-## Investigation orchestration
-
-`InvestigationOrchestrator` maintains an `InvestigationState` containing the
-original question, deterministic analysis, observations, and failed attempts.
-
-The investigator decides whether to ask another analytical question or finish.
-Successful execution adds a `QueryObservation` containing the question, SQL,
-and query result.
-
-Selected query failures are recorded in internal investigation state.
-Repeated questions and exhausted analytical-step budgets terminate investigation
-with an incomplete result.
-
-`max_steps` bounds analytical attempts rather than total provider calls.
-
-Prompt-budget and incomplete-evidence paths preserve collected observations.
-Expected synthesis failures also return incomplete results with observations.
-Other errors, including provider failures during investigation decisions or
-query planning, can still escape without returning a partial result.
-Unexpected programming errors continue to raise.
-
-## Structured synthesis and format repair
-
-The default Gemini-enabled facade uses `StructuredInvestigationSynthesizer`.
-It serializes investigation state into a budgeted prompt and requests a JSON
-object containing a conclusion and numerical claims.
-The prompt treats investigation state as untrusted data.
-
-The response contract requires:
-
-- A nonblank conclusion.
-- At most 50 claims.
-- Decimal strings for expected values.
-- Supported operations: `value` or `difference`.
-- Explicit observation, row, and column references.
-- No unknown fields or model-selected tolerance.
-
-Duplicate JSON fields and nonstandard constants are rejected.
-Responses exceeding 60,000 characters are rejected.
-
-The parser accepts plain JSON or one complete code fence labeled `json`,
-case-insensitively, or with no language label. LF and CRLF line endings are
-supported. Surrounding prose and other language labels are not accepted as
-valid response wrappers.
-
-If response parsing or validation fails, the synthesizer permits one additional
-generation call for format repair. The repair prompt contains the original
-schema and evidence plus one application-defined validation category:
-
-- `invalid_json`
-- `invalid_schema_or_claim`
-- `response_too_large`
-
-The rejected response, raw validation messages, and parser input values are
-omitted from repair feedback. The repair prompt must pass the character budget
-before a second call is made.
-
-The second response passes the same strict parser and claim construction rules.
-A second format failure raises an `InvestigationError` subtype, which the
-orchestrator converts into an incomplete result with evidence preserved.
-
-Format repair does not repair SQL or establish numerical correctness.
-Successfully parsed claims still pass through deterministic verification.
-A contradicted claim does not trigger this format-repair mechanism.
-
-Provider-generation failures bypass format repair. Existing provider retry
-settings apply independently to each generation call. Consequently, two
-synthesis generation calls can involve more than two network requests.
-
-The synthesizer returns `StructuredSynthesis`. Legacy injected synthesizers may
-return plain text, which does not supply generated claims.
-
-## Numerical verification
-
-`NumericalClaimVerifier` resolves evidence references and evaluates numerical
-comparisons using Decimal-based arithmetic.
-
-References must identify an available observation, row, and unambiguous column.
-Nulls, booleans, strings, non-finite values, and invalid references cannot support
-a numerical claim.
-
-The verifier supports direct values and differences. Unsafe or inexact required
-arithmetic fails closed as `unverifiable`.
-
-Verdicts are `supported`, `contradicted`, and `unverifiable`.
-The direct claim API supports an absolute tolerance. Structured model-generated
-claims use zero tolerance and cannot override it.
-
-There is no separate rounded-match verdict or application rounding policy yet.
-
-## Investigation results and synthesis failures
-
-`InvestigationResult` contains:
-
-- Question and conclusion.
-- Deterministic analysis.
-- Collected observations.
-- Workflow status.
-- Generated numerical claims and computed `verified_claims`.
-- Computed `quantitative_statements` linked to those verified claims.
-- Computed `narrative_numbers` and `unlinked_numbers` for a limited token audit.
-- Fixed `narrative_number_audit_scope="ascii_numeric_tokens_only"`.
-- Optional `synthesis_failure` metadata.
-- Fixed `narrative_verified=False`.
-- Fixed `verification_scope="referenced_numeric_values_only"`.
-
-Verification is computed from generated claims and retained observations.
-`complete` is a workflow status rather than a certification of the conclusion.
-An empty claim list does not establish that a narrative has no numerical claims.
-
-A recorded synthesis failure requires `INCOMPLETE` status. Its kind is:
-
-| Kind | Meaning |
+| Failure path | Behavior |
 | --- | --- |
-| `provider_unavailable` | A typed transient provider-generation failure |
-| `provider_error` | Another typed provider-generation failure |
-| `synthesis_error` | Another expected synthesis failure, including invalid output |
+| Expected synthesis error or provider failure | Incomplete result with observations and `synthesis_failure` |
+| Expected investigator error after a successful observation | Incomplete result with `investigation_failure` |
+| Provider failure during later planning or repair | Incomplete result with `investigation_failure` |
+| Prompt-budget failure during a later query attempt | Incomplete result with `investigation_failure` |
+| Investigator/synthesis budget or incomplete-evidence failure | Incomplete result; failure metadata may be absent |
+| Provider failure before any successful observation | Can raise to the caller |
+| Unexpected programming error | Propagates |
 
-Failure classification follows explicit exception causes with cycle protection.
-Metadata retains existing safe provider diagnostics when available, without
-retaining exception objects or copying exception messages.
+`synthesis_failure` distinguishes `provider_unavailable`, `provider_error`, and
+`synthesis_error`. `investigation_failure` records a stage (`investigator` or
+`query_execution`), a safe kind, and optional provider diagnostics.
+`query_execution` covers planning, execution, and repair; it is not a precise
+planner-versus-repair trace.
 
-`synthesis_failure` is null when no such failure was recorded. It is not a
-complete description of every incomplete-result path. For example, a prompt
-budget failure can produce an incomplete result without synthesis metadata.
+Classification follows explicit exception causes with cycle protection.
+Metadata does not retain exceptions or copy raw messages. Both failure fields
+require incomplete status. They do not describe every incomplete path or
+replace full failed-attempt and repair history.
 
-The result still omits internal failed query attempts and repair history.
+## Provider requests and telemetry
 
-## Claim-linked quantitative statements
+`GeminiTextGenerationClient` disables SDK retries and applies bounded application
+retries to typed transient failures. Timeouts and retry settings come from
+Settings. Provider diagnostics can include HTTP status, retryability, attempts,
+a coarse generation stage, and a per-client call number.
 
-`InvestigationResult.quantitative_statements` provides one application-rendered
-statement per generated numerical claim. Each immutable `ClaimLinkedStatement`
-contains:
+`generation_telemetry.py` uses context-local capture scopes. Each recorded call
+contains stage, call number, attempts, elapsed seconds, and `returned_text`.
+Duration includes application retry delays. Calls outside a capture scope are
+not retained. Stages are inferred from response-schema fields; generic text
+calls do not distinguish planning from repair. Call numbers are not globally
+unique.
 
-- `claim_index`: a zero-based index into the result's generated and verified claims.
-- `verified_claim`: the corresponding claim and its numerical verdict.
-- `text`: computed from the operation, expected value, evidence value, absolute
-  tolerance, and verification status.
+Capture records no prompt, response, credential, or raw exception message.
+`returned_text=True` does not establish schema validity or answer correctness.
+Telemetry does not measure token usage, provider charges, or server-side work.
 
-Human-readable claim labels start at 1. The stored `claim_index` starts at 0.
-Evidence references in the linked claim lead to observation rows, columns,
-and the executed SQL.
+## Public boundary, serialization, and evaluation
 
-For example, a contradicted value claim can render as:
+Settings load environment variables and an optional `.env` file. Built-in
+provider generation requires a key and disclosure permission. Normal Settings
+serialization and representation exclude the key; application code can still
+access it as a string.
 
-> Claim 1 (value): expected 31; evidence 30; absolute tolerance 0; status contradicted.
+`run_public_operation` converts raised exceptions into fixed public reports.
+Unexpected internal errors are logged by exception type only. A returned
+incomplete investigation is a successful operation value; consumers must
+inspect its workflow status and metadata.
 
-An unavailable numerical result is rendered as `evidence unavailable`, with
-its `unverifiable` status. Decimal values are rendered without rounding or
-conversion to float. Tolerances remain visible, including tolerances supplied
-through the direct Python claim API.
+`to_jsonable` serializes supported domain results, including derived audits and
+safe failure metadata. Decimal values become strings. Full investigation results
+contain source evidence; content-free diagnostic metadata does not make the
+whole result safe to publish automatically.
 
-The model supplies conclusions and claims; the application computes statement
-text after verification. Statement text does not copy the generated conclusion,
-column labels, or interpretation. It does not infer units or causal meaning.
+The live evaluator uses the default investigation path with five temporary
+synthetic fixtures. It scores one VALUE claim against an independent expected
+metric. `correct_numeric` does not require complete digit coverage or certify
+narrative or SQL semantics. Incomplete results retain available failure metadata;
+escaping exceptions follow a separate failure-report path.
 
-`InvestigationVerificationReport` also exposes `quantitative_statements` for
-claims passed to `verify_claims()`. In that report, indexes refer to its own
-submitted claim sequence, which may differ from the investigation's generated
-claims.
+Saved reports include revision, tracked-change status, settings, timings,
+audits, and observed generation calls when available. Older reports may lack
+new fields. Missing telemetry is not evidence of zero provider calls.
 
-Statements are rebuilt when a result is constructed, including reconstruction
-with a changed claim sequence. Empty claim sequences produce empty statement
-sequences. This does not certify an empty or number-free narrative.
+## CI and remaining architecture work
 
-The original `conclusion` remains unverified. A separate numerical token audit
-reports unmatched tokens within a limited syntax. Neither the rendered statements
-nor token matching establish a semantic link between narrative sentences and
-submitted claims. Consumers can display quantitative statements with their
-explicit verdicts and expose the generated conclusion as unverified interpretation.
-
-## Numerical token audit of the conclusion
-
-`narrative_audit.py` scans the conclusion and compares detected numerical tokens
-with `generated_claims` expected values using exact Decimal equality.
-It does not match against observed values or apply claim tolerances.
-Calling `verify_claims()` with a separate claim sequence does not mutate the
-original investigation's audit.
-
-`InvestigationResult.narrative_numbers` records each detected token's text,
-zero-based Python string character offsets (`start` inclusive, `end` exclusive),
-parsed value, and matching zero-based `claim_indexes`.
-Multiple equal claims can match one token. Repeated occurrences remain separate.
-
-`unlinked_numbers` contains the original text of detected tokens without a
-matching submitted claim, in occurrence order, including repetitions.
-A conclusion containing `9999` with no corresponding claim reports that token.
-A conclusion containing a number with no submitted claims also reports it.
-
-Supported syntax includes ASCII integers, signed decimals, leading-dot decimals,
-scientific notation, and conventional three-digit comma grouping.
-A percentage suffix is retained in the token text. Matching compares the printed
-number: `25%` can match a claim of `25`, while it does not match `0.25`.
-Percentage scaling, units, and rounding are not inferred.
-
-Detected tokens longer than 128 characters, malformed grouping, leading-zero
-integer forms, and unconvertible exponents have a null parsed value and remain
-unlinked. Conversion does not use float or Python integer parsing.
-
-The lexer excludes word identifiers, dotted versions, and contiguous ASCII date
-or arithmetic forms such as `ID123`, `1.2.3`, `2026-10-19`, and `10-5`.
-Number words and unsupported Unicode signs are outside its syntax.
-Standalone years and numbered headings can still produce audit warnings.
-This audit cannot establish that every numerical assertion was detected.
-
-Linkage is independent of verification: a token can match a contradicted or
-unverifiable claim. Equal numbers also cannot establish direction, causation,
-units, filters, or whether a sentence describes the correct measurement.
-An empty `unlinked_numbers` sequence never sets `narrative_verified` to true.
-Use token counts as audit diagnostics; a hallucination metric requires
-independently labeled semantic outcomes.
-
-These computed fields are rebuilt on result construction and included in
-serialization. They preserve the original conclusion and workflow status.
-
-## Verification boundary
-
-Three questions must remain distinct:
-
-1. Does the submitted number match its referenced evidence?
-2. Does that evidence answer the analytical question correctly?
-3. Does the narrative accurately describe the evidence and its limitations?
-
-Current numerical verification addresses the first question.
-A supported claim can repeat the result of an incorrect join, filter, or
-denominator. A narrative can also contradict a supported claim.
-
-## Provider integration and public errors
-
-`GeminiTextGenerationClient` handles provider requests and bounded application
-retries. SDK retries are disabled by the client configuration.
-Retry policy and request timeout come from Settings.
-
-Safe diagnostics can include HTTP status, retryability, attempt count,
-inferred generation stage, and a per-client generation call number.
-Stages are coarse categories, not a complete distributed trace.
-
-`Settings` loads optional `.env` values and `VERISIGHT_` environment variables.
-Built-in generation requires an API key and disclosure permission.
-The key is excluded from normal Settings serialization and representation.
-It remains a string available to application code.
-
-`run_public_operation` translates raised failures into fixed public reports.
-Retryable Gemini failures can map to `provider_unavailable`.
-Unexpected internal failures are logged by exception type only.
-
-A returned incomplete investigation is a value at that public boundary.
-Callers must inspect investigation status and synthesis failure metadata in
-addition to checking whether the public operation raised an error.
-
-## Serialization and evaluation
-
-`to_jsonable` converts supported domain results into JSON-compatible structures.
-Decimal values are preserved as strings. Synthesis failure metadata is included
-in serialized investigation results.
-
-Deterministic benchmarks exercise numerical verification and SQL behavior with
-controlled generative components.
-The live evaluator exercises the default provider-backed investigation path on
-three temporary synthetic fixtures.
-
-An incomplete live result remains in the `incomplete` outcome bucket.
-Its `synthesis_failure` details are included when available.
-Exceptions that escape investigation retain the evaluator's separate failure
-classification path.
-
-Passing deterministic tests establishes reproducible implementation behavior.
-It does not establish correctness on every unfamiliar dataset or consistent
-live-provider availability.
-
-## Outstanding architectural work
-
-- Preserve partial evidence across remaining decision and planning failures.
-- Return failed query and repair provenance.
-- Link narrative findings to claim identities.
-- Define application-controlled rounding.
-- Extend independent semantic and ground-truth evaluation.
-- Improve nullable Excel boolean inference.
-- Remove private attribute assignment in legacy synthesis.
-- Add identifier-quoting instructions to planner and repair prompts.
-- Establish CI, deployment isolation, and operational acceptance criteria.
+`.github/workflows/ci.yml` runs offline gates on Windows and Linux with Python
+3.11. Deployment isolation, cancellation, workload limits, richer provenance,
+controlled rounding, semantic evaluation, and the end-user workflow remain
+separate acceptance work. See [Roadmap](roadmap.md).

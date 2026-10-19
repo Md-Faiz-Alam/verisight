@@ -1,10 +1,10 @@
 # VeriSight development guide
 
-## Setup
+## Setup and repository layout
 
-Use Python 3.11 or newer.
+Use Python 3.11 or newer. CI currently tests Python 3.11 on Windows and Linux.
 
-From the repository root in Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
 python -m venv .venv
@@ -12,7 +12,7 @@ python -m venv .venv
 python -m pip install -e ".[dev]"
 ```
 
-On macOS or Linux:
+macOS or Linux:
 
 ```bash
 python3 -m venv .venv
@@ -20,25 +20,23 @@ source .venv/bin/activate
 python -m pip install -e ".[dev]"
 ```
 
-Dependencies and tool configuration are defined in `pyproject.toml`.
-
-## Repository responsibilities
+Dependencies and tool configuration live in `pyproject.toml`. The development
+scripts run from the repository root and are not included by the current
+`src` package discovery configuration.
 
 | Location | Responsibility |
 | --- | --- |
-| `src/verisight/ingestion/` | File validation, loading, and schema handling |
-| `src/verisight/execution/` | SQL, provider integration, investigation, and verification |
+| `src/verisight/ingestion/` | Validation, loaders, and schema inference |
+| `src/verisight/execution/` | SQL, generation, investigation, and verification |
 | `src/verisight/service.py` | Public Python facade |
-| `src/verisight/error_reporting.py` | Safe public error classification |
-| `src/verisight/public_api.py` | Framework-independent operation boundary |
-| `tests/` | Automated regression and benchmark tests |
+| `src/verisight/error_reporting.py` | Fixed public error classification |
+| `src/verisight/public_api.py` | Operation boundary |
+| `tests/` | Offline regression and development benchmark tests |
 | `scripts/` | Development evaluation utilities |
-| `docs/` | Architecture, development guidance, and roadmap |
+| `reports/evaluations/` | Reviewed evaluation evidence |
+| `.github/workflows/ci.yml` | Automated quality gates |
 
-The `scripts` package is used from the repository root. It is not included by
-the current `src` package discovery configuration.
-
-## Required quality gate
+## Required gates and CI
 
 Run from the repository root:
 
@@ -46,176 +44,140 @@ Run from the repository root:
 ruff format .
 ruff format --check .
 ruff check .
-mypy src tests scripts
+mypy --strict src tests scripts
 python -m pytest --cov=verisight --cov=scripts --cov-report=term-missing --cov-fail-under=100
 git diff --check
 ```
 
-The project configures strict mypy checking and branch coverage.
+Include `scripts` explicitly in mypy and coverage commands. The project enables
+branch coverage. Full coverage is an engineering gate, not proof of analytical
+correctness.
 
-Include `scripts` explicitly in type checking and coverage. The default
-configuration alone does not cover that entire development surface.
+CI runs formatting, lint, strict mypy, full offline coverage, and whitespace
+checks on Python 3.11 with `ubuntu-latest` and `windows-latest`. It triggers on
+pushes to `main`, pull requests, and manual dispatch. Jobs have a 15-minute
+limit and fail independently. CI uses read-only repository permissions, pinned
+action commits, and no provider credentials or live evaluations.
 
-Use focused tests while changing behavior, then run the complete gate for
-runtime changes.
+Dependencies are resolved within the ranges in `pyproject.toml`; the project
+does not yet have a committed dependency lock. Record installed versions when
+investigating differences between local and hosted runs.
 
-Documentation-only changes require checking accuracy, examples, links, and the
-diff. They do not require inventing tests solely to exercise documentation.
+Use focused tests while changing behavior, then run the full gate for runtime
+changes. Documentation-only changes require checking accuracy, examples, links,
+and diffs. Do not invent runtime tests solely for documentation edits.
 
-## Test design
+## Test contracts
 
-Use synthetic inputs and deterministic substitutes for external generation.
+Use synthetic data and deterministic generation substitutes. Test meaningful
+behavior: source-value preservation, SQL guards, independent analytical answers,
+partial evidence, safe metadata, serialization, and numerical boundaries.
+Use short explicit parameter IDs for large or unusual fixtures.
 
-Tests should establish behavior that matters:
+Keep these distinctions visible:
 
-- Source-value preservation.
-- Correct input validation.
-- SQL validation and resource-limit handling.
-- Known analytical answers.
-- Safe failure classification.
-- Evidence retention.
-- Numerical comparison boundaries.
-- Serialization and secret exclusion.
+- Evidence support versus analytical correctness.
+- Workflow completion versus verified correctness.
+- Missing claims versus justified abstention.
+- Unverifiable versus contradicted values.
+- Token linkage versus digit coverage versus narrative meaning.
 
-Do not treat 100% coverage as proof of analytical correctness.
+Structured generated claims use decimal strings and zero tolerance. The model
+cannot choose a tolerance. Keep `narrative_verified=False` and
+`verification_scope="referenced_numeric_values_only"` unless a separately
+specified, implemented, and evaluated contract replaces them.
 
-Extend an existing relevant test file when practical. Create a new test module
-when it represents a distinct responsibility.
+Recovery tests should cover failures after real successful SQL execution,
+serialization of retained evidence, and failure redaction. Unexpected programming
+errors must remain distinguishable. Current expected-failure recovery does not
+provide complete attempt or repair history.
 
-## Numerical verification contracts
+## Deterministic and live evaluation
 
-The current verifier supports `value` and `difference`.
-
-Generated claims identify observation rows and named columns. Structured
-generation requires decimal strings and does not accept a model-selected
-tolerance.
-
-Preserve these distinctions:
-
-- Numerical support versus analytical correctness.
-- Workflow completion versus answer correctness.
-- No submitted claims versus justified abstention.
-- Unverifiable evidence versus contradicted evidence.
-- Exact comparison versus a future rounded presentation policy.
-
-The fixed result fields are:
-
-```text
-narrative_verified = False
-verification_scope = referenced_numeric_values_only
-```
-
-Changes to this contract require implementation, regression tests, and matching
-documentation updates.
-
-## Deterministic benchmark
-
-Run:
+Run the offline development benchmark:
 
 ```powershell
 python -m pytest tests/test_verification_benchmark.py -q
 ```
 
-The benchmark includes five-domain numerical scenarios and adversarial SQL
-examples.
+Expected answers must be independent of generated SQL and claims. Adversarial
+cases demonstrate that an analytically wrong query can produce a supported
+claim.
 
-Expected answers must be independent of the generated SQL and submitted claims.
-Otherwise a wrong query can become its own correctness oracle.
-
-The adversarial cases deliberately demonstrate that a supported claim can repeat
-the result of an analytically wrong query.
-
-## Live evaluation
-
-Configure the API key locally, then run:
+The live runner has five known fixtures: finance, retail, manufacturing,
+healthcare, and logistics. It creates temporary synthetic files, enables
+disclosure for those fixtures, and calls the real configured provider path.
+A key is required; calls may incur charges.
 
 ```powershell
 python -m scripts.live_evaluation --live --case finance
+New-Item -ItemType Directory -Force reports/evaluations | Out-Null
+$evaluationStamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
+python -m scripts.live_evaluation --live --case all --request-timeout-seconds 60 --provider-retries 1 --output "reports/evaluations/live-$evaluationStamp.json"
 ```
 
-To run all current synthetic cases:
+| Control | Default |
+| --- | --- |
+| Case | `finance` |
+| Analytical attempts per case | 1 |
+| Provider request timeout | 20 seconds |
+| Additional provider retries per generation call | 0 |
+| SQL execution timeout | 5 seconds |
+| Maximum query result rows | 20 |
 
-```powershell
-python -m scripts.live_evaluation --live --case all
-```
+`--request-timeout-seconds` accepts a finite positive value.
+`--provider-retries` accepts integers from 0 through 5. These overrides apply
+only to that evaluation invocation; they do not change application defaults.
+One analytical attempt can require several generation calls and retries.
 
-The evaluator creates temporary synthetic files and explicitly enables provider
-disclosure for those fixtures.
+JSON is printed. `--output` additionally saves to a new file whose parent must
+exist. Existing files are not overwritten.
 
-Its current settings include:
-
-- One analytical step per case.
-- Zero application provider retries.
-- A 20-second provider request timeout.
-- A five-second SQL execution limit.
-- At most 20 query result rows.
-
-One analytical step may involve multiple provider requests.
-
-The script prints a JSON report. Exit codes are:
-
-| Code | Meaning |
+| Exit code | Meaning |
 | --- | --- |
 | `0` | Every selected case received `correct_numeric` |
-| `1` | At least one case had another outcome |
-| `2` | Argument or configuration failure |
+| `1` | At least one selected case had another outcome |
+| `2` | Argument, configuration, or report-save failure |
 
-Do not silently discard failed runs. Provider errors, missing claims, incomplete
-investigations, and incorrect answers are part of evaluation evidence.
+Reports retain revision, tracked-file change status, model, settings, timings,
+all case outcomes, token counts, digit coverage, and available failure metadata.
+Observed client calls include attempts, duration, and whether text returned.
+No raw conclusion is included by the scorer. Review reports before committing.
 
-Current fixtures are development cases, not a held-out benchmark.
+`tracked_changes` excludes untracked files and is not a full dependency or
+fixture fingerprint. Older reports lack newer fields; absence is not zero.
+`number_audit_summary` summarizes token diagnostics, not semantic verification
+or complete digit coverage. Inspect each case's `narrative_digit_coverage`.
 
-## Provider troubleshooting
+Retain failed runs. Separate completion, availability, numerical correctness,
+and latency metrics. Report denominators and group comparable revisions and
+settings. Known fixtures are not held-out generalization evidence. A successful
+run with retries configured does not establish that a retry actually occurred;
+use generation telemetry when available.
 
-Use safe diagnostic fields instead of raw exception text:
+## Diagnostics and disclosure
 
-- HTTP status.
-- Retryability.
-- Attempt count.
-- Stage.
-- Per-client call number.
+Use safe diagnostics instead of raw provider exception text. Keep connectivity,
+format validity, SQL execution, numerical support, and analytical correctness
+separate. Do not infer a failure's cause from an SDK warning alone.
 
-Keep transport failures separate from response-format failures and analytical
-errors.
+Token audits may miss unsupported number formats. Digit coverage flags unparsed
+digit characters but does not interpret them. Number words remain outside the
+coverage check, and `all_digits_parsed` does not certify a narrative.
 
-A connectivity test that returns text establishes only that that request
-succeeded. It does not establish successful SQL planning, synthesis, or numerical
-correctness.
+Built-in generation requires disclosure permission and can send schema,
+profiles, questions, and query results. Never send local datasets merely because
+they exist in the working directory. Keep credentials, private datasets, raw
+provider messages, and rejected responses out of diagnostic artifacts.
+Full investigation results contain evidence and may be sensitive.
 
-Do not change timeouts or retry counts without recording the changed settings.
-Do not interpret an SDK warning as the cause of a failure without evidence.
+## Review and commit workflow
 
-## Security and disclosure
-
-Keep credentials out of commits, examples, logs, and evaluation artifacts.
-
-Built-in generation requires disclosure permission. Prompts can contain schema,
-profiling context, questions, and query results.
-
-Use synthetic data for ordinary tests and live development fixtures.
-Do not send local datasets to a provider merely because they exist in the
-working directory.
-
-The API key is excluded from normal Settings serialization. This is not a
-guarantee against every possible way application code could expose a string.
-
-Treat dataset text and model output as untrusted inputs.
-
-## Development workflow
-
-1. Inspect the current implementation and existing tests.
-2. Define a small observable behavior change.
-3. Implement it using existing public contracts where possible.
-4. Add regression tests for the concrete failure.
-5. Run focused checks and the appropriate quality gate.
-6. Update documentation when behavior or limitations change.
-7. Review the complete diff.
-8. Stage only the intended files.
-
-Use explicit paths when staging. Do not use `git add .` for routine milestones
-when local datasets or unrelated files are present.
-
-Before committing:
+1. Inspect implementation and tests; define an observable change.
+2. Implement and add regressions for concrete failure cases.
+3. Run appropriate checks and update affected documentation.
+4. Review the diff and explicitly stage intended files.
+5. Inspect staged contents, commit, and check CI.
 
 ```powershell
 git status --short
@@ -225,31 +187,7 @@ git diff --cached --stat
 git diff --cached --name-only
 ```
 
-Inspect staged contents, not only their filenames.
-
-## Documentation maintenance
-
-Update documentation when changing:
-
-- Public methods or result contracts.
-- Verification scope and verdicts.
-- Error classification.
-- Provider diagnostics or retries.
-- Evaluation fixtures, metrics, or commands.
-- Installation and deployment behavior.
-
-Avoid undated test-count badges or unsupported readiness percentages.
-Separate implemented behavior from proposed work.
-
-## Current engineering priorities
-
-1. Preserve evidence when synthesis or provider generation fails.
-2. Expose structured failure provenance.
-3. Link report statements to numerical claims.
-4. Define application-controlled rounding behavior.
-5. Expand independent evaluations and retain reproducible results.
-6. Resolve remaining ingestion and prompt-contract gaps.
-7. Add continuous integration.
-
-There is no committed CI workflow in the reviewed project snapshot.
-Local gates remain necessary until automated CI is implemented.
+Do not use `git add .` when unrelated files or local datasets are present.
+Do not stage `datasets/`. Avoid undated test-count badges and unsupported
+completion percentages. See [Architecture](architecture.md) for current
+contracts and [Roadmap](roadmap.md) for remaining acceptance work.

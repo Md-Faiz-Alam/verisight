@@ -2,13 +2,12 @@
 
 An evidence-verifying autonomous investigator for structured tabular datasets.
 
-VeriSight loads data, profiles its structure and quality, executes analytical SQL,
-and supports Gemini-driven investigations. Its default investigation synthesizer
-produces structured numerical claims that are checked against collected query
-results.
+VeriSight loads and profiles data, executes analytical SQL, and supports
+Gemini-driven investigations. Its default synthesizer produces structured
+numerical claims that application code checks against collected query results.
 
-Numerical support does not establish that a narrative, SQL query, or analytical
-interpretation is correct.
+A supported number does not establish that the SQL, interpretation, or narrative
+is correct. Narrative verification remains explicitly false.
 
 ## Current capabilities
 
@@ -16,23 +15,23 @@ interpretation is correct.
 | --- | --- |
 | CSV, JSON, and Excel ingestion | Implemented |
 | Schema inference, profiling, and data-quality analysis | Implemented |
-| Validated analytical SQL execution with DuckDB | Implemented |
-| Gemini-driven query planning and repair | Implemented |
-| Bounded multi-step investigations | Implemented |
-| Structured synthesis with automatic numerical verification | Implemented |
-| Safe public error reports and provider diagnostics | Implemented |
-| Deterministic verification benchmark | Implemented |
-| Opt-in synthetic live evaluation | Implemented |
-| Verification of narrative meaning and claim completeness | Not established |
-| General analytical correctness across unfamiliar domains | Not established |
-| Consistent preservation of observations after synthesis failures | Incomplete |
+| Validated DuckDB queries with configured resource limits | Implemented |
+| Gemini planning, query repair, and bounded investigations | Implemented |
+| Structured synthesis and numerical claim verification | Implemented |
+| Application-rendered statements linked to claims | Implemented |
+| Limited narrative token audit and Unicode digit coverage | Implemented |
+| Evidence recovery for tested expected workflow failures | Implemented |
+| Safe failure metadata and generation telemetry | Implemented |
+| Deterministic tests and five synthetic live evaluation cases | Implemented |
+| Python 3.11 CI on Windows and Linux | Implemented |
+| Narrative meaning and analytical correctness on unfamiliar data | Not established |
 | End-user application and production deployment | Remaining work |
 
-## Requirements and installation
+## Installation
 
-Python 3.11 or newer is required.
+Python 3.11 or newer is required. CI currently exercises Python 3.11.
 
-From the repository root, using Windows PowerShell:
+Windows PowerShell, from the repository root:
 
 ```powershell
 python -m venv .venv
@@ -40,7 +39,7 @@ python -m venv .venv
 python -m pip install -e ".[dev]"
 ```
 
-On macOS or Linux:
+macOS or Linux:
 
 ```bash
 python3 -m venv .venv
@@ -50,7 +49,7 @@ python -m pip install -e ".[dev]"
 
 ## Local analysis and SQL
 
-This example creates temporary synthetic data and requires no Gemini API key.
+This example uses temporary synthetic data and requires no Gemini API key.
 
 ```python
 from pathlib import Path
@@ -65,230 +64,199 @@ with TemporaryDirectory() as directory:
         "amount,state\n100,posted\n-20,posted\n50,pending\n",
         encoding="utf-8",
     )
-
     app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
-
     analysis = app.analyze(path)
     result = app.execute(
         path,
         "SELECT SUM(amount) AS net_amount FROM transactions WHERE state = 'posted'",
     )
-
     print(result.columns)
     print(result.rows)
 ```
 
-The public methods accept a file path or an iterable of file paths. Empty inputs
-and invalid entries are rejected.
+Expected query result: column `net_amount`, row `(80,)`.
 
 | Method | Purpose | Return type |
 | --- | --- | --- |
-| `analyze(paths)` | Deterministic profiling and quality analysis | `DatasetAnalysisResult` |
+| `analyze(paths)` | Profile data and assess quality | `DatasetAnalysisResult` |
 | `execute(paths, query)` | Execute supplied analytical SQL | `QueryResult` |
-| `ask(paths, question)` | Plan and execute a natural-language query | `QueryResult` |
-| `investigate(paths, question, max_steps=5)` | Investigate and synthesize findings | `InvestigationResult` |
+| `ask(paths, question)` | Plan and execute a question | `QueryResult` |
+| `investigate(paths, question, max_steps=5)` | Investigate and synthesize | `InvestigationResult` |
 
-`ask()` currently returns query data without a public planning or repair history.
+Inputs accept a string path, a `Path`, or an iterable of either. Empty inputs
+and invalid entries are rejected. `ask()` does not expose planning or repair
+history in its return value.
 
-## Gemini configuration
+## Gemini investigations
 
-Settings load from environment variables and an optional `.env` file using the
-`VERISIGHT_` prefix.
-
-For the default Gemini components, configure:
+Configure a local `.env` file or environment variables:
 
 ```dotenv
 VERISIGHT_GEMINI_API_KEY=replace-with-your-key
 VERISIGHT_ALLOW_LLM_DATA_DISCLOSURE=true
 ```
 
-Set `VERISIGHT_GEMINI_MODEL` when overriding the model configured in
-`src/verisight/config.py`.
+Set `VERISIGHT_GEMINI_MODEL` to override the configured model. Check available
+models and quotas for your provider project. Disclosure permission defaults to
+false. Enabling it permits built-in generation to send analytical context,
+including schema, profiles, questions, and query observations.
 
-Disclosure permission defaults to false. Enabling it permits the built-in
-generative workflow to send analytical context to Gemini. This context can
-include schema, profiling information, questions, and query observations.
+The API key is excluded from normal Settings serialization and representation.
+It remains a string accessible to application code. Never commit credentials
+or private datasets.
 
-The API key is excluded from Settings representations and normal model
-serialization. It remains available to application code as a string.
-
-Never commit credentials or private datasets.
-
-## Autonomous investigations
-
-With Gemini configured and an existing supported dataset:
+With Gemini configured and a supported dataset available:
 
 ```python
 from verisight import VeriSight
 from verisight.config import Settings
 
 app = VeriSight(settings=Settings())
-
 result = app.investigate(
     "transactions.csv",
     "What is the net posted amount? Exclude pending transactions.",
     max_steps=3,
 )
-
 print(result.status.value)
 print(result.conclusion)
-print(result.verification_scope)
-print(result.narrative_verified)
-
-for item in result.verified_claims:
-    print(
-        item.verification.status.value,
-        item.verification.expected,
-        item.verification.actual,
-    )
+print(result.narrative_digit_coverage)
+for statement in result.quantitative_statements:
+    print(statement.text)
 ```
 
-`max_steps` limits analytical attempts. It is not a limit on the total number
-of provider requests: investigation decisions, query planning, repair, and
-synthesis can each require a request.
+`max_steps` limits analytical attempts, including failed attempts. It does not
+limit provider calls: decisions, planning, repair, and synthesis may each
+require generation. `StructuredInvestigationSynthesizer` is the default for
+configured Gemini investigations. Custom components can be injected.
 
-The default configured synthesizer is `StructuredInvestigationSynthesizer`.
-Custom components can be injected for testing or alternative behavior.
+## Verification and narrative audit
 
-## What numerical verification establishes
+Claims reference observation rows and named columns. Supported operations are
+`value` and `difference` (left minus right). Verdicts are `supported`,
+`contradicted`, or `unverifiable`.
 
-Generated claims refer to observation rows and named result columns.
+Structured model-generated claims require decimal strings and use zero
+tolerance. The model cannot choose a tolerance. A rounded presentation can
+therefore be contradicted. An application-controlled rounding policy remains
+future work.
 
-The current supported operations are:
+Results expose `generated_claims`, `verified_claims`, and application-rendered
+`quantitative_statements`. The fixed scope is
+`verification_scope="referenced_numeric_values_only"`; `narrative_verified`
+remains false. A `complete` workflow does not certify answer correctness.
 
-- `value`: compare an expected number with one evidence cell.
-- `difference`: compare an expected number with left minus right evidence cells.
+The conclusion has two supplementary diagnostics:
 
-Each claim receives one verdict:
+- `narrative_numbers` and `unlinked_numbers` compare supported ASCII numerical
+  tokens with submitted claim values. Equal values do not establish semantic
+  linkage, and tokens can link to contradicted claims.
+- `narrative_digit_coverage` counts Unicode digit characters inside and outside
+  successfully parsed tokens. Its statuses are `no_digits`, `all_digits_parsed`,
+  and `unparsed_digits`.
 
-| Verdict | Meaning |
-| --- | --- |
-| `supported` | The referenced numerical evidence matches under the claim's comparison policy |
-| `contradicted` | The numerical comparison could be performed and did not match |
-| `unverifiable` | The evidence or required arithmetic could not be safely evaluated |
+Neither diagnostic verifies narrative meaning. `all_digits_parsed` does not
+validate signs, units, or truth. `no_digits` can include number words.
+Unsupported formats such as `12k`, `3.5x`, Unicode minus, and ranges can produce
+`unparsed_digits` even when `unlinked_numbers` is empty.
 
-Structured model-generated claims use zero tolerance. The model cannot supply
-its own tolerance. Rounded values can therefore be contradicted even when they
-would be acceptable under a separate presentation-rounding policy.
+A wrong join, filter, or denominator can produce a number that a claim correctly
+repeats. Numerical verification does not establish causation, source quality,
+or completeness of generated claims.
 
-Verification rejects unsuitable evidence such as booleans, numeric-looking
-strings, non-finite values, ambiguous columns, and invalid references.
+## Partial results and safe diagnostics
 
-Every investigation result exposes:
+Observations retain questions, SQL, and query results. Expected synthesis
+failures return `incomplete` with observations and optional `synthesis_failure`.
+After at least one successful observation, expected investigator failures and
+provider failures during planning or repair return `incomplete` with
+`investigation_failure`. Later query-attempt prompt-budget failures also
+preserve observations.
 
-- `generated_claims`
-- `verified_claims`
-- `verification_scope="referenced_numeric_values_only"`
-- `narrative_verified=False`
+Provider failures before evidence collection can still raise. Unexpected
+programming errors propagate. Recovery is not a guarantee that every possible
+failure returns a partial result.
 
-A `complete` investigation means the workflow completed. It does not mean every
-claim is supported or that the conclusion is correct.
+`run_public_operation` converts raised exceptions into fixed public errors.
+A returned incomplete investigation is a successful operation value: inspect
+its workflow status and failure metadata. `to_jsonable` in
+`verisight.serialization` prepares results for JSON, preserving Decimal values
+as strings.
 
-The verifier does not establish:
-
-- Whether the conclusion accurately expresses the submitted claims.
-- Whether every material numerical statement has a submitted claim.
-- Whether SQL uses the correct filters, joins, units, or denominator.
-- Whether a relationship is causal.
-- Whether the source data is accurate or representative.
-
-A wrong query can produce a number that a claim correctly repeats.
-
-## Evidence, errors, and serialization
-
-Investigation observations retain analytical questions, SQL, and query results.
-Use `verisight.serialization.to_jsonable` to prepare supported result objects
-for JSON serialization.
-
-`run_public_operation` in `verisight.public_api` converts exceptions into safe
-public reports. Codes distinguish ingestion, query, configuration, prompt-budget,
-and other failures. Retryable Gemini failures can map to `provider_unavailable`.
-
-Unexpected internal failures are logged by exception type without raw exception
-messages or tracebacks.
-
-Provider exceptions can carry safe diagnostics: HTTP status, retryability,
-attempt count, generation stage, and a per-client call number.
-
-Some synthesis and provider failures still raise instead of returning an
-incomplete investigation with accumulated observations.
+Safe provider diagnostics include HTTP status, retryability, attempts, a coarse
+stage, and a per-client call number. Evaluation telemetry records generation
+attempts, elapsed time, and whether text returned, without prompts or responses.
+Returning text does not imply valid JSON or a correct answer.
 
 ## Evaluation
 
-Run the deterministic benchmark:
+Run the deterministic development benchmark:
 
 ```powershell
 python -m pytest tests/test_verification_benchmark.py -q
 ```
 
-It includes numerical verification scenarios across five domains and adversarial
-cases demonstrating that numerical support does not establish analytical
-correctness. These are development fixtures, not a held-out generalization test.
-
-The opt-in live evaluator uses temporary synthetic data:
+The opt-in live evaluator uses five temporary synthetic fixtures: finance,
+retail, manufacturing, healthcare, and logistics. Each permits one analytical
+step and scores one numerical answer against an independent expected value.
 
 ```powershell
 python -m scripts.live_evaluation --live --case finance
-python -m scripts.live_evaluation --live --case all
+New-Item -ItemType Directory -Force reports/evaluations | Out-Null
+$evaluationStamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
+python -m scripts.live_evaluation --live --case all --request-timeout-seconds 60 --provider-retries 1 --output "reports/evaluations/live-$evaluationStamp.json"
 ```
 
-Live calls require a configured API key and may incur provider charges.
-The evaluator explicitly enables disclosure for its synthetic fixtures.
+Live calls require a key and may incur charges. The evaluator enables disclosure
+for its synthetic fixtures. Defaults remain 20 seconds per request and zero
+additional provider retries; overrides are recorded.
 
-Its three cases cover finance, retail, and manufacturing. Each permits one
-analytical step and scores a single numerical answer against an independent
-expected value.
+JSON is printed and optionally saved with `--output`. The parent directory must
+exist and an existing file is never overwritten. Reports retain revision,
+tracked-change status, settings, timings, outcomes, audits, and available failure
+and generation metadata. Older reports may lack newer fields.
 
-Outcomes distinguish correct and incorrect numerical answers, unverified
-answers, missing or ambiguous claims, incomplete investigations, and failures.
-A `no_claims` response is not automatically a correct abstention.
+`correct_numeric` scores the submitted metric; it does not certify prose or SQL
+semantics. `no_claims` is not automatically a justified abstention. Retain failed
+runs. These known fixtures are not a held-out generalization benchmark.
 
-The evaluator prints JSON. It does not automatically save a report.
-Passing offline tests does not establish live-provider reliability.
-
-## Development checks
-
-Run from the repository root:
+## Quality gates and CI
 
 ```powershell
 ruff format --check .
 ruff check .
-mypy src tests scripts
+mypy --strict src tests scripts
 python -m pytest --cov=verisight --cov=scripts --cov-report=term-missing --cov-fail-under=100
 git diff --check
 ```
 
-Coverage includes statements and branches. Full coverage measures exercised
-code paths, not universal analytical correctness.
+[GitHub Actions](https://github.com/Md-Faiz-Alam/verisight/actions) runs these gates
+on Windows and Linux with Python 3.11 for pushes to `main`, pull requests, and
+manual dispatch. CI uses offline tests without provider credentials. Full
+statement and branch coverage measures exercised paths, not universal accuracy.
 
-## Known limitations and next work
+## Remaining work
 
-- Preserve observations and failure provenance when synthesis fails.
-- Link report statements to structured claims.
-- Introduce an application-controlled rounding policy.
-- Expand independently scored evaluations and retain reproducible live results.
-- Improve nullable Excel boolean inference.
-- Expose investigation failure and repair history.
-- Add identifier-quoting guidance to planning and repair prompts.
-- Remove private cross-object configuration in the legacy synthesizer.
-- Add continuous integration and establish deployment acceptance criteria.
+- Define controlled rounding and evaluate analytical semantics independently.
+- Expand held-out questions, multi-step cases, and baseline comparisons.
+- Expose failed-attempt and repair history.
+- Improve nullable Excel boolean inference and identifier-quoting guidance.
+- Remove private cross-object configuration in legacy synthesis.
+- Build the user workflow, report export, and deployment acceptance evidence.
 
-See [Architecture](docs/architecture.md),
-[Development](docs/development.md), and [Roadmap](docs/roadmap.md).
+See [Architecture](docs/architecture.md), [Development](docs/development.md),
+and [Roadmap](docs/roadmap.md).
 
 ## Dataset attribution
 
-Local development has used the Bank Marketing dataset associated with:
+Local development has used Bank Marketing, associated with:
 
 Moro, S., Cortez, P., and Rita, P. (2014).
 *A Data-Driven Approach to Predict the Success of Bank Telemarketing.*
 Decision Support Systems, 62, 22–31.
 
-Dataset source:
-[UCI Machine Learning Repository — Bank Marketing](https://archive.ics.uci.edu/dataset/222/bank+marketing).
-
-Check applicable dataset licensing before redistribution. Local datasets are
-not part of the standard source-code commit workflow.
+Source: [UCI Bank Marketing](https://archive.ics.uci.edu/dataset/222/bank+marketing).
+Check applicable licensing before redistribution. Local datasets are not part
+of the standard source-code commit workflow.
 
 ## License
 
