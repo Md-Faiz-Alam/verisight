@@ -154,6 +154,7 @@ There is no separate rounded-match verdict or application rounding policy yet.
 - Collected observations.
 - Workflow status.
 - Generated numerical claims and computed `verified_claims`.
+- Computed `quantitative_statements` linked to those verified claims.
 - Optional `synthesis_failure` metadata.
 - Fixed `narrative_verified=False`.
 - Fixed `verification_scope="referenced_numeric_values_only"`.
@@ -179,6 +180,49 @@ complete description of every incomplete-result path. For example, a prompt
 budget failure can produce an incomplete result without synthesis metadata.
 
 The result still omits internal failed query attempts and repair history.
+
+## Claim-linked quantitative statements
+
+`InvestigationResult.quantitative_statements` provides one application-rendered
+statement per generated numerical claim. Each immutable `ClaimLinkedStatement`
+contains:
+
+- `claim_index`: a zero-based index into the result's generated and verified claims.
+- `verified_claim`: the corresponding claim and its numerical verdict.
+- `text`: computed from the operation, expected value, evidence value, absolute
+  tolerance, and verification status.
+
+Human-readable claim labels start at 1. The stored `claim_index` starts at 0.
+Evidence references in the linked claim lead to observation rows, columns,
+and the executed SQL.
+
+For example, a contradicted value claim can render as:
+
+> Claim 1 (value): expected 31; evidence 30; absolute tolerance 0; status contradicted.
+
+An unavailable numerical result is rendered as `evidence unavailable`, with
+its `unverifiable` status. Decimal values are rendered without rounding or
+conversion to float. Tolerances remain visible, including tolerances supplied
+through the direct Python claim API.
+
+The model supplies conclusions and claims; the application computes statement
+text after verification. Statement text does not copy the generated conclusion,
+column labels, or interpretation. It does not infer units or causal meaning.
+
+`InvestigationVerificationReport` also exposes `quantitative_statements` for
+claims passed to `verify_claims()`. In that report, indexes refer to its own
+submitted claim sequence, which may differ from the investigation's generated
+claims.
+
+Statements are rebuilt when a result is constructed, including reconstruction
+with a changed claim sequence. Empty claim sequences produce empty statement
+sequences. This does not certify an empty or number-free narrative.
+
+The original `conclusion` remains unverified. This report does not extract its
+numbers, detect every omitted claim, or establish a semantic link between its
+sentences and the submitted claims. Consumers can display the computed
+quantitative statements with their explicit verdicts and expose the generated
+conclusion as unverified interpretation.
 
 ## Verification boundary
 

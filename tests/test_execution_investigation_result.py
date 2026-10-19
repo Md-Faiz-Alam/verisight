@@ -1,4 +1,6 @@
 import json
+from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -25,6 +27,7 @@ from verisight.execution.investigation_result import (
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
 from verisight.execution.planning import QueryPlan, QueryRequest
+from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 from verisight.ingestion.schema import DatasetSchema
 from verisight.profiling.models import DatasetProfile
 from verisight.serialization import to_jsonable
@@ -78,6 +81,7 @@ def test_investigation_result_can_have_no_observations() -> None:
 
     assert result.observations == ()
     assert result.observation_count == 0
+    assert result.quantitative_statements == ()
 
 
 @pytest.mark.parametrize(
@@ -213,6 +217,16 @@ def test_verification_benchmark_uses_real_investigation_sql(
         VerificationStatus.CONTRADICTED,
         VerificationStatus.UNVERIFIABLE,
     )
+    assert tuple(
+        statement.claim_index for statement in report.quantitative_statements
+    ) == (
+        0,
+        1,
+        2,
+        3,
+    )
+    for index, statement in enumerate(report.quantitative_statements):
+        assert statement.verified_claim is report.verified_claims[index]
     assert report.verified_claims[1].verification.actual == difference
     assert report.verification_scope == "referenced_numeric_values_only"
     serialized = json.loads(json.dumps(to_jsonable(report)))
@@ -240,6 +254,7 @@ def test_empty_claim_report_does_not_certify_a_conclusion() -> None:
     report = investigation.verify_claims(())
 
     assert report.verified_claims == ()
+    assert report.quantitative_statements == ()
     assert report.investigation is investigation
     assert report.verification_scope == "referenced_numeric_values_only"
 
@@ -259,3 +274,171 @@ def test_claim_without_observations_is_unverifiable() -> None:
         report.verified_claims[0].verification.status is VerificationStatus.UNVERIFIABLE
     )
     assert report.investigation.status is InvestigationStatus.INCOMPLETE
+
+
+@pytest.mark.parametrize(
+    "value",
+    [0, -7, 2**100, Decimal("1234.567890123456789012345678")],
+    ids=["zero", "negative", "large-integer", "exact-decimal"],
+)
+def test_quantitative_statement_preserves_exact_evidence(value: int | Decimal) -> None:
+    claim = NumericalClaim(
+        ClaimOperation.VALUE, value, EvidenceReference(0, 0, "metric")
+    )
+    result = InvestigationResult(
+        question="Read the metric.",
+        conclusion="Unverified narrative.",
+        analysis=_build_analysis_result(),
+        observations=(
+            QueryObservation(
+                question="Read the metric.",
+                sql="SELECT metric FROM measurements",
+                result=QueryResult(columns=("metric",), rows=((value,),)),
+            ),
+        ),
+        generated_claims=(claim,),
+    )
+
+    statement = result.quantitative_statements[0]
+
+    assert statement.claim_index == 0
+    assert statement.verified_claim is result.verified_claims[0]
+    assert statement.text == (
+        f"Claim 1 (value): expected {value}; evidence {value}; "
+        "absolute tolerance 0; status supported."
+    )
+    assert result.narrative_verified is False
+    serialized = json.loads(json.dumps(to_jsonable(result)))
+    saved = serialized["quantitative_statements"][0]
+    assert saved["text"] == statement.text
+    assert saved["claim_index"] == 0
+    assert saved["verified_claim"]["claim"]["left"]["column"] == "metric"
+    assert saved["verified_claim"]["verification"]["actual"] == str(value)
+
+
+def test_quantitative_statement_exposes_tolerance_and_recomputes_on_change() -> None:
+    observation = QueryObservation(
+        question="Read the metric.",
+        sql="SELECT metric FROM measurements",
+        result=QueryResult(columns=("metric",), rows=((11,),)),
+    )
+    claim = NumericalClaim(
+        ClaimOperation.VALUE,
+        10,
+        EvidenceReference(0, 0, "metric"),
+        absolute_tolerance=1,
+    )
+    result = InvestigationResult(
+        question="Read the metric.",
+        conclusion="Unverified narrative.",
+        analysis=_build_analysis_result(),
+        observations=(observation,),
+        generated_claims=(claim,),
+    )
+
+    assert result.quantitative_statements[0].text == (
+        "Claim 1 (value): expected 10; evidence 11; "
+        "absolute tolerance 1; status supported."
+    )
+    changed = replace(result, generated_claims=(replace(claim, absolute_tolerance=0),))
+    assert changed.quantitative_statements[0].text == (
+        "Claim 1 (value): expected 10; evidence 11; "
+        "absolute tolerance 0; status contradicted."
+    )
+    assert (
+        changed.quantitative_statements[0].verified_claim is changed.verified_claims[0]
+    )
+    assert result.quantitative_statements[0].verified_claim.verification.status is (
+        VerificationStatus.SUPPORTED
+    )
+
+
+def test_structured_investigation_renders_only_claim_linked_quantities(
+    tmp_path: Path,
+) -> None:
+    class Client:
+        def generate(self, prompt: str) -> str:
+            left = {"observation_index": 0, "row_index": 0, "column": "current_total"}
+            right = {"observation_index": 0, "row_index": 0, "column": "previous_total"}
+            return json.dumps(
+                {
+                    "conclusion": "There are 9999 rows. Revenue caused the change.",
+                    "claims": [
+                        {
+                            "operation": "value",
+                            "expected": "30",
+                            "left": left,
+                            "right": None,
+                        },
+                        {
+                            "operation": "difference",
+                            "expected": "10",
+                            "left": left,
+                            "right": right,
+                        },
+                        {
+                            "operation": "value",
+                            "expected": "31",
+                            "left": left,
+                            "right": None,
+                        },
+                        {
+                            "operation": "value",
+                            "expected": "5",
+                            "left": {**left, "column": "absent"},
+                            "right": None,
+                        },
+                    ],
+                }
+            )
+
+    path = tmp_path / "measurements.csv"
+    path.write_text("current_value,previous_value\n10,8\n20,12\n", encoding="utf-8")
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        planner=_SyntheticPlanner(),
+        investigator=_OneQueryInvestigator(),
+        synthesizer=StructuredInvestigationSynthesizer(Client()),
+    )
+
+    result = app.investigate(path, "Compare the totals.", max_steps=1)
+
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.narrative_verified is False
+    assert "9999" in result.conclusion
+    assert [statement.text for statement in result.quantitative_statements] == [
+        (
+            "Claim 1 (value): expected 30; evidence 30; "
+            "absolute tolerance 0; status supported."
+        ),
+        (
+            "Claim 2 (difference, left minus right): expected 10; evidence 10; "
+            "absolute tolerance 0; status supported."
+        ),
+        (
+            "Claim 3 (value): expected 31; evidence 30; "
+            "absolute tolerance 0; status contradicted."
+        ),
+        (
+            "Claim 4 (value): expected 5; evidence unavailable; "
+            "absolute tolerance 0; status unverifiable."
+        ),
+    ]
+    for index, statement in enumerate(result.quantitative_statements):
+        assert statement.claim_index == index
+        assert statement.verified_claim is result.verified_claims[index]
+        assert statement.verified_claim.claim is result.generated_claims[index]
+        reference = statement.verified_claim.claim.left
+        assert result.observations[reference.observation_index].sql.startswith(
+            "SELECT SUM"
+        )
+        assert "9999" not in statement.text
+        assert "caused" not in statement.text
+    assert result.quantitative_statements[1].verified_claim.claim.right is not None
+    serialized = json.loads(json.dumps(to_jsonable(result)))
+    assert (
+        serialized["quantitative_statements"][3]["verified_claim"]["verification"][
+            "status"
+        ]
+        == "unverifiable"
+    )

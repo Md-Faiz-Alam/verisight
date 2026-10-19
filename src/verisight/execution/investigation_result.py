@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.execution.claim_verification import (
+    ClaimOperation,
     ClaimVerificationResult,
     NumericalClaim,
     NumericalClaimVerifier,
@@ -72,6 +73,7 @@ class InvestigationResult:
     synthesis_failure: SynthesisFailure | None = None
     narrative_verified: bool = field(default=False, init=False)
     verified_claims: tuple["VerifiedNumericalClaim", ...] = field(init=False)
+    quantitative_statements: tuple["ClaimLinkedStatement", ...] = field(init=False)
     verification_scope: str = field(
         default="referenced_numeric_values_only", init=False
     )
@@ -91,10 +93,10 @@ class InvestigationResult:
         ):
             raise ValueError("Synthesis failure requires an incomplete investigation.")
 
+        report = self.verify_claims(self.generated_claims)
+        object.__setattr__(self, "verified_claims", report.verified_claims)
         object.__setattr__(
-            self,
-            "verified_claims",
-            self.verify_claims(self.generated_claims).verified_claims,
+            self, "quantitative_statements", report.quantitative_statements
         )
 
     @property
@@ -129,6 +131,40 @@ class VerifiedNumericalClaim:
 
 
 @dataclass(frozen=True, slots=True)
+class ClaimLinkedStatement:
+    """Application-rendered numerical statement with its exact claim and verdict.
+
+    claim_index is a zero-based position in the owning report's claim sequence.
+    Text is computed from numerical verification, never supplied by a model.
+    It does not certify SQL semantics or the generated conclusion.
+    """
+
+    claim_index: int
+    verified_claim: VerifiedNumericalClaim
+    text: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Render expected and evidence values with an explicit verification status."""
+        verification = self.verified_claim.verification
+        operation = (
+            "difference, left minus right"
+            if self.verified_claim.claim.operation is ClaimOperation.DIFFERENCE
+            else "value"
+        )
+        actual = (
+            "unavailable" if verification.actual is None else str(verification.actual)
+        )
+        object.__setattr__(
+            self,
+            "text",
+            f"Claim {self.claim_index + 1} ({operation}): "
+            f"expected {verification.expected}; evidence {actual}; "
+            f"absolute tolerance {verification.absolute_tolerance}; "
+            f"status {verification.status.value}.",
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class InvestigationVerificationReport:
     """Numerical checks alongside the original investigation and SQL evidence.
 
@@ -139,6 +175,18 @@ class InvestigationVerificationReport:
 
     investigation: InvestigationResult
     verified_claims: tuple[VerifiedNumericalClaim, ...]
+    quantitative_statements: tuple[ClaimLinkedStatement, ...] = field(init=False)
     verification_scope: str = field(
         default="referenced_numeric_values_only", init=False
     )
+
+    def __post_init__(self) -> None:
+        """Build one traceable statement per submitted numerical claim."""
+        object.__setattr__(
+            self,
+            "quantitative_statements",
+            tuple(
+                ClaimLinkedStatement(claim_index=index, verified_claim=item)
+                for index, item in enumerate(self.verified_claims)
+            ),
+        )
