@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -518,3 +519,85 @@ def test_report_save_failure_preserves_stdout_and_existing_files(
         assert path.read_text(encoding="utf-8") == "original"
     else:
         assert not path.exists()
+
+
+@pytest.mark.parametrize(
+    ("arguments", "timeout", "retries"),
+    [
+        pytest.param([], 20.0, 0, id="defaults"),
+        pytest.param(
+            ["--request-timeout-seconds", "60", "--provider-retries", "1"],
+            60.0,
+            1,
+            id="explicit-values",
+        ),
+        pytest.param(
+            ["--request-timeout-seconds", "0.5", "--provider-retries", "5"],
+            0.5,
+            5,
+            id="fractional-timeout-max-retries",
+        ),
+    ],
+)
+def test_cli_provider_controls_reach_settings_cases_and_report(
+    arguments: list[str],
+    timeout: float,
+    retries: int,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def configured_settings(**kwargs: Any) -> Settings:
+        return Settings(gemini_api_key="private-secret", **kwargs)
+
+    with (
+        patch("sys.argv", ["live_evaluation", "--live", *arguments]),
+        patch(
+            "scripts.live_evaluation.Settings", side_effect=configured_settings
+        ) as factory,
+        patch(
+            "scripts.live_evaluation.run_case",
+            return_value={"outcome": "provider_error"},
+        ) as run,
+    ):
+        assert main() == 1
+
+    assert factory.call_args.kwargs["gemini_request_timeout_seconds"] == timeout
+    assert factory.call_args.kwargs["gemini_max_retries"] == retries
+    settings = run.call_args.args[1]
+    assert settings.gemini_request_timeout_seconds == timeout
+    assert settings.gemini_max_retries == retries
+    output = capsys.readouterr().out
+    report = json.loads(output)
+    assert report["run_settings"]["request_timeout_seconds"] == timeout
+    assert report["provider_retries"] == retries
+    assert "private-secret" not in output
+
+
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "--request-timeout-seconds=0",
+        "--request-timeout-seconds=-1",
+        "--request-timeout-seconds=nan",
+        "--request-timeout-seconds=inf",
+        "--request-timeout-seconds=-inf",
+        "--request-timeout-seconds=not-a-number",
+        "--provider-retries=-1",
+        "--provider-retries=6",
+        "--provider-retries=1.5",
+    ],
+)
+def test_cli_rejects_invalid_provider_controls_before_any_run(
+    argument: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with (
+        patch("sys.argv", ["live_evaluation", "--live", argument]),
+        patch("scripts.live_evaluation.Settings") as settings,
+        patch("scripts.live_evaluation.run_case") as run,
+        pytest.raises(SystemExit) as caught,
+    ):
+        main()
+
+    assert caught.value.code == 2
+    settings.assert_not_called()
+    run.assert_not_called()
+    assert "error:" in capsys.readouterr().err

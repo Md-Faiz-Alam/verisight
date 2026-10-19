@@ -228,12 +228,38 @@ def repository_metadata() -> dict[str, object]:
     return metadata
 
 
+def _positive_timeout(value: str) -> float:
+    """Reject invalid deadlines before constructing settings or calling a provider."""
+    try:
+        timeout = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "Timeout must be finite and positive."
+        ) from error
+    if not 0 < timeout < float("inf"):
+        raise argparse.ArgumentTypeError("Timeout must be finite and positive.")
+    return timeout
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--live", action="store_true", help="Allow Gemini calls using synthetic data."
     )
     parser.add_argument("--case", choices=[*CASES, "all"], default="finance")
+    parser.add_argument(
+        "--request-timeout-seconds",
+        type=_positive_timeout,
+        default=20.0,
+        help="Deadline per provider request in seconds (default: 20).",
+    )
+    parser.add_argument(
+        "--provider-retries",
+        type=int,
+        choices=range(6),
+        default=0,
+        help="Additional transient-error retries per generation call (default: 0).",
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -246,8 +272,8 @@ def main() -> int:
     try:
         settings = Settings(
             allow_llm_data_disclosure=True,
-            gemini_max_retries=0,
-            gemini_request_timeout_seconds=20.0,
+            gemini_max_retries=args.provider_retries,
+            gemini_request_timeout_seconds=args.request_timeout_seconds,
             max_query_execution_seconds=5.0,
             max_query_result_rows=20,
         )
