@@ -13,6 +13,7 @@ from verisight.execution.generative_investigator import GenerativeInvestigator
 from verisight.execution.generative_synthesis import (
     GenerativeInvestigationSynthesizer,
 )
+from verisight.execution.investigation_result import InvestigationStatus
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.execution.service import AnalyticalExecutionService
@@ -169,8 +170,8 @@ def test_investigator_provider_failure_stops_before_sql_execution() -> None:
     assert synthesis_client.prompts == []
 
 
-def test_synthesizer_provider_failure_propagates_after_sql_execution() -> None:
-    """Synthesis failure must propagate without discarding the provider cause."""
+def test_synthesizer_provider_failure_preserves_sql_observation() -> None:
+    """Synthesis failure returns incomplete results with SQL evidence retained."""
 
     dataset = _dataset()
     provider_error = GeminiGenerationError("Provider unavailable.")
@@ -194,16 +195,16 @@ def test_synthesizer_provider_failure_propagates_after_sql_execution() -> None:
         max_steps=1,
     )
 
-    with pytest.raises(
-        InvestigationError,
-        match="Investigation synthesis text generation failed.",
-    ) as exc_info:
-        orchestrator.investigate(
-            question="Investigate the available data.",
-            analysis=_analysis(dataset),
-        )
+    result = orchestrator.investigate(
+        question="Investigate the available data.",
+        analysis=_analysis(dataset),
+    )
 
-    assert exc_info.value.__cause__ is provider_error
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 1
+    assert result.observations[0].result.rows == ((3,),)
+    assert "final synthesis could not be completed" in result.conclusion
+    assert "Provider unavailable." not in result.conclusion
     assert len(investigator_client.prompts) == 2
     assert len(planner.requests) == 1
     assert planner.requests[0].question == "How many records are available?"
@@ -304,7 +305,7 @@ def test_investigator_invalid_response_stops_before_sql_execution() -> None:
     assert synthesis_client.prompts == []
 
 
-def test_empty_synthesis_conclusion_propagates() -> None:
+def test_empty_synthesis_conclusion_preserves_sql_observation() -> None:
     """Empty synthesis output must not be accepted as a valid conclusion."""
 
     dataset = _dataset()
@@ -328,14 +329,15 @@ def test_empty_synthesis_conclusion_propagates() -> None:
         max_steps=1,
     )
 
-    with pytest.raises(
-        InvestigationError,
-        match="Investigation synthesizer returned an empty conclusion.",
-    ):
-        orchestrator.investigate(
-            question="Investigate the available data.",
-            analysis=_analysis(dataset),
-        )
+    result = orchestrator.investigate(
+        question="Investigate the available data.",
+        analysis=_analysis(dataset),
+    )
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 1
+    assert result.observations[0].result.rows == ((3,),)
+    assert "No analytical conclusion has been established." in result.conclusion
 
     assert len(investigator_client.prompts) == 2
     assert len(planner.requests) == 1

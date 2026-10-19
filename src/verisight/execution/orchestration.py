@@ -78,6 +78,11 @@ class InvestigationOrchestrator:
                     synthesis = self._synthesizer.synthesize(state)
                 except (PromptBudgetExceededError, IncompleteEvidenceError):
                     return self._incomplete(state)
+                except (InvestigationError, GeminiGenerationError):
+                    return self._incomplete(
+                        state,
+                        reason="final synthesis could not be completed",
+                    )
 
                 return InvestigationResult(
                     question=state.question,

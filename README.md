@@ -71,8 +71,7 @@ with TemporaryDirectory() as directory:
     analysis = app.analyze(path)
     result = app.execute(
         path,
-        "SELECT SUM(amount) AS net_amount "
-        "FROM transactions WHERE state = 'posted'",
+        "SELECT SUM(amount) AS net_amount FROM transactions WHERE state = 'posted'",
     )
 
     print(result.columns)

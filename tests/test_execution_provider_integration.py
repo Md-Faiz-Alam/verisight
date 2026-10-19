@@ -21,6 +21,7 @@ from verisight.execution.generative_synthesis import (
     GenerativeInvestigationSynthesizer,
 )
 from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation_result import InvestigationStatus
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.service import AnalyticalExecutionService
 from verisight.ingestion.models import (
@@ -370,8 +371,8 @@ def test_transient_investigator_failure_reaches_public_boundary() -> None:
     assert synthesizer.states == []
 
 
-def test_transient_synthesis_failure_reaches_public_boundary() -> None:
-    """A synthesis outage must propagate after successful SQL execution."""
+def test_transient_synthesis_failure_returns_incomplete_public_value() -> None:
+    """A synthesis outage preserves successful SQL evidence in an incomplete value."""
 
     dataset = _dataset()
 
@@ -400,11 +401,13 @@ def test_transient_synthesis_failure_reaches_public_boundary() -> None:
         )
     )
 
-    assert result.succeeded is False
-    assert result.value is None
-    assert result.error is not None
-    assert result.error.code is ErrorCode.PROVIDER_UNAVAILABLE
-    assert result.error.message == "The AI provider is temporarily unavailable."
+    assert result.succeeded is True
+    assert result.error is None
+    assert result.value is not None
+    assert result.value.status is InvestigationStatus.INCOMPLETE
+    assert result.value.observation_count == 1
+    assert result.value.observations[0].result.rows == ((3,),)
+    assert "final synthesis could not be completed" in result.value.conclusion
     assert "Sensitive synthesis provider details." not in repr(result)
 
     assert len(planner_client.prompts) == 1

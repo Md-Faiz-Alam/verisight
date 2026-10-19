@@ -1001,7 +1001,7 @@ def test_default_gemini_investigator_can_request_observe_and_synthesize(
     assert "total_amount" in synthesis_prompt
 
 
-def test_default_gemini_synthesis_rejects_plain_text(
+def test_default_gemini_synthesis_preserves_evidence_on_plain_text(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "orders.csv"
@@ -1024,17 +1024,21 @@ def test_default_gemini_synthesis_rejects_plain_text(
             "verisight.execution.structured_synthesis.GeminiTextGenerationClient",
             return_value=synthesizer_client,
         ),
-        pytest.raises(
-            InvestigationError, match="Structured synthesis response is invalid."
-        ),
     ):
-        VeriSight(
+        result = VeriSight(
             settings=Settings(
                 gemini_api_key="test-api-key",
                 allow_llm_data_disclosure=True,
             ),
             planner=StubQueryPlanner(),
         ).investigate(path, "Investigate orders.")
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 1
+    assert result.observations[0].result.rows == ((1, 10.0),)
+    assert result.generated_claims == ()
+    assert result.verified_claims == ()
+    assert "final synthesis could not be completed" in result.conclusion
     synthesizer_client.generate.assert_called_once()
 
 

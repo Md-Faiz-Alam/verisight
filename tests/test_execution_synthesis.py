@@ -335,3 +335,121 @@ def test_structured_budget_failure_preserves_incomplete_investigation(
     assert result.observation_count == 1
     assert result.verified_claims == ()
     assert client.prompts == []
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "private-invalid-response",
+        "```json\n" + _response([_claim()]) + "\n```",
+        _response([{**_claim(), "expected": 30}]),
+        _response([_claim()] * 51),
+        _response([{**_claim(), "operation": "ratio"}]),
+        "private" * 10_001,
+    ],
+    ids=[
+        "not-json",
+        "fenced-json",
+        "numeric-expected",
+        "too-many-claims",
+        "unsupported-operation",
+        "oversized-response",
+    ],
+)
+def test_invalid_synthesis_preserves_real_sql_observation(
+    tmp_path: Path,
+    response: str,
+) -> None:
+    path = tmp_path / "measurements.csv"
+    path.write_text("value\n10\n20\n", encoding="utf-8")
+    client = _Client(response)
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        planner=_Planner(),
+        investigator=_Investigator(),
+        synthesizer=StructuredInvestigationSynthesizer(client),
+    )
+
+    result = app.investigate(path, "Find the total.", max_steps=1)
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.question == "Find the total."
+    assert result.observation_count == 1
+    observation = result.observations[0]
+    assert observation.sql == "SELECT SUM(value) AS total FROM measurements"
+    assert observation.result == QueryResult(columns=("total",), rows=((30,),))
+    assert result.generated_claims == ()
+    assert result.verified_claims == ()
+    assert result.narrative_verified is False
+    assert result.conclusion == (
+        "Investigation incomplete: final synthesis could not be completed. "
+        "No analytical conclusion has been established."
+    )
+    serialized = json.dumps(to_jsonable(result))
+    assert "private" not in serialized
+    assert json.loads(serialized)["observations"][0]["result"]["rows"] == [[30]]
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        GeminiGenerationError("private-provider-details"),
+        GeminiTransientError("private-provider-details"),
+        InvestigationError("private-synthesis-details"),
+    ],
+)
+def test_expected_synthesis_failure_preserves_observations(
+    tmp_path: Path,
+    error: Exception,
+) -> None:
+    class FailingClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def generate(self, prompt: str) -> str:
+            self.calls += 1
+            raise error
+
+    path = tmp_path / "measurements.csv"
+    path.write_text("value\n10\n20\n", encoding="utf-8")
+    client = FailingClient()
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        planner=_Planner(),
+        investigator=_Investigator(),
+        synthesizer=StructuredInvestigationSynthesizer(client),
+    )
+
+    result = app.investigate(path, "Find the total.", max_steps=1)
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 1
+    assert result.observations[0].result.rows == ((30,),)
+    assert result.generated_claims == ()
+    assert result.verified_claims == ()
+    assert "final synthesis could not be completed" in result.conclusion
+    assert "private" not in json.dumps(to_jsonable(result))
+    assert client.calls == 1
+
+
+def test_unexpected_synthesis_error_is_not_suppressed(tmp_path: Path) -> None:
+    error = RuntimeError("Unexpected programming error.")
+
+    class BrokenSynthesizer:
+        def synthesize(self, state: InvestigationState) -> str:
+            raise error
+
+    path = tmp_path / "measurements.csv"
+    path.write_text("value\n10\n", encoding="utf-8")
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        planner=_Planner(),
+        investigator=_Investigator(),
+        synthesizer=BrokenSynthesizer(),
+    )
+
+    with pytest.raises(RuntimeError) as caught:
+        app.investigate(path, "Find the total.", max_steps=1)
+
+    assert caught.value is error
