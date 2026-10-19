@@ -133,12 +133,37 @@ configured Gemini investigations. Custom components can be injected.
 
 Claims reference observation rows and named columns. Supported operations are
 `value` and `difference` (left minus right). Verdicts are `supported`,
-`contradicted`, or `unverifiable`.
+`contradicted`, or `unverifiable`. Opt-in rounding can additionally return
+`supported_rounded`.
 
 Structured model-generated claims require decimal strings and use zero
 tolerance. The model cannot choose a tolerance. A rounded presentation can
-therefore be contradicted. An application-controlled rounding policy remains
-future work.
+therefore be contradicted in the default investigation result.
+
+Application code can explicitly reverify selected claims using a
+`DecimalRoundingPolicy` with 0–12 decimal places and fixed half-even rounding:
+
+```python
+from verisight.execution.claim_verification import DecimalRoundingPolicy
+
+report = result.verify_claims(
+    result.generated_claims,
+    rounding_policy=DecimalRoundingPolicy(decimal_places=2),
+)
+for statement in report.quantitative_statements:
+    print(statement.text)
+```
+
+Choose precision for the metric's existing units in application code, never
+from model-selected decimal places. Exact zero-tolerance matches remain
+`supported`; permitted rounded matches receive `supported_rounded`. Reports
+retain original evidence, rounded evidence, and the policy. Nonzero absolute
+tolerance cannot be combined with rounding. Unsafe quantization returns
+`unverifiable`.
+
+This creates a separate verification report. It does not change the original
+result, default synthesis, narrative audit, or live evaluator. There is no
+unit conversion or automatic interpretation of floating-point differences.
 
 Results expose `generated_claims`, `verified_claims`, and application-rendered
 `quantitative_statements`. The fixed scope is
@@ -236,7 +261,7 @@ statement and branch coverage measures exercised paths, not universal accuracy.
 
 ## Remaining work
 
-- Define controlled rounding and evaluate analytical semantics independently.
+- Integrate explicit per-metric rounding where appropriate and evaluate analytical semantics independently.
 - Expand held-out questions, multi-step cases, and baseline comparisons.
 - Expose failed-attempt and repair history.
 - Improve nullable Excel boolean inference and identifier-quoting guidance.

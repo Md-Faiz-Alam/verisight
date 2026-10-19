@@ -18,21 +18,26 @@ exist. Reports span different revisions and settings. They establish examples
 of working behavior and failures, not general accuracy or production readiness.
 Narrative verification remains false.
 
-## 1. Define controlled rounding
+## 1. Integrate per-metric rounding deliberately
 
-Structured claims currently use zero tolerance. Rounded values can be
-contradicted even when suitable for presentation.
+An opt-in `DecimalRoundingPolicy` now supports 0–12 decimal places with fixed
+half-even rounding. Explicit reverification retains original evidence and the
+policy, distinguishing `supported_rounded` from ordinary support. Model-selected
+precision and combinations with nonzero absolute tolerance are rejected.
 
-Required work:
+Default structured investigations and live evaluation still use strict
+comparison. A separate rounded report does not mutate the investigation.
 
-- Define application-controlled precision, units, and rounding mode.
-- Preserve exact evidence beside displayed values.
-- Distinguish exact support from support under an explicit rounding policy.
-- Prevent model-selected decimal places from widening acceptance arbitrarily.
+Remaining work:
 
-Acceptance: boundary, negative, percentage, large-value, and incorrect-value
-cases pass independent tests. Floating-point differences are not broadly excused
-without a specified policy.
+- Define which metrics and units permit which presentation precision.
+- Integrate explicit application policies into report consumers where justified.
+- Decide how a future evaluator scores rounded answers against independent
+  ground truth while preserving the strict baseline.
+
+Acceptance: metric policies are explicit; boundary, negative, percentage,
+large-value, and incorrect-value cases remain covered. There is no implicit unit
+conversion or general forgiveness of floating-point differences.
 
 ## 2. Expand independent correctness evaluation
 

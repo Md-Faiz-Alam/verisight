@@ -9,6 +9,7 @@ from verisight.error_reporting import to_public_error
 from verisight.execution.claim_verification import (
     ClaimOperation,
     ClaimVerificationResult,
+    DecimalRoundingPolicy,
     NumericalClaim,
     NumericalClaimVerifier,
 )
@@ -182,10 +183,13 @@ class InvestigationResult:
         return len(self.observations)
 
     def verify_claims(
-        self, claims: tuple[NumericalClaim, ...]
+        self,
+        claims: tuple[NumericalClaim, ...],
+        *,
+        rounding_policy: DecimalRoundingPolicy | None = None,
     ) -> "InvestigationVerificationReport":
         """Check explicit numerical claims without certifying the narrative."""
-        verifier = NumericalClaimVerifier()
+        verifier = NumericalClaimVerifier(rounding_policy=rounding_policy)
         return InvestigationVerificationReport(
             investigation=self,
             verified_claims=tuple(
@@ -230,13 +234,25 @@ class ClaimLinkedStatement:
         actual = (
             "unavailable" if verification.actual is None else str(verification.actual)
         )
+        rounding_text = ""
+        if verification.rounding_policy is not None:
+            policy = verification.rounding_policy
+            rounded = (
+                "not applied"
+                if verification.rounded_actual is None
+                else str(verification.rounded_actual)
+            )
+            rounding_text = (
+                f" Rounding policy: {policy.decimal_places} decimal places, "
+                f"{policy.rounding_mode}; rounded evidence {rounded}."
+            )
         object.__setattr__(
             self,
             "text",
             f"Claim {self.claim_index + 1} ({operation}): "
             f"expected {verification.expected}; evidence {actual}; "
             f"absolute tolerance {verification.absolute_tolerance}; "
-            f"status {verification.status.value}.",
+            f"status {verification.status.value}." + rounding_text,
         )
 
 

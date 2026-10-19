@@ -72,10 +72,32 @@ Supported operations are `value` and `difference` (left minus right).
 Decimal-based arithmetic avoids float coercion. Unsuitable cells, ambiguous
 columns, invalid references, and unsafe required arithmetic fail closed.
 
-Verdicts are `supported`, `contradicted`, and `unverifiable`. The direct Python
+Default verdicts are `supported`, `contradicted`, and `unverifiable`. The direct Python
 claim API accepts an absolute tolerance. Structured model-generated claims
-use zero tolerance and cannot supply their own comparison policy. Controlled
-presentation rounding remains unimplemented.
+use zero tolerance and cannot supply their own comparison policy.
+
+`DecimalRoundingPolicy` is an opt-in application policy with 0–12 decimal places
+and fixed `ROUND_HALF_EVEN`. It can be passed to `NumericalClaimVerifier` or to
+`InvestigationResult.verify_claims()`. Precision is not inferred from the claim.
+Nonzero absolute tolerance and rounding cannot be combined.
+
+The verifier first performs its existing numerical comparison. Exact matches
+remain `supported`. For a usable contradicted result, the policy quantizes the
+original numerical evidence and accepts only equality with that rounded value,
+returning `supported_rounded`. Wrong values remain contradicted; unsuitable or
+unsafe numerical evidence remains unverifiable. Unsafe quantization also returns
+unverifiable, retaining the original computed value.
+
+Verification metadata includes `rounding_policy` and `rounded_actual`. Decimal
+context precision and exponent limits can make quantization unavailable. Local
+rounding changes do not mutate caller context. Evidence arithmetic is not
+silently rounded to make an otherwise unsafe computation pass.
+
+Application-rendered statements expose the policy and rounded evidence when
+configured. This policy does not infer units, scale percentages, or certify SQL
+semantics. The original investigation's computed verdicts and token audit stay
+unchanged when a separate rounded report is requested. Default synthesis and live
+evaluation continue to use strict comparison.
 
 `InvestigationResult` computes `verified_claims` and `quantitative_statements`
 from generated claims and observations. Each immutable `ClaimLinkedStatement`
@@ -206,5 +228,5 @@ new fields. Missing telemetry is not evidence of zero provider calls.
 
 `.github/workflows/ci.yml` runs offline gates on Windows and Linux with Python
 3.11. Deployment isolation, cancellation, workload limits, richer provenance,
-controlled rounding, semantic evaluation, and the end-user workflow remain
+per-metric rounding integration, semantic evaluation, and the end-user workflow remain
 separate acceptance work. See [Roadmap](roadmap.md).

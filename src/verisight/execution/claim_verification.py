@@ -1,13 +1,15 @@
 """Deterministic verification of numerical claims against query observations."""
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from decimal import (
+    ROUND_HALF_EVEN,
     Decimal,
     DecimalException,
     Inexact,
     InvalidOperation,
     Overflow,
+    Rounded,
     localcontext,
 )
 from enum import StrEnum
@@ -29,6 +31,7 @@ class VerificationStatus(StrEnum):
     """Outcome of deterministic numerical claim verification."""
 
     SUPPORTED = "supported"
+    SUPPORTED_ROUNDED = "supported_rounded"
     CONTRADICTED = "contradicted"
     UNVERIFIABLE = "unverifiable"
 
@@ -93,6 +96,24 @@ class NumericalClaim:
 
 
 @dataclass(frozen=True, slots=True)
+class DecimalRoundingPolicy:
+    """Application-selected decimal places; never inferred from a model claim.
+
+    This policy rounds in the evidence cell's existing units. It does not
+    convert percentages or currencies, infer units, or validate SQL semantics.
+    """
+
+    decimal_places: int
+    rounding_mode: str = field(default=ROUND_HALF_EVEN, init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.decimal_places) is not int:
+            raise TypeError("Decimal places must be an integer.")
+        if not 0 <= self.decimal_places <= 12:
+            raise ValueError("Decimal places must be between 0 and 12.")
+
+
+@dataclass(frozen=True, slots=True)
 class ClaimVerificationResult:
     """Deterministic outcome with computed value when evidence is usable."""
 
@@ -101,12 +122,62 @@ class ClaimVerificationResult:
     expected: Decimal
     absolute_tolerance: Decimal
     reason: str
+    rounding_policy: DecimalRoundingPolicy | None = None
+    rounded_actual: Decimal | None = None
 
 
 class NumericalClaimVerifier:
     """Check numerical claims without generating or executing new queries."""
 
+    def __init__(self, *, rounding_policy: DecimalRoundingPolicy | None = None) -> None:
+        if rounding_policy is not None and not isinstance(
+            rounding_policy, DecimalRoundingPolicy
+        ):
+            raise TypeError("Rounding policy must be a DecimalRoundingPolicy.")
+        self._rounding_policy = rounding_policy
+
     def verify(
+        self,
+        claim: NumericalClaim,
+        observations: tuple[QueryObservation, ...],
+    ) -> ClaimVerificationResult:
+        """Check evidence, optionally applying an explicit presentation policy."""
+        policy = self._rounding_policy
+        if policy is not None and claim.absolute_tolerance != 0:
+            raise ValueError("Rounding cannot be combined with absolute tolerance.")
+        result = self._verify_exact(claim, observations)
+        if policy is None:
+            return result
+        if result.status is not VerificationStatus.CONTRADICTED:
+            return replace(result, rounding_policy=policy)
+        actual = cast(Decimal, result.actual)
+        try:
+            rounded = _round_for_policy(actual, policy)
+        except DecimalException:
+            return replace(
+                result,
+                status=VerificationStatus.UNVERIFIABLE,
+                rounding_policy=policy,
+                reason="Numerical evidence cannot be rounded safely.",
+            )
+        matches = rounded == result.expected
+        return replace(
+            result,
+            status=(
+                VerificationStatus.SUPPORTED_ROUNDED
+                if matches
+                else VerificationStatus.CONTRADICTED
+            ),
+            rounding_policy=policy,
+            rounded_actual=rounded,
+            reason=(
+                "The claimed value matches evidence under the rounding policy."
+                if matches
+                else "The claimed value differs under the rounding policy."
+            ),
+        )
+
+    def _verify_exact(
         self,
         claim: NumericalClaim,
         observations: tuple[QueryObservation, ...],
@@ -253,3 +324,14 @@ def _subtract_exact(left: Decimal, right: Decimal) -> Decimal:
         context.traps[InvalidOperation] = True
         context.traps[Overflow] = True
         return left - right
+
+
+def _round_for_policy(value: Decimal, policy: DecimalRoundingPolicy) -> Decimal:
+    """Allow deliberate quantization while keeping caller context unchanged."""
+    quantum = Decimal((0, (1,), -policy.decimal_places))
+    with localcontext() as context:
+        context.traps[Inexact] = False
+        context.traps[Rounded] = False
+        context.traps[InvalidOperation] = True
+        context.traps[Overflow] = True
+        return value.quantize(quantum, rounding=ROUND_HALF_EVEN)
