@@ -19,6 +19,7 @@ from verisight.error_reporting import to_public_error
 from verisight.exceptions import ConfigurationError
 from verisight.execution.claim_verification import ClaimOperation, VerificationStatus
 from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.generation_telemetry import capture_generation_calls
 from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
@@ -181,19 +182,23 @@ def failure_report(error: Exception) -> dict[str, object]:
 
 def run_case(case: Case, settings: Settings) -> dict[str, object]:
     """Use temporary synthetic files and the real default investigation path."""
-    try:
-        with TemporaryDirectory(prefix="verisight-evaluation-") as directory:
-            paths = []
-            for filename, content in case.files:
-                path = Path(directory) / filename
-                path.write_text(content, encoding="utf-8")
-                paths.append(path)
-            result = VeriSight(settings=settings).investigate(
-                paths, case.question + REQUEST, max_steps=1
-            )
-            return score_result(result, case.answer)
-    except Exception as error:
-        return failure_report(error)
+    with capture_generation_calls() as calls:
+        try:
+            with TemporaryDirectory(prefix="verisight-evaluation-") as directory:
+                paths = []
+                for filename, content in case.files:
+                    path = Path(directory) / filename
+                    path.write_text(content, encoding="utf-8")
+                    paths.append(path)
+                result = VeriSight(settings=settings).investigate(
+                    paths, case.question + REQUEST, max_steps=1
+                )
+                report = score_result(result, case.answer)
+        except Exception as error:
+            report = failure_report(error)
+    if calls:
+        report["generation_calls"] = [asdict(call) for call in calls]
+    return report
 
 
 def repository_metadata() -> dict[str, object]:
@@ -314,6 +319,7 @@ def main() -> int:
             "max_query_memory_mb": settings.max_query_memory_mb,
             "max_query_temp_storage_mb": settings.max_query_temp_storage_mb,
         },
+        "generation_telemetry_scope": "client_calls_observed_during_case",
         "scoring_scope": "single_claim_numeric_answer_only",
         "limitations": (
             "No narrative or general semantic certification. No-claims responses "

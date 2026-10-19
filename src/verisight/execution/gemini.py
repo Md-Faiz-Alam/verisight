@@ -3,15 +3,17 @@
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Protocol
 
 import httpx
 from google import genai
 from google.genai import errors, types
 
 from verisight.exceptions import VeriSightError
-
-GenerationStage = Literal["investigator", "structured_synthesis", "text_generation"]
+from verisight.execution.generation_telemetry import (
+    GenerationStage,
+    track_generation_call,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,70 +156,73 @@ class GeminiTextGenerationClient:
             raise ValueError("Generation prompt must not be empty.")
 
         self._call_number += 1
-        for attempt in range(self._max_retries + 1):
-            try:
-                if self._response_config is None:
-                    response = self._client.models.generate_content(
-                        model=self._model,
-                        contents=prompt,
-                    )
-                else:
-                    response = self._client.models.generate_content(
-                        model=self._model,
-                        contents=prompt,
-                        config=self._response_config,
-                    )
-            except Exception as exc:
-                http_status = exc.code if isinstance(exc, errors.APIError) else None
-                retryable = _is_retryable(exc)
-                should_retry = retryable and attempt < self._max_retries
-
-                # Leave the exception handler before raising an application
-                # error so the raw SDK exception is not its __context__.
-                if should_retry:
-                    delay = min(
-                        self._retry_base_delay_seconds * (2**attempt),
-                        8.0,
-                    )
-                    self._sleep(delay)
-                    continue
-            else:
+        with track_generation_call(self._stage, self._call_number) as call:
+            for attempt in range(self._max_retries + 1):
+                call.attempts = attempt + 1
                 try:
-                    text = response.text
-                except (AttributeError, ValueError):
-                    # Raise outside this handler for the same reason.
-                    pass
-                else:
-                    if text is None or not text.strip():
-                        raise self._failure(
-                            "Gemini returned an empty text response.",
-                            attempts=attempt + 1,
+                    if self._response_config is None:
+                        response = self._client.models.generate_content(
+                            model=self._model,
+                            contents=prompt,
                         )
+                    else:
+                        response = self._client.models.generate_content(
+                            model=self._model,
+                            contents=prompt,
+                            config=self._response_config,
+                        )
+                except Exception as exc:
+                    http_status = exc.code if isinstance(exc, errors.APIError) else None
+                    retryable = _is_retryable(exc)
+                    should_retry = retryable and attempt < self._max_retries
 
-                    return text
+                    # Leave the exception handler before raising an application
+                    # error so the raw SDK exception is not its __context__.
+                    if should_retry:
+                        delay = min(
+                            self._retry_base_delay_seconds * (2**attempt),
+                            8.0,
+                        )
+                        self._sleep(delay)
+                        continue
+                else:
+                    try:
+                        text = response.text
+                    except (AttributeError, ValueError):
+                        # Raise outside this handler for the same reason.
+                        pass
+                    else:
+                        if text is None or not text.strip():
+                            raise self._failure(
+                                "Gemini returned an empty text response.",
+                                attempts=attempt + 1,
+                            )
+
+                        call.returned_text = True
+                        return text
+
+                    raise self._failure(
+                        "Gemini returned an unusable text response.",
+                        attempts=attempt + 1,
+                    )
+
+                if retryable:
+                    raise self._failure(
+                        "Gemini is temporarily unavailable.",
+                        attempts=attempt + 1,
+                        http_status=http_status,
+                        retryable=True,
+                    )
 
                 raise self._failure(
-                    "Gemini returned an unusable text response.",
-                    attempts=attempt + 1,
-                )
-
-            if retryable:
-                raise self._failure(
-                    "Gemini is temporarily unavailable.",
+                    "Gemini text generation failed.",
                     attempts=attempt + 1,
                     http_status=http_status,
-                    retryable=True,
                 )
 
-            raise self._failure(
-                "Gemini text generation failed.",
-                attempts=attempt + 1,
-                http_status=http_status,
-            )
-
-        raise AssertionError(
-            "Gemini retry loop ended unexpectedly."
-        )  # pragma: no cover
+            raise AssertionError(
+                "Gemini retry loop ended unexpectedly."
+            )  # pragma: no cover
 
     def _failure(
         self,
