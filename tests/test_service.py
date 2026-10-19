@@ -1039,7 +1039,7 @@ def test_default_gemini_synthesis_preserves_evidence_on_plain_text(
     assert result.generated_claims == ()
     assert result.verified_claims == ()
     assert "final synthesis could not be completed" in result.conclusion
-    synthesizer_client.generate.assert_called_once()
+    assert synthesizer_client.generate.call_count == 2
 
 
 def test_public_investigate_rebuilds_missing_planner(

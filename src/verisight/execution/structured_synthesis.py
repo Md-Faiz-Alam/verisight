@@ -1,6 +1,7 @@
 """Generate strictly validated numerical claims from complete SQL evidence."""
 
 import json
+import re
 from decimal import Decimal, DecimalException
 from typing import Any, Literal
 
@@ -64,6 +65,24 @@ def _unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 def _reject_constant(value: str) -> None:
     raise ValueError("Nonstandard JSON constant.")
+
+
+class _SynthesisFormatError(InvestigationError):
+    """An application-defined format category suitable for repair feedback."""
+
+    def __init__(
+        self,
+        reason: Literal[
+            "response_too_large", "invalid_json", "invalid_schema_or_claim"
+        ],
+    ) -> None:
+        self.reason = reason
+        message = (
+            "Structured synthesis response is too large."
+            if reason == "response_too_large"
+            else "Structured synthesis response is invalid."
+        )
+        super().__init__(message)
 
 
 class StructuredInvestigationSynthesizer:
@@ -130,21 +149,56 @@ class StructuredInvestigationSynthesizer:
             + "\nINVESTIGATION STATE:\n"
             + json.dumps(to_jsonable(state), separators=(",", ":"), allow_nan=False)
         )
+        response = self._generate(prompt)
         try:
-            response = self._client.generate(prompt)
+            return self._parse_response(response)
+        except _SynthesisFormatError as exc:
+            feedback = json.dumps({"validation_error": exc.reason})
+
+        repair_prompt = self._budget.enforce(
+            prompt
+            + "\nFORMAT REPAIR (one attempt):\n"
+            + feedback
+            + "\nGenerate a fresh complete response from the same evidence. "
+            "Return one JSON object matching RESPONSE SCHEMA. "
+            "Use decimal strings for expected values, only value or difference "
+            "operations, and no more than 50 claims. "
+            "Do not change the evidence or invent missing values. "
+            "The rejected response is intentionally omitted.\n"
+        )
+        return self._parse_response(self._generate(repair_prompt))
+
+    def _generate(self, prompt: str) -> str:
+        """Preserve provider classification without adding generation retries."""
+        try:
+            return self._client.generate(prompt)
         except GeminiTransientError:
             raise
         except GeminiGenerationError as exc:
             raise InvestigationError("Structured synthesis generation failed.") from exc
 
+    @staticmethod
+    def _parse_response(response: str) -> StructuredSynthesis:
+        """Accept one JSON object, optionally inside a complete JSON code fence."""
         if len(response) > 60_000:
-            raise InvestigationError("Structured synthesis response is too large.")
+            raise _SynthesisFormatError("response_too_large")
+        normalized = response.strip()
+        fenced = re.fullmatch(
+            r"```(?:json)?[ \t]*\r?\n(?P<payload>[\s\S]*?)\r?\n```",
+            normalized,
+            flags=re.IGNORECASE,
+        )
+        if fenced is not None:
+            normalized = fenced.group("payload")
         try:
             payload = json.loads(
-                response,
+                normalized,
                 object_pairs_hook=_unique_fields,
                 parse_constant=_reject_constant,
             )
+        except (ValueError, TypeError) as exc:
+            raise _SynthesisFormatError("invalid_json") from exc
+        try:
             parsed = _Response.model_validate(payload)
             claims = tuple(
                 NumericalClaim(
@@ -160,7 +214,5 @@ class StructuredInvestigationSynthesizer:
                 for claim in parsed.claims
             )
         except (ValueError, TypeError, DecimalException) as exc:
-            raise InvestigationError(
-                "Structured synthesis response is invalid."
-            ) from exc
+            raise _SynthesisFormatError("invalid_schema_or_claim") from exc
         return StructuredSynthesis(conclusion=parsed.conclusion.strip(), claims=claims)

@@ -61,12 +61,8 @@ planning and repair audit trail.
 original question, deterministic analysis, observations, and failed attempts.
 
 The investigator decides whether to ask another analytical question or finish.
-
-Successful analytical execution adds a `QueryObservation` containing:
-
-- The analytical question.
-- The executed SQL.
-- The query result.
+Successful execution adds a `QueryObservation` containing the question, SQL,
+and query result.
 
 Selected query failures are recorded in internal investigation state.
 Repeated questions and exhausted analytical-step budgets terminate investigation
@@ -75,16 +71,17 @@ with an incomplete result.
 `max_steps` bounds analytical attempts rather than total provider calls.
 
 Prompt-budget and incomplete-evidence paths preserve collected observations.
-Other errors, including some provider and synthesis failures, can still escape
-without returning a partial investigation result.
+Expected synthesis failures also return incomplete results with observations.
+Other errors, including provider failures during investigation decisions or
+query planning, can still escape without returning a partial result.
+Unexpected programming errors continue to raise.
 
-## Structured synthesis
+## Structured synthesis and format repair
 
 The default Gemini-enabled facade uses `StructuredInvestigationSynthesizer`.
-
 It serializes investigation state into a budgeted prompt and requests a JSON
-object containing a conclusion and numerical claims. The prompt treats
-investigation state as untrusted data.
+object containing a conclusion and numerical claims.
+The prompt treats investigation state as untrusted data.
 
 The response contract requires:
 
@@ -96,9 +93,36 @@ The response contract requires:
 - No unknown fields or model-selected tolerance.
 
 Duplicate JSON fields and nonstandard constants are rejected.
+Responses exceeding 60,000 characters are rejected.
 
-The current synthesis parser rejects fenced JSON. Invalid responses raise
-`InvestigationError`; there is no synthesis-format repair loop yet.
+The parser accepts plain JSON or one complete code fence labeled `json`,
+case-insensitively, or with no language label. LF and CRLF line endings are
+supported. Surrounding prose and other language labels are not accepted as
+valid response wrappers.
+
+If response parsing or validation fails, the synthesizer permits one additional
+generation call for format repair. The repair prompt contains the original
+schema and evidence plus one application-defined validation category:
+
+- `invalid_json`
+- `invalid_schema_or_claim`
+- `response_too_large`
+
+The rejected response, raw validation messages, and parser input values are
+omitted from repair feedback. The repair prompt must pass the character budget
+before a second call is made.
+
+The second response passes the same strict parser and claim construction rules.
+A second format failure raises an `InvestigationError` subtype, which the
+orchestrator converts into an incomplete result with evidence preserved.
+
+Format repair does not repair SQL or establish numerical correctness.
+Successfully parsed claims still pass through deterministic verification.
+A contradicted claim does not trigger this format-repair mechanism.
+
+Provider-generation failures bypass format repair. Existing provider retry
+settings apply independently to each generation call. Consequently, two
+synthesis generation calls can involve more than two network requests.
 
 The synthesizer returns `StructuredSynthesis`. Legacy injected synthesizers may
 return plain text, which does not supply generated claims.
@@ -115,18 +139,13 @@ a numerical claim.
 The verifier supports direct values and differences. Unsafe or inexact required
 arithmetic fails closed as `unverifiable`.
 
-Verdicts are:
-
-- `supported`
-- `contradicted`
-- `unverifiable`
-
+Verdicts are `supported`, `contradicted`, and `unverifiable`.
 The direct claim API supports an absolute tolerance. Structured model-generated
 claims use zero tolerance and cannot override it.
 
 There is no separate rounded-match verdict or application rounding policy yet.
 
-## Investigation results
+## Investigation results and synthesis failures
 
 `InvestigationResult` contains:
 
@@ -134,18 +153,32 @@ There is no separate rounded-match verdict or application rounding policy yet.
 - Deterministic analysis.
 - Collected observations.
 - Workflow status.
-- Generated numerical claims.
-- Computed `verified_claims`.
+- Generated numerical claims and computed `verified_claims`.
+- Optional `synthesis_failure` metadata.
 - Fixed `narrative_verified=False`.
 - Fixed `verification_scope="referenced_numeric_values_only"`.
 
 Verification is computed from generated claims and retained observations.
+`complete` is a workflow status rather than a certification of the conclusion.
+An empty claim list does not establish that a narrative has no numerical claims.
 
-`complete` is a workflow status. It is not a certification of the conclusion.
-An empty claim list does not establish that the narrative has no numerical
-assertions.
+A recorded synthesis failure requires `INCOMPLETE` status. Its kind is:
 
-The result currently omits internal failed attempts and repair history.
+| Kind | Meaning |
+| --- | --- |
+| `provider_unavailable` | A typed transient provider-generation failure |
+| `provider_error` | Another typed provider-generation failure |
+| `synthesis_error` | Another expected synthesis failure, including invalid output |
+
+Failure classification follows explicit exception causes with cycle protection.
+Metadata retains existing safe provider diagnostics when available, without
+retaining exception objects or copying exception messages.
+
+`synthesis_failure` is null when no such failure was recorded. It is not a
+complete description of every incomplete-result path. For example, a prompt
+budget failure can produce an incomplete result without synthesis metadata.
+
+The result still omits internal failed query attempts and repair history.
 
 ## Verification boundary
 
@@ -156,77 +189,60 @@ Three questions must remain distinct:
 3. Does the narrative accurately describe the evidence and its limitations?
 
 Current numerical verification addresses the first question.
-
-A claim can be supported while its query uses an incorrect join, filter, or
+A supported claim can repeat the result of an incorrect join, filter, or
 denominator. A narrative can also contradict a supported claim.
 
-Future narrative linkage and semantic evaluation must not relabel numerical
-support as general correctness.
-
-## Provider integration and diagnostics
+## Provider integration and public errors
 
 `GeminiTextGenerationClient` handles provider requests and bounded application
 retries. SDK retries are disabled by the client configuration.
+Retry policy and request timeout come from Settings.
 
-Retryable failures include selected HTTP failures and transport or timeout
-errors. Retry policy and request timeout come from Settings.
-
-Safe diagnostics can include:
-
-- HTTP status.
-- Retryability.
-- Attempt count.
-- Inferred generation stage.
-- Per-client generation call number.
-
-Generation stages are coarse categories, not a complete distributed trace.
-
-Public provider exceptions avoid carrying raw SDK messages as public diagnostics.
-A successful connectivity request does not establish that a multi-request
-investigation will complete.
-
-## Configuration and public errors
+Safe diagnostics can include HTTP status, retryability, attempt count,
+inferred generation stage, and a per-client generation call number.
+Stages are coarse categories, not a complete distributed trace.
 
 `Settings` loads optional `.env` values and `VERISIGHT_` environment variables.
-Built-in generative components require an API key and disclosure permission.
-
+Built-in generation requires an API key and disclosure permission.
 The key is excluded from normal Settings serialization and representation.
 It remains a string available to application code.
 
-`run_public_operation` translates failures into fixed public error reports.
+`run_public_operation` translates raised failures into fixed public reports.
 Retryable Gemini failures can map to `provider_unavailable`.
 Unexpected internal failures are logged by exception type only.
 
-## Serialization
+A returned incomplete investigation is a value at that public boundary.
+Callers must inspect investigation status and synthesis failure metadata in
+addition to checking whether the public operation raised an error.
+
+## Serialization and evaluation
 
 `to_jsonable` converts supported domain results into JSON-compatible structures.
-Decimal values are preserved as strings.
+Decimal values are preserved as strings. Synthesis failure metadata is included
+in serialized investigation results.
 
-Serialization preserves declared evidence and verification fields. It does not
-supply missing provenance or verify report prose.
-
-## Evaluation boundaries
-
-Deterministic benchmarks exercise real numerical verification and SQL behavior
-with controlled generative components.
-
+Deterministic benchmarks exercise numerical verification and SQL behavior with
+controlled generative components.
 The live evaluator exercises the default provider-backed investigation path on
 three temporary synthetic fixtures.
 
-These serve different purposes:
+An incomplete live result remains in the `incomplete` outcome bucket.
+Its `synthesis_failure` details are included when available.
+Exceptions that escape investigation retain the evaluator's separate failure
+classification path.
 
-- Deterministic tests establish reproducible implementation behavior.
-- Live runs measure provider-backed behavior for the recorded fixtures.
-- Neither establishes correctness on every unfamiliar dataset.
+Passing deterministic tests establishes reproducible implementation behavior.
+It does not establish correctness on every unfamiliar dataset or consistent
+live-provider availability.
 
 ## Outstanding architectural work
 
-- Preserve partial observations across synthesis and provider failures.
-- Return structured failure and repair provenance.
+- Preserve partial evidence across remaining decision and planning failures.
+- Return failed query and repair provenance.
 - Link narrative findings to claim identities.
 - Define application-controlled rounding.
 - Extend independent semantic and ground-truth evaluation.
 - Improve nullable Excel boolean inference.
-- Remove private attribute assignment in the legacy synthesis component.
+- Remove private attribute assignment in legacy synthesis.
 - Add identifier-quoting instructions to planner and repair prompts.
 - Establish CI, deployment isolation, and operational acceptance criteria.

@@ -218,7 +218,7 @@ def test_synthesis_failure_metadata_survives_investigation_and_evaluation(
     assert result.generated_claims == ()
     assert result.verified_claims == ()
     assert result.narrative_verified is False
-    assert client.calls == 1
+    assert client.calls == (2 if kind is SynthesisFailureKind.SYNTHESIS_ERROR else 1)
 
     payload = json.loads(json.dumps(to_jsonable(result)))
     expected_failure = {

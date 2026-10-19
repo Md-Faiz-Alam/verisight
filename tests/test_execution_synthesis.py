@@ -14,7 +14,10 @@ from verisight.execution.decisions import InvestigationAction, InvestigationDeci
 from verisight.execution.exceptions import InvestigationError
 from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
 from verisight.execution.investigation import InvestigationState
-from verisight.execution.investigation_result import InvestigationStatus
+from verisight.execution.investigation_result import (
+    InvestigationStatus,
+    SynthesisFailureKind,
+)
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
 from verisight.execution.planning import QueryPlan, QueryRequest
@@ -341,7 +344,6 @@ def test_structured_budget_failure_preserves_incomplete_investigation(
     "response",
     [
         "private-invalid-response",
-        "```json\n" + _response([_claim()]) + "\n```",
         _response([{**_claim(), "expected": 30}]),
         _response([_claim()] * 51),
         _response([{**_claim(), "operation": "ratio"}]),
@@ -349,7 +351,6 @@ def test_structured_budget_failure_preserves_incomplete_investigation(
     ],
     ids=[
         "not-json",
-        "fenced-json",
         "numeric-expected",
         "too-many-claims",
         "unsupported-operation",
@@ -388,7 +389,7 @@ def test_invalid_synthesis_preserves_real_sql_observation(
     serialized = json.dumps(to_jsonable(result))
     assert "private" not in serialized
     assert json.loads(serialized)["observations"][0]["result"]["rows"] == [[30]]
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2
 
 
 @pytest.mark.parametrize(
@@ -453,3 +454,150 @@ def test_unexpected_synthesis_error_is_not_suppressed(tmp_path: Path) -> None:
         app.investigate(path, "Find the total.", max_steps=1)
 
     assert caught.value is error
+
+
+class _SequenceClient:
+    def __init__(self, responses: list[str | Exception]) -> None:
+        self.responses = responses
+        self.prompts: list[str] = []
+
+    def generate(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+        response = self.responses[len(self.prompts) - 1]
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+@pytest.mark.parametrize(
+    "language,newline",
+    [("json", "\n"), ("JSON", "\r\n"), ("", "\n"), ("json \t", "\n")],
+)
+def test_structured_synthesis_accepts_complete_json_fences(
+    language: str,
+    newline: str,
+) -> None:
+    response = "  ```" + language + newline + _response([_claim()]) + newline + "```  "
+    client = _Client(response)
+
+    result = StructuredInvestigationSynthesizer(client).synthesize(_build_state())
+
+    assert len(result.claims) == 1
+    assert result.claims[0].expected == 30
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.parametrize(
+    "invalid,reason",
+    [
+        ("synthetic-private-rejected-response", "invalid_json"),
+        ("```python\n" + _response([]) + "\n```", "invalid_json"),
+        ("prefix\n```json\n" + _response([]) + "\n```", "invalid_json"),
+        (_response([{**_claim(), "expected": 30}]), "invalid_schema_or_claim"),
+        (_response([_claim()] * 51), "invalid_schema_or_claim"),
+        (_response([{**_claim(), "operation": "ratio"}]), "invalid_schema_or_claim"),
+        ("synthetic-private" * 4000, "response_too_large"),
+    ],
+    ids=[
+        "malformed-json",
+        "unsupported-fence",
+        "surrounding-prose",
+        "numeric-expected",
+        "too-many-claims",
+        "unsupported-operation",
+        "oversized-response",
+    ],
+)
+def test_format_repair_uses_safe_feedback_and_revalidates(
+    invalid: str,
+    reason: str,
+) -> None:
+    client = _SequenceClient([invalid, _response([_claim()])])
+
+    result = StructuredInvestigationSynthesizer(client).synthesize(_build_state())
+
+    assert result.claims[0].expected == 30
+    assert result.claims[0].absolute_tolerance == 0
+    assert len(client.prompts) == 2
+    first, repair = client.prompts
+    assert repair.startswith(first)
+    assert '"validation_error": "' + reason + '"' in repair
+    assert "synthetic-private" not in repair
+    assert "FORMAT REPAIR (one attempt)" in repair
+
+
+def test_format_repair_stops_after_second_invalid_response() -> None:
+    client = _SequenceClient(["private-first-response", "private-second-response"])
+
+    with pytest.raises(InvestigationError, match="response is invalid"):
+        StructuredInvestigationSynthesizer(client).synthesize(_build_state())
+
+    assert len(client.prompts) == 2
+    assert "private-first-response" not in client.prompts[1]
+
+
+def test_format_repair_enforces_budget_before_second_generation() -> None:
+    state = _build_state()
+    probe = _Client(_response([]))
+    StructuredInvestigationSynthesizer(probe).synthesize(state)
+    client = _SequenceClient(["private-invalid-response"])
+    synthesizer = StructuredInvestigationSynthesizer(
+        client, max_prompt_chars=len(probe.prompts[0])
+    )
+
+    with pytest.raises(PromptBudgetExceededError):
+        synthesizer.synthesize(state)
+
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.parametrize("transient", [False, True])
+def test_provider_failure_during_format_repair_preserves_evidence(
+    tmp_path: Path,
+    transient: bool,
+) -> None:
+    error_type = GeminiTransientError if transient else GeminiGenerationError
+    client = _SequenceClient(["private-invalid", error_type("private-provider-error")])
+    path = tmp_path / "measurements.csv"
+    path.write_text("value\n10\n20\n", encoding="utf-8")
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        planner=_Planner(),
+        investigator=_Investigator(),
+        synthesizer=StructuredInvestigationSynthesizer(client),
+    )
+
+    result = app.investigate(path, "Find the total.", max_steps=1)
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observations[0].result.rows == ((30,),)
+    assert result.synthesis_failure is not None
+    assert result.synthesis_failure.kind is (
+        SynthesisFailureKind.PROVIDER_UNAVAILABLE
+        if transient
+        else SynthesisFailureKind.PROVIDER_ERROR
+    )
+    assert "private" not in json.dumps(to_jsonable(result))
+    assert len(client.prompts) == 2
+
+
+def test_repaired_claim_is_still_verified_against_sql(tmp_path: Path) -> None:
+    client = _SequenceClient(["invalid", _response([_claim("31")])])
+    path = tmp_path / "measurements.csv"
+    path.write_text("value\n10\n20\n", encoding="utf-8")
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        planner=_Planner(),
+        investigator=_Investigator(),
+        synthesizer=StructuredInvestigationSynthesizer(client),
+    )
+
+    result = app.investigate(path, "Find the total.", max_steps=1)
+
+    assert result.status is InvestigationStatus.COMPLETE
+    assert (
+        result.verified_claims[0].verification.status is VerificationStatus.CONTRADICTED
+    )
+    assert result.synthesis_failure is None
+    assert result.narrative_verified is False
+    assert len(client.prompts) == 2
