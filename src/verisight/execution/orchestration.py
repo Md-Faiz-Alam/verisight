@@ -14,6 +14,7 @@ from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.incomplete_evidence import IncompleteEvidenceError
 from verisight.execution.investigation import FailedQueryAttempt, InvestigationState
 from verisight.execution.investigation_result import (
+    InvestigationFailure,
     InvestigationResult,
     InvestigationStatus,
     SynthesisFailure,
@@ -65,6 +66,17 @@ class InvestigationOrchestrator:
                 decision = self._investigator.decide(state)
             except (PromptBudgetExceededError, IncompleteEvidenceError):
                 return self._incomplete(state)
+
+            except (InvestigationError, GeminiGenerationError) as exc:
+                if state.observation_count == 0:
+                    raise
+                return self._incomplete(
+                    state,
+                    reason="the next investigation decision could not be completed",
+                    investigation_failure=InvestigationFailure.from_exception(
+                        "investigator", exc
+                    ),
+                )
 
             if decision.action is InvestigationAction.FINISH:
                 if state.observation_count == 0:
@@ -126,15 +138,35 @@ class InvestigationOrchestrator:
 
             try:
                 execution = self._execution_service.run(investigation_question)
+            except (GeminiGenerationError, PromptBudgetExceededError) as exc:
+                if state.observation_count == 0:
+                    raise
+                return self._incomplete(
+                    state,
+                    reason="a subsequent analytical attempt could not be completed",
+                    investigation_failure=InvestigationFailure.from_exception(
+                        "query_execution", exc
+                    ),
+                )
             except (
                 QueryValidationError,
                 QueryExecutionError,
                 QueryPlanningError,
             ) as exc:
-                if isinstance(exc, QueryPlanningError) and isinstance(
-                    exc.__cause__, GeminiGenerationError
-                ):
-                    raise
+                if isinstance(exc, QueryPlanningError):
+                    failure = InvestigationFailure.from_exception(
+                        "query_execution", exc
+                    )
+                    if failure.kind in {"provider_error", "provider_unavailable"}:
+                        if state.observation_count == 0:
+                            raise
+                        return self._incomplete(
+                            state,
+                            reason=(
+                                "a subsequent analytical attempt could not be completed"
+                            ),
+                            investigation_failure=failure,
+                        )
 
                 state = state.add_failed_attempt(
                     FailedQueryAttempt(
@@ -159,6 +191,7 @@ class InvestigationOrchestrator:
         *,
         reason: str | None = None,
         synthesis_failure: SynthesisFailure | None = None,
+        investigation_failure: InvestigationFailure | None = None,
     ) -> InvestigationResult:
         """Preserve observations without presenting unsupported conclusions."""
 
@@ -178,6 +211,7 @@ class InvestigationOrchestrator:
             observations=state.observations,
             status=InvestigationStatus.INCOMPLETE,
             synthesis_failure=synthesis_failure,
+            investigation_failure=investigation_failure,
         )
 
     @staticmethod

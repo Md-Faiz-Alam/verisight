@@ -2,8 +2,10 @@
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Literal
 
 from verisight.analysis.result import DatasetAnalysisResult
+from verisight.error_reporting import to_public_error
 from verisight.execution.claim_verification import (
     ClaimOperation,
     ClaimVerificationResult,
@@ -64,6 +66,44 @@ class SynthesisFailure:
         return cls(kind=SynthesisFailureKind.SYNTHESIS_ERROR)
 
 
+InvestigationFailureStage = Literal["investigator", "query_execution"]
+
+
+@dataclass(frozen=True, slots=True)
+class InvestigationFailure:
+    """Safe terminal failure after evidence collection, with no raw error text.
+
+    query_execution covers planning, execution, and repair. Provider diagnostics
+    retain the generation client's more specific stage when available.
+    """
+
+    stage: InvestigationFailureStage
+    kind: str
+    diagnostics: ProviderFailureDiagnostics | None = None
+
+    @classmethod
+    def from_exception(
+        cls, stage: InvestigationFailureStage, error: Exception
+    ) -> "InvestigationFailure":
+        """Classify explicit causes without retaining exceptions or messages."""
+        current: BaseException | None = error
+        seen: set[int] = set()
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            if isinstance(current, GeminiGenerationError):
+                return cls(
+                    stage=stage,
+                    kind=(
+                        "provider_unavailable"
+                        if isinstance(current, GeminiTransientError)
+                        else "provider_error"
+                    ),
+                    diagnostics=current.diagnostics,
+                )
+            current = current.__cause__
+        return cls(stage=stage, kind=to_public_error(error).code.value)
+
+
 @dataclass(frozen=True, slots=True)
 class InvestigationResult:
     """Result produced by an autonomous analytical investigation."""
@@ -75,6 +115,7 @@ class InvestigationResult:
     status: InvestigationStatus = InvestigationStatus.COMPLETE
     generated_claims: tuple[NumericalClaim, ...] = ()
     synthesis_failure: SynthesisFailure | None = None
+    investigation_failure: InvestigationFailure | None = None
     narrative_verified: bool = field(default=False, init=False)
     verified_claims: tuple["VerifiedNumericalClaim", ...] = field(init=False)
     quantitative_statements: tuple["ClaimLinkedStatement", ...] = field(init=False)
@@ -101,6 +142,14 @@ class InvestigationResult:
             and self.status is not InvestigationStatus.INCOMPLETE
         ):
             raise ValueError("Synthesis failure requires an incomplete investigation.")
+
+        if (
+            self.investigation_failure is not None
+            and self.status is not InvestigationStatus.INCOMPLETE
+        ):
+            raise ValueError(
+                "Investigation failure requires an incomplete investigation."
+            )
 
         report = self.verify_claims(self.generated_claims)
         object.__setattr__(self, "verified_claims", report.verified_claims)
