@@ -16,6 +16,7 @@ from verisight.execution.investigation import FailedQueryAttempt, InvestigationS
 from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
+    SynthesisFailure,
 )
 from verisight.execution.investigator import Investigator
 from verisight.execution.observations import QueryObservation
@@ -78,10 +79,11 @@ class InvestigationOrchestrator:
                     synthesis = self._synthesizer.synthesize(state)
                 except (PromptBudgetExceededError, IncompleteEvidenceError):
                     return self._incomplete(state)
-                except (InvestigationError, GeminiGenerationError):
+                except (InvestigationError, GeminiGenerationError) as exc:
                     return self._incomplete(
                         state,
                         reason="final synthesis could not be completed",
+                        synthesis_failure=SynthesisFailure.from_exception(exc),
                     )
 
                 return InvestigationResult(
@@ -156,6 +158,7 @@ class InvestigationOrchestrator:
         state: InvestigationState,
         *,
         reason: str | None = None,
+        synthesis_failure: SynthesisFailure | None = None,
     ) -> InvestigationResult:
         """Preserve observations without presenting unsupported conclusions."""
 
@@ -174,6 +177,7 @@ class InvestigationOrchestrator:
             analysis=state.analysis,
             observations=state.observations,
             status=InvestigationStatus.INCOMPLETE,
+            synthesis_failure=synthesis_failure,
         )
 
     @staticmethod

@@ -9,6 +9,11 @@ from verisight.execution.claim_verification import (
     NumericalClaim,
     NumericalClaimVerifier,
 )
+from verisight.execution.gemini import (
+    GeminiGenerationError,
+    GeminiTransientError,
+    ProviderFailureDiagnostics,
+)
 from verisight.execution.observations import QueryObservation
 
 
@@ -17,6 +22,41 @@ class InvestigationStatus(StrEnum):
 
     COMPLETE = "complete"
     INCOMPLETE = "incomplete"
+
+
+class SynthesisFailureKind(StrEnum):
+    """Distinguish provider failures from other expected synthesis failures."""
+
+    PROVIDER_UNAVAILABLE = "provider_unavailable"
+    PROVIDER_ERROR = "provider_error"
+    SYNTHESIS_ERROR = "synthesis_error"
+
+
+@dataclass(frozen=True, slots=True)
+class SynthesisFailure:
+    """Safe synthesis failure metadata without exception text or objects."""
+
+    kind: SynthesisFailureKind
+    diagnostics: ProviderFailureDiagnostics | None = None
+
+    @classmethod
+    def from_exception(cls, error: Exception) -> "SynthesisFailure":
+        """Follow explicit causes to preserve provider classification safely."""
+        current: BaseException | None = error
+        seen: set[int] = set()
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            if isinstance(current, GeminiGenerationError):
+                return cls(
+                    kind=(
+                        SynthesisFailureKind.PROVIDER_UNAVAILABLE
+                        if isinstance(current, GeminiTransientError)
+                        else SynthesisFailureKind.PROVIDER_ERROR
+                    ),
+                    diagnostics=current.diagnostics,
+                )
+            current = current.__cause__
+        return cls(kind=SynthesisFailureKind.SYNTHESIS_ERROR)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +69,7 @@ class InvestigationResult:
     observations: tuple[QueryObservation, ...] = ()
     status: InvestigationStatus = InvestigationStatus.COMPLETE
     generated_claims: tuple[NumericalClaim, ...] = ()
+    synthesis_failure: SynthesisFailure | None = None
     narrative_verified: bool = field(default=False, init=False)
     verified_claims: tuple["VerifiedNumericalClaim", ...] = field(init=False)
     verification_scope: str = field(
@@ -43,6 +84,12 @@ class InvestigationResult:
 
         if not self.conclusion.strip():
             raise ValueError("Investigation conclusion must not be empty.")
+
+        if (
+            self.synthesis_failure is not None
+            and self.status is not InvestigationStatus.INCOMPLETE
+        ):
+            raise ValueError("Synthesis failure requires an incomplete investigation.")
 
         object.__setattr__(
             self,

@@ -79,6 +79,8 @@ def score_result(result: InvestigationResult, answer: str) -> dict[str, object]:
     }
     if result.status is InvestigationStatus.INCOMPLETE:
         report["outcome"] = "incomplete"
+        if result.synthesis_failure is not None:
+            report["synthesis_failure"] = asdict(result.synthesis_failure)
     elif not result.verified_claims:
         report["outcome"] = "no_claims"
     elif len(result.verified_claims) != 1:
