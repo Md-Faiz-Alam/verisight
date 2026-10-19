@@ -1,0 +1,105 @@
+{
+  "schema_version": 2,
+  "timestamp_utc": "2026-10-19T05:45:33.720703+00:00",
+  "elapsed_seconds": 27.306,
+  "revision": {
+    "commit": "5ef47b9a44689fea8cda819342c2bbefffb74a1b",
+    "tracked_changes": false,
+    "status_scope": "tracked_files_only"
+  },
+  "python_version": "3.11.9",
+  "model": "gemini-3.8-flash",
+  "max_steps_per_case": 1,
+  "provider_retries": 0,
+  "run_settings": {
+    "allow_llm_data_disclosure": true,
+    "request_timeout_seconds": 20.0,
+    "retry_base_delay_seconds": 1.0,
+    "max_upload_size_mb": 100,
+    "max_query_execution_seconds": 5.0,
+    "max_query_result_rows": 20,
+    "max_query_memory_mb": 512,
+    "max_query_temp_storage_mb": 1024
+  },
+  "scoring_scope": "single_claim_numeric_answer_only",
+  "limitations": "No narrative or general semantic certification. No-claims responses are not automatically proven abstentions. These are known development fixtures, not a held-out generalization benchmark.",
+  "case_count": 5,
+  "outcome_counts": {
+    "incomplete": 1,
+    "provider_error": 4
+  },
+  "number_audit_summary": {
+    "audited_case_count": 1,
+    "unaudited_case_count": 4,
+    "detected_token_count": 0,
+    "unlinked_token_count": 0,
+    "cases_with_unlinked_tokens": 0
+  },
+  "results": {
+    "finance": {
+      "expected": "10050",
+      "observation_count": 1,
+      "claim_count": 0,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 0,
+      "unlinked_number_count": 0,
+      "outcome": "incomplete",
+      "synthesis_failure": {
+        "kind": "provider_unavailable",
+        "diagnostics": {
+          "http_status": 429,
+          "retryable": true,
+          "attempts": 1,
+          "stage": "structured_synthesis",
+          "call_number": 1
+        }
+      },
+      "elapsed_seconds": 18.752
+    },
+    "retail": {
+      "outcome": "provider_error",
+      "diagnostics": {
+        "http_status": 429,
+        "retryable": true,
+        "attempts": 1,
+        "stage": "investigator",
+        "call_number": 1
+      },
+      "elapsed_seconds": 2.112
+    },
+    "manufacturing": {
+      "outcome": "provider_error",
+      "diagnostics": {
+        "http_status": 429,
+        "retryable": true,
+        "attempts": 1,
+        "stage": "investigator",
+        "call_number": 1
+      },
+      "elapsed_seconds": 2.157
+    },
+    "healthcare": {
+      "outcome": "provider_error",
+      "diagnostics": {
+        "http_status": 429,
+        "retryable": true,
+        "attempts": 1,
+        "stage": "investigator",
+        "call_number": 1
+      },
+      "elapsed_seconds": 2.162
+    },
+    "logistics": {
+      "outcome": "provider_error",
+      "diagnostics": {
+        "http_status": 429,
+        "retryable": true,
+        "attempts": 1,
+        "stage": "investigator",
+        "call_number": 1
+      },
+      "elapsed_seconds": 2.121
+    }
+  }
+}
