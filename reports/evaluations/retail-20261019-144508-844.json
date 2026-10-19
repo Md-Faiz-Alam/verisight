@@ -1,0 +1,50 @@
+{
+  "schema_version": 2,
+  "timestamp_utc": "2026-10-19T09:15:10.523943+00:00",
+  "elapsed_seconds": 22.429,
+  "revision": {
+    "commit": "fb95ba5da5f15006cd23ab881eda49bfd773843f",
+    "tracked_changes": false,
+    "status_scope": "tracked_files_only"
+  },
+  "python_version": "3.11.9",
+  "model": "gemini-3.8-flash",
+  "max_steps_per_case": 1,
+  "provider_retries": 0,
+  "run_settings": {
+    "allow_llm_data_disclosure": true,
+    "request_timeout_seconds": 20.0,
+    "retry_base_delay_seconds": 1.0,
+    "max_upload_size_mb": 100,
+    "max_query_execution_seconds": 5.0,
+    "max_query_result_rows": 20,
+    "max_query_memory_mb": 512,
+    "max_query_temp_storage_mb": 1024
+  },
+  "scoring_scope": "single_claim_numeric_answer_only",
+  "limitations": "No narrative or general semantic certification. No-claims responses are not automatically proven abstentions. These are known development fixtures, not a held-out generalization benchmark.",
+  "case_count": 1,
+  "outcome_counts": {
+    "provider_error": 1
+  },
+  "number_audit_summary": {
+    "audited_case_count": 0,
+    "unaudited_case_count": 1,
+    "detected_token_count": 0,
+    "unlinked_token_count": 0,
+    "cases_with_unlinked_tokens": 0
+  },
+  "results": {
+    "retail": {
+      "outcome": "provider_error",
+      "diagnostics": {
+        "http_status": 504,
+        "retryable": true,
+        "attempts": 1,
+        "stage": "investigator",
+        "call_number": 1
+      },
+      "elapsed_seconds": 22.429
+    }
+  }
+}
