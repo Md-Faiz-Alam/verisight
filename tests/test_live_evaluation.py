@@ -1,12 +1,20 @@
 """Offline tests for the opt-in live evaluation runner; no provider calls."""
 
+import json
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from scripts.live_evaluation import CASES, failure_report, main, run_case, score_result
+from scripts.live_evaluation import (
+    CASES,
+    failure_report,
+    main,
+    run_case,
+    score_result,
+    summarize_number_audits,
+)
 
 from verisight import VeriSight
 from verisight.config import Settings
@@ -166,3 +174,124 @@ def test_main_reports_all_cases_without_secrets(
     output = capsys.readouterr().out
     assert "private-secret" not in output
     assert f'"case_count": {count}' in output
+
+
+@pytest.mark.parametrize(
+    ("conclusion", "detected", "unlinked"),
+    [
+        ("The total is 30.", 1, 0),
+        ("The total is 9999, repeated as 9999, rather than 30.", 3, 2),
+        ("No numerical conclusion is available.", 0, 0),
+    ],
+)
+def test_score_reports_token_occurrences_without_certifying_narrative(
+    result: InvestigationResult, conclusion: str, detected: int, unlinked: int
+) -> None:
+    report = score_result(replace(result, conclusion=conclusion), "30")
+
+    assert report["outcome"] == "correct_numeric"
+    assert report["narrative_number_count"] == detected
+    assert report["unlinked_number_count"] == unlinked
+    assert report["narrative_number_audit_scope"] == "ascii_numeric_tokens_only"
+    assert report["narrative_verified"] is False
+    assert "conclusion" not in report
+    assert "9999" not in json.dumps(report)
+
+
+def test_no_claims_and_incomplete_results_still_have_number_audits(
+    result: InvestigationResult,
+) -> None:
+    no_claims = replace(result, generated_claims=())
+    for item, outcome in (
+        (no_claims, "no_claims"),
+        (replace(no_claims, status=InvestigationStatus.INCOMPLETE), "incomplete"),
+    ):
+        report = score_result(item, "30")
+        assert report["outcome"] == outcome
+        assert report["narrative_number_count"] == 1
+        assert report["unlinked_number_count"] == 1
+
+
+def test_number_audit_summary_separates_missing_audits_from_zero_tokens(
+    result: InvestigationResult,
+) -> None:
+    reports = {
+        "linked": score_result(result, "30"),
+        "unlinked": score_result(
+            replace(result, conclusion="9999 and 9999; the claim says 30."), "30"
+        ),
+        "zero_tokens": score_result(
+            replace(result, conclusion="No numerical finding."), "30"
+        ),
+        "provider_failure": failure_report(GeminiGenerationError("private-secret")),
+        "application_failure": failure_report(InvestigationError("private-secret")),
+    }
+
+    assert summarize_number_audits(reports) == {
+        "audited_case_count": 3,
+        "unaudited_case_count": 2,
+        "detected_token_count": 4,
+        "unlinked_token_count": 2,
+        "cases_with_unlinked_tokens": 1,
+    }
+    assert summarize_number_audits({}) == {
+        "audited_case_count": 0,
+        "unaudited_case_count": 0,
+        "detected_token_count": 0,
+        "unlinked_token_count": 0,
+        "cases_with_unlinked_tokens": 0,
+    }
+
+
+@pytest.mark.parametrize(
+    ("detected", "unlinked"),
+    [(None, 0), (1, None), (True, 0), (1, False), (-1, 0), (1, -1), (1, 2)],
+)
+def test_number_audit_summary_rejects_invalid_counts(
+    detected: object, unlinked: object
+) -> None:
+    summary = summarize_number_audits(
+        {
+            "case": {
+                "narrative_number_count": detected,
+                "unlinked_number_count": unlinked,
+            }
+        }
+    )
+
+    assert summary["audited_case_count"] == 0
+    assert summary["unaudited_case_count"] == 1
+    assert summary["detected_token_count"] == 0
+    assert summary["unlinked_token_count"] == 0
+
+
+def test_main_includes_audit_summary_without_changing_numeric_exit_status(
+    result: InvestigationResult, capsys: pytest.CaptureFixture[str]
+) -> None:
+    reports = [
+        score_result(replace(result, conclusion="The total is 9999."), "30"),
+        score_result(result, "30"),
+        score_result(replace(result, conclusion="No numerical finding."), "30"),
+    ]
+    with (
+        patch("sys.argv", ["live_evaluation", "--live", "--case", "all"]),
+        patch(
+            "scripts.live_evaluation.Settings",
+            return_value=Settings(gemini_api_key="private-secret"),
+        ),
+        patch("scripts.live_evaluation.run_case", side_effect=reports),
+    ):
+        assert main() == 0
+
+    output = capsys.readouterr().out
+    report = json.loads(output)
+    assert report["outcome_counts"] == {"correct_numeric": 3}
+    assert report["number_audit_summary"] == {
+        "audited_case_count": 3,
+        "unaudited_case_count": 0,
+        "detected_token_count": 2,
+        "unlinked_token_count": 1,
+        "cases_with_unlinked_tokens": 1,
+    }
+    assert "9999" not in output
+    assert "private-secret" not in output

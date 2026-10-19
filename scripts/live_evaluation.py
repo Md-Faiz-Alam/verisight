@@ -75,7 +75,10 @@ def score_result(result: InvestigationResult, answer: str) -> dict[str, object]:
         "expected": answer,
         "observation_count": result.observation_count,
         "claim_count": len(result.verified_claims),
-        "narrative_verified": False,
+        "narrative_verified": result.narrative_verified,
+        "narrative_number_audit_scope": result.narrative_number_audit_scope,
+        "narrative_number_count": len(result.narrative_numbers),
+        "unlinked_number_count": len(result.unlinked_numbers),
     }
     if result.status is InvestigationStatus.INCOMPLETE:
         report["outcome"] = "incomplete"
@@ -100,6 +103,34 @@ def score_result(result: InvestigationResult, answer: str) -> dict[str, object]:
                 else "incorrect_numeric"
             )
     return report
+
+
+def summarize_number_audits(
+    results: dict[str, dict[str, object]],
+) -> dict[str, int]:
+    """Count token occurrences; missing audits are not zero-token conclusions."""
+    audited = 0
+    detected = 0
+    unlinked = 0
+    cases_with_unlinked = 0
+    for report in results.values():
+        token_count = report.get("narrative_number_count")
+        unmatched_count = report.get("unlinked_number_count")
+        if type(token_count) is not int or type(unmatched_count) is not int:
+            continue
+        if not 0 <= unmatched_count <= token_count:
+            continue
+        audited += 1
+        detected += token_count
+        unlinked += unmatched_count
+        cases_with_unlinked += int(unmatched_count > 0)
+    return {
+        "audited_case_count": audited,
+        "unaudited_case_count": len(results) - audited,
+        "detected_token_count": detected,
+        "unlinked_token_count": unlinked,
+        "cases_with_unlinked_tokens": cases_with_unlinked,
+    }
 
 
 def failure_report(error: Exception) -> dict[str, object]:
@@ -175,6 +206,7 @@ def main() -> int:
         ),
         "case_count": len(results),
         "outcome_counts": dict(counts),
+        "number_audit_summary": summarize_number_audits(results),
         "results": results,
     }
     print(json.dumps(report, indent=2))
