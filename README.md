@@ -87,6 +87,12 @@ Inputs accept a string path, a `Path`, or an iterable of either. Empty inputs
 and invalid entries are rejected. `ask()` does not expose planning or repair
 history in its return value.
 
+Excel columns containing native booleans and blanks use a nullable boolean
+dtype and infer as boolean. Numeric `0`/`1` cells and boolean-looking text remain
+distinct from native booleans. Mixed boolean/numeric or boolean/text columns
+retain their scalar types in loaded data and infer as `unknown`. This does not
+guarantee heterogeneous scalar types survive conversion into a SQL column.
+
 ## Gemini investigations
 
 Configure a local `.env` file or environment variables:
@@ -271,7 +277,7 @@ statement and branch coverage measures exercised paths, not universal accuracy.
 - Integrate explicit per-metric rounding where appropriate and evaluate analytical semantics independently.
 - Expand held-out questions, multi-step cases, and baseline comparisons.
 - Expose failed-attempt and repair history.
-- Improve nullable Excel boolean inference and identifier-quoting guidance.
+- Improve identifier-quoting guidance for planning and repair.
 - Remove private cross-object configuration in legacy synthesis.
 - Build the user workflow, report export, and deployment acceptance evidence.
 

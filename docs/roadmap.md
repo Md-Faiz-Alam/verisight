@@ -11,7 +11,8 @@ The implemented foundation includes ingestion, profiling, quality analysis,
 validated SQL, generation and repair, bounded investigation, structured synthesis,
 numerical verification, application-rendered claim statements, token audits,
 Unicode digit coverage, expected-failure evidence recovery, safe diagnostics,
-generation telemetry, and offline CI on Windows and Linux.
+generation telemetry, native/nullable Excel boolean handling, and offline CI
+on Windows and Linux.
 
 Five synthetic live development fixtures and committed success/failure reports
 exist. Reports span different revisions and settings. They establish examples
@@ -85,8 +86,8 @@ Narrative error rates require independently labeled semantic evaluation.
 
 ## 4. Improve unfamiliar-data handling and planning
 
-Required work includes nullable Excel boolean inference, identifier-quoting
-instructions, removal of private cross-object configuration in legacy synthesis,
+Required work includes identifier-quoting instructions, removal of private
+cross-object configuration in legacy synthesis,
 relationship discovery, semantic roles, units, schema ambiguity, useful competing
 hypotheses, and stopping rules for insufficient evidence.
 

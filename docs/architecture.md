@@ -18,7 +18,20 @@ either. Empty collections and invalid entries are rejected.
 CSV, JSON, and Excel loaders validate supported inputs and produce loaded
 relations. Schema inference, profiling, and quality rules produce deterministic
 analysis. Loader precision protections do not establish source-data accuracy.
-Nullable Excel boolean inference remains a known gap.
+The Excel loader uses a header-only parse to configure converters for the full
+parse. Identity-based temporary cell wrappers prevent pandas inference and
+equality caching from merging native booleans with numeric `0`/`1`. Scalars are
+restored into object series before application inference, preserving exact
+integers. Empty string cells are treated as missing; literal text such as `NA`
+remains text.
+
+Columns containing only native booleans among nonmissing cells become `bool`
+or nullable `boolean`. Mixed boolean/numeric or boolean/text columns retain
+native scalars in loaded data and infer as `unknown`. Pure numeric `0`/`1`
+columns remain integer columns, and boolean-looking text is not reinterpreted.
+All-blank columns remain unknown. SQL engines can still coerce heterogeneous
+object columns; preserving mixed source scalars at ingestion is not a guarantee
+of mixed scalar types in SQL results.
 
 Planner, investigator, repairer, and synthesizer dependencies support injection
 for deterministic tests and alternative behavior.

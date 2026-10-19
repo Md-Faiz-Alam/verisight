@@ -1,5 +1,6 @@
 """Excel loader for the VeriSight ingestion subsystem."""
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +15,13 @@ from verisight.ingestion.models import (
 from verisight.ingestion.validation import validate_file
 
 EXCEL_EXTENSIONS = frozenset({".xls", ".xlsx"})
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class _ExcelCell:
+    """Prevent parser inference and equality caching from merging source types."""
+
+    value: object
 
 
 class ExcelLoader:
@@ -45,14 +53,17 @@ class ExcelLoader:
                             "Excel workbook contains a non-string sheet name."
                         )
 
+                    headers = workbook.parse(sheet_name=sheet_name, nrows=0)
                     data = workbook.parse(
                         sheet_name=sheet_name,
-                        dtype=object,
+                        converters={
+                            index: _ExcelCell for index in range(len(headers.columns))
+                        },
                         keep_default_na=False,
-                        na_values=[""],
+                        na_filter=False,
                     )
                     for column in data.columns:
-                        data[column] = _infer_column(data[column])
+                        data[column] = _infer_column(_restore_cells(data[column]))
 
                     tables.append(
                         LoadedTable(
@@ -79,9 +90,28 @@ class ExcelLoader:
         )
 
 
+def _restore_cells(series: pd.Series) -> pd.Series:
+    """Restore scalars into an object series before applying application inference."""
+    values = [
+        value.value if isinstance(value, _ExcelCell) else value
+        for value in series.tolist()
+    ]
+    return pd.Series(
+        [None if type(value) is str and value == "" else value for value in values],
+        index=series.index,
+        name=series.name,
+        dtype=object,
+    )
+
+
 def _infer_column(series: pd.Series) -> pd.Series:
     """Infer native types without routing exact integers through floats."""
     values = series.dropna().tolist()
+    booleans = [value for value in values if type(value) is bool]
+    if booleans:
+        if len(booleans) == len(values):
+            return series.astype("boolean" if series.isna().any() else "bool")
+        return series
     integers = [value for value in values if type(value) is int]
 
     if integers and len(integers) == len(values):
