@@ -54,6 +54,45 @@ class _Response(BaseModel):
     claims: list[_Claim] = Field(max_length=50)
 
 
+def _generation_schema() -> dict[str, Any]:
+    """Use a compact provider schema; local Pydantic validation stays authoritative."""
+    reference = {
+        "type": "object",
+        "properties": {
+            "observation_index": {"type": "integer"},
+            "row_index": {"type": "integer"},
+            "column": {"type": "string"},
+        },
+        "required": ["observation_index", "row_index", "column"],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "conclusion": {"type": "string"},
+            "claims": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "operation": {
+                            "type": "string",
+                            "enum": ["value", "difference"],
+                        },
+                        "expected": {"type": "string"},
+                        "left": reference,
+                        "right": {**reference, "type": ["object", "null"]},
+                    },
+                    "required": ["operation", "expected", "left", "right"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["conclusion", "claims"],
+        "additionalProperties": False,
+    }
+
+
 def _unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for key, value in pairs:
@@ -114,7 +153,7 @@ class StructuredInvestigationSynthesizer:
                 request_timeout_seconds=settings.gemini_request_timeout_seconds,
                 max_retries=settings.gemini_max_retries,
                 retry_base_delay_seconds=settings.gemini_retry_base_delay_seconds,
-                response_json_schema=_Response.model_json_schema(),
+                response_json_schema=_generation_schema(),
             )
         )
 

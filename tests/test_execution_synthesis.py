@@ -236,10 +236,11 @@ def test_structured_factory_configures_gemini_schema(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
+    client = _Client(_response([]))
 
     def factory(**kwargs: Any) -> _Client:
         captured.update(kwargs)
-        return _Client(_response([]))
+        return client
 
     monkeypatch.setattr(
         "verisight.execution.structured_synthesis.GeminiTextGenerationClient", factory
@@ -256,7 +257,42 @@ def test_structured_factory_configures_gemini_schema(
     schema = captured["response_json_schema"]
     assert set(schema["required"]) == {"conclusion", "claims"}
     assert schema["additionalProperties"] is False
-    assert schema["$defs"]["_Claim"]["properties"]["expected"]["type"] == "string"
+    claim_schema = schema["properties"]["claims"]["items"]
+    assert claim_schema["properties"]["expected"] == {"type": "string"}
+    assert claim_schema["properties"]["operation"]["enum"] == ["value", "difference"]
+    assert set(claim_schema["required"]) == {"operation", "expected", "left", "right"}
+    left = claim_schema["properties"]["left"]
+    right = claim_schema["properties"]["right"]
+    assert left["type"] == "object"
+    assert right["type"] == ["object", "null"]
+    assert left["properties"] == right["properties"]
+    assert set(left["required"]) == {"observation_index", "row_index", "column"}
+    assert left["additionalProperties"] is False
+    assert right["additionalProperties"] is False
+    wire_schema = json.dumps(schema)
+    for keyword in (
+        "$defs",
+        "$ref",
+        "anyOf",
+        "pattern",
+        "maxLength",
+        "minLength",
+        "maxItems",
+        "minimum",
+    ):
+        assert keyword not in wire_schema
+
+    # The prompt still describes the stricter local contract.
+    prompt_schema = json.loads(
+        client.prompts[0]
+        .split("RESPONSE SCHEMA:\n", 1)[1]
+        .split("\nINVESTIGATION STATE:\n", 1)[0]
+    )
+    assert prompt_schema["properties"]["claims"]["maxItems"] == 50
+    assert prompt_schema["properties"]["conclusion"]["maxLength"] == 20_000
+    expected_schema = prompt_schema["$defs"]["_Claim"]["properties"]["expected"]
+    assert expected_schema["maxLength"] == 128
+    assert "pattern" in expected_schema
     assert captured["model"] == "test-model"
 
 
@@ -600,4 +636,43 @@ def test_repaired_claim_is_still_verified_against_sql(tmp_path: Path) -> None:
     )
     assert result.synthesis_failure is None
     assert result.narrative_verified is False
+    assert len(client.prompts) == 2
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        json.dumps({"conclusion": "x" * 20_001, "claims": []}),
+        _response([_claim()] * 51),
+        _response(
+            [
+                {
+                    **_claim(),
+                    "left": {
+                        "observation_index": 0,
+                        "row_index": 0,
+                        "column": "x" * 257,
+                    },
+                }
+            ]
+        ),
+        _response([_claim("NaN")]),
+    ],
+    ids=["long-conclusion", "too-many-claims", "long-column", "nonfinite-expected"],
+)
+def test_compact_generation_schema_does_not_relax_local_validation(
+    monkeypatch: pytest.MonkeyPatch, response: str
+) -> None:
+    client = _Client(response)
+    monkeypatch.setattr(
+        "verisight.execution.structured_synthesis.GeminiTextGenerationClient",
+        lambda **kwargs: client,
+    )
+    synthesizer = StructuredInvestigationSynthesizer.from_settings(
+        Settings(allow_llm_data_disclosure=True, gemini_api_key="synthetic")
+    )
+
+    with pytest.raises(InvestigationError, match="response is invalid"):
+        synthesizer.synthesize(_build_state())
+
     assert len(client.prompts) == 2
