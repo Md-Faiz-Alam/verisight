@@ -111,6 +111,7 @@ def score_result(result: InvestigationResult, answer: str) -> dict[str, object]:
         "narrative_number_audit_scope": result.narrative_number_audit_scope,
         "narrative_number_count": len(result.narrative_numbers),
         "unlinked_number_count": len(result.unlinked_numbers),
+        "narrative_digit_coverage": asdict(result.narrative_digit_coverage),
     }
     if result.status is InvestigationStatus.INCOMPLETE:
         report["outcome"] = "incomplete"

@@ -18,7 +18,9 @@ from verisight.execution.gemini import (
     ProviderFailureDiagnostics,
 )
 from verisight.execution.narrative_audit import (
+    NarrativeDigitCoverage,
     NarrativeNumberToken,
+    audit_narrative_digit_coverage,
     find_narrative_numbers,
 )
 from verisight.execution.observations import QueryObservation
@@ -120,6 +122,7 @@ class InvestigationResult:
     verified_claims: tuple["VerifiedNumericalClaim", ...] = field(init=False)
     quantitative_statements: tuple["ClaimLinkedStatement", ...] = field(init=False)
     narrative_numbers: tuple[NarrativeNumberToken, ...] = field(init=False)
+    narrative_digit_coverage: NarrativeDigitCoverage = field(init=False)
     unlinked_numbers: tuple[str, ...] = field(init=False)
     narrative_number_audit_scope: str = field(
         default="ascii_numeric_tokens_only", init=False
@@ -161,6 +164,11 @@ class InvestigationResult:
             tuple(item.verification.expected for item in self.verified_claims),
         )
         object.__setattr__(self, "narrative_numbers", tokens)
+        object.__setattr__(
+            self,
+            "narrative_digit_coverage",
+            audit_narrative_digit_coverage(self.conclusion, tokens),
+        )
         object.__setattr__(
             self,
             "unlinked_numbers",

@@ -3,6 +3,7 @@
 import re
 from dataclasses import dataclass
 from decimal import Decimal, DecimalException
+from typing import Literal
 
 # Exclude word identifiers, dotted versions, and contiguous ASCII dates or
 # arithmetic expressions. This lexer deliberately supports a limited syntax.
@@ -31,6 +32,50 @@ class NarrativeNumberToken:
     end: int
     value: Decimal | None
     claim_indexes: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NarrativeDigitCoverage:
+    """Character coverage only, independent of claim support or narrative truth.
+
+    Digits are characters recognized by str.isdigit(), including Unicode digits.
+    all_digits_parsed means every such character falls within a token with a
+    parsed numerical value. It does not validate signs, units, meaning, or
+    number words. no_digits does not establish the absence of numerical claims.
+    """
+
+    total_digit_count: int
+    parsed_digit_count: int
+    unparsed_digit_count: int
+    status: Literal["no_digits", "all_digits_parsed", "unparsed_digits"]
+
+
+def audit_narrative_digit_coverage(
+    text: str, tokens: tuple[NarrativeNumberToken, ...]
+) -> NarrativeDigitCoverage:
+    """Measure coverage using tokens returned for this text by the lexer.
+
+    Rejected token syntax and conversion limits count as unparsed. No Unicode
+    normalization or interpretation of suffixes, ranges, or units is performed.
+    """
+    digit_positions = {
+        index for index, character in enumerate(text) if character.isdigit()
+    }
+    parsed_positions: set[int] = set()
+    for token in tokens:
+        if token.value is not None:
+            parsed_positions.update(range(token.start, token.end))
+    total = len(digit_positions)
+    parsed = len(digit_positions & parsed_positions)
+    unparsed = total - parsed
+    status: Literal["no_digits", "all_digits_parsed", "unparsed_digits"]
+    if total == 0:
+        status = "no_digits"
+    elif unparsed:
+        status = "unparsed_digits"
+    else:
+        status = "all_digits_parsed"
+    return NarrativeDigitCoverage(total, parsed, unparsed, status)
 
 
 def find_narrative_numbers(
