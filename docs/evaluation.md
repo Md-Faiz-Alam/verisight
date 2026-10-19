@@ -73,15 +73,64 @@ The tests fail if either SQL path produces a value other than its independently
 specified fixture value, if an incorrect answer is scored as correct, or if
 claim/evidence checks stop reflecting the executed result.
 
+## Bounded multi-step benchmark
+
+`tests/test_multistep_correctness_benchmark.py` adds five scripted investigations
+with three successful SQL observations each: a broad intermediate metric, the
+included before-period metric, and the included after-period metric.
+
+```powershell
+python -m pytest tests/test_multistep_correctness_benchmark.py -q
+```
+
+Every observation is checked against independently specified fixture values.
+The final claim is a difference across observation references, not a newly
+executed change query. Correct references use after minus before.
+
+| Domain | Included before | Included after | Correct change | Broad metric | Wrong broad-minus-before change |
+| --- | --- | --- | --- | --- | --- |
+| Finance, posted amount | `10.5` | `12.25` | `1.75` | `122.75` | `112.25` |
+| Healthcare, completed wait mean | `1.875` | `3.75` | `1.875` | `22.25` | `20.375` |
+| Retail, paid order total | `30.75` | `40.75` | `10` | `171.5` | `140.75` |
+| Manufacturing, defect percentage | `37.5` | `12.5` | `-25` | `40` | `2.5` |
+| Logistics, on-time percentage | `50` | `62.5` | `12.5` | `80` | `30` |
+
+Percentage changes here are percentage-point differences, not relative changes.
+The broad metric intentionally includes both periods and excluded records.
+
+Four final-claim modes are tested per fixture:
+
+- Correct references and answer: supported and equal to the independent change.
+- Broad intermediate observation used as the after value: supported but wrong
+  against the independent change.
+- Reversed references with the correct claimed change: contradicted.
+- A nonexistent observation reference: unverifiable.
+
+Another four paths per fixture stop on a two-attempt budget, an investigator
+outage, a planning outage, or a synthesis outage. They assert bounded calls,
+ordered retained observations, incomplete status, empty claim lists, available
+safe failure metadata, and serialization without raw provider error text.
+The budget test prevents the third query from executing. It does not prevent
+the investigator from making the next decision.
+
+This adds forty offline tests. Planning, decisions, and synthesis remain
+scripted. The tests establish cross-observation plumbing, numerical verdicts,
+independent-answer distinctions, and failure recovery; they do not establish
+autonomous hypothesis formation or semantic error detection.
+
+The live evaluator currently scores one VALUE claim. These multi-step DIFFERENCE
+claims are checked directly against their independent fixture oracle; the live
+runner and its scoring contract are not expanded by this test module.
+
 ## Limits and next evaluation work
 
 These tests establish controlled pipeline and scorer behavior. They do not show
 that VeriSight detects bad SQL semantics autonomously, handles unfamiliar
 schemas reliably, or generates useful follow-up investigations.
 
-Next work includes independently labeled multi-step questions, held-out
-fixtures, insufficient-evidence cases, a defined model or system comparison,
-and reproducible live runs. Report all attempted cases and distinguish provider
+Next work includes unscripted multi-step evaluations, held-out fixtures,
+insufficient-evidence cases, a defined model or system comparison, and
+reproducible live runs. Report all attempted cases and distinguish provider
 availability, completion, correctness, and latency. The live runner's five
 fixtures remain separate from this ten-question offline increment.
 
