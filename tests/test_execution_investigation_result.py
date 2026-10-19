@@ -1,6 +1,6 @@
 import json
 from dataclasses import replace
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import Path
 
 import pytest
@@ -340,6 +340,11 @@ def test_quantitative_statement_exposes_tolerance_and_recomputes_on_change() -> 
         "Claim 1 (value): expected 10; evidence 11; "
         "absolute tolerance 1; status supported."
     )
+    audited = replace(result, conclusion="The value is 11.")
+    assert audited.unlinked_numbers == ("11",)
+    assert (
+        audited.verified_claims[0].verification.status is VerificationStatus.SUPPORTED
+    )
     changed = replace(result, generated_claims=(replace(claim, absolute_tolerance=0),))
     assert changed.quantitative_statements[0].text == (
         "Claim 1 (value): expected 10; evidence 11; "
@@ -406,6 +411,7 @@ def test_structured_investigation_renders_only_claim_linked_quantities(
     assert result.status is InvestigationStatus.COMPLETE
     assert result.narrative_verified is False
     assert "9999" in result.conclusion
+    assert result.unlinked_numbers == ("9999",)
     assert [statement.text for statement in result.quantitative_statements] == [
         (
             "Claim 1 (value): expected 30; evidence 30; "
@@ -442,3 +448,212 @@ def test_structured_investigation_renders_only_claim_linked_quantities(
         ]
         == "unverifiable"
     )
+
+
+def _audited_result(conclusion: str, *expected: str) -> InvestigationResult:
+    return InvestigationResult(
+        question="Audit the submitted numbers.",
+        conclusion=conclusion,
+        analysis=_build_analysis_result(),
+        generated_claims=tuple(
+            NumericalClaim(
+                ClaimOperation.VALUE, Decimal(value), EvidenceReference(0, 0, "metric")
+            )
+            for value in expected
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "token,expected,parsed,linked",
+    [
+        ("0", "0", "0", True),
+        ("9007199254740993", "9007199254740993", "9007199254740993", True),
+        (
+            "1234.567890123456789012345678901",
+            "1234.567890123456789012345678901",
+            "1234.567890123456789012345678901",
+            True,
+        ),
+        ("4,521", "4521", "4521", True),
+        ("-12.50", "-12.5", "-12.50", True),
+        (".5", "0.5", "0.5", True),
+        ("+7", "7", "7", True),
+        ("1E+3", "1000", "1E+3", True),
+        ("25%", "25", "25", True),
+        ("25%", "0.25", "25", False),
+        ("31.4", "31.4126", "31.4", False),
+        ("9999", "4521", "9999", False),
+        ("00123", "123", None, False),
+        ("1,00", "100", None, False),
+        ("1e999999999999999999999", "1", None, False),
+        ("9" * 129, "9", None, False),
+    ],
+    ids=[
+        "zero",
+        "large-integer",
+        "exact-decimal",
+        "grouped",
+        "negative",
+        "leading-dot",
+        "positive-sign",
+        "scientific",
+        "percentage-points",
+        "no-percentage-scaling",
+        "no-rounding",
+        "unclaimed",
+        "leading-zero",
+        "malformed-grouping",
+        "exponent-limit",
+        "token-length-limit",
+    ],
+)
+def test_narrative_number_audit_matches_exact_claim_values(
+    token: str,
+    expected: str,
+    parsed: str | None,
+    linked: bool,
+) -> None:
+    result = _audited_result(f"Metric: {token}.", expected)
+
+    assert len(result.narrative_numbers) == 1
+    number = result.narrative_numbers[0]
+    assert number.text == token
+    assert result.conclusion[number.start : number.end] == token
+    assert number.value == (Decimal(parsed) if parsed is not None else None)
+    assert number.claim_indexes == ((0,) if linked else ())
+    assert result.unlinked_numbers == (() if linked else (token,))
+    assert result.narrative_number_audit_scope == "ascii_numeric_tokens_only"
+    assert result.narrative_verified is False
+
+
+@pytest.mark.parametrize(
+    "conclusion",
+    [
+        "There are ten rows.",
+        "As of 2026-10-19, ID123 user_456 uses version 1.2.3.",
+        "Compare 10-5 and 10/19/2026.",
+        "The unsupported Unicode sign is \u22125.",
+    ],
+    ids=[
+        "number-words",
+        "dates-and-identifiers",
+        "contiguous-expressions",
+        "unicode-sign",
+    ],
+)
+def test_narrative_audit_declares_limited_syntax(conclusion: str) -> None:
+    result = _audited_result(conclusion)
+
+    assert result.narrative_numbers == ()
+    assert result.unlinked_numbers == ()
+    assert result.narrative_number_audit_scope == "ascii_numeric_tokens_only"
+    assert result.narrative_verified is False
+
+
+def test_narrative_audit_preserves_occurrences_and_duplicate_claim_links() -> None:
+    result = _audited_result("10 then 99, then 10 and 99.", "10", "10")
+
+    assert [number.text for number in result.narrative_numbers] == [
+        "10",
+        "99",
+        "10",
+        "99",
+    ]
+    assert [number.claim_indexes for number in result.narrative_numbers] == [
+        (0, 1),
+        (),
+        (0, 1),
+        (),
+    ]
+    assert result.unlinked_numbers == ("99", "99")
+    for number in result.narrative_numbers:
+        assert result.conclusion[number.start : number.end] == number.text
+    assert all(
+        item.verification.status is VerificationStatus.UNVERIFIABLE
+        for item in result.verified_claims
+    )
+    serialized = json.loads(json.dumps(to_jsonable(result)))
+    assert serialized["unlinked_numbers"] == ["99", "99"]
+    assert serialized["narrative_numbers"][0]["value"] == "10"
+    assert serialized["narrative_numbers"][0]["claim_indexes"] == [0, 1]
+    assert serialized["narrative_number_audit_scope"] == "ascii_numeric_tokens_only"
+    assert serialized["narrative_verified"] is False
+
+
+def test_narrative_number_without_claims_is_reported() -> None:
+    result = _audited_result("There are 9999 rows.")
+
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.unlinked_numbers == ("9999",)
+    assert result.narrative_numbers[0].claim_indexes == ()
+    assert result.verified_claims == ()
+    assert result.narrative_verified is False
+
+
+def test_narrative_audit_recomputes_after_claim_or_conclusion_changes() -> None:
+    original = _audited_result("Value 10.", "10")
+    changed_text = replace(original, conclusion="Value 20.")
+    changed_claim = replace(
+        changed_text,
+        generated_claims=(replace(original.generated_claims[0], expected=20),),
+    )
+
+    assert original.unlinked_numbers == ()
+    assert changed_text.unlinked_numbers == ("20",)
+    assert changed_claim.unlinked_numbers == ()
+    assert changed_claim.narrative_numbers[0].claim_indexes == (0,)
+
+
+@pytest.mark.parametrize(
+    "conclusion,unlinked",
+    [("Claimed 99.", ()), ("Observed 10.", ("10",))],
+    ids=["matches-contradicted-claim", "does-not-match-evidence-instead"],
+)
+def test_narrative_linkage_does_not_establish_numerical_support(
+    conclusion: str,
+    unlinked: tuple[str, ...],
+) -> None:
+    result = replace(
+        _audited_result(conclusion, "99"),
+        observations=(
+            QueryObservation(
+                question="Read the metric.",
+                sql="SELECT 10 AS metric",
+                result=QueryResult(columns=("metric",), rows=((10,),)),
+            ),
+        ),
+    )
+
+    assert result.unlinked_numbers == unlinked
+    assert (
+        result.verified_claims[0].verification.status is VerificationStatus.CONTRADICTED
+    )
+    assert result.narrative_verified is False
+
+
+@pytest.mark.parametrize("direction", ["increased", "decreased"])
+def test_matching_percentage_does_not_certify_direction(direction: str) -> None:
+    result = replace(
+        _audited_result(f"The metric {direction} by 10%.", "10"),
+        observations=(
+            QueryObservation(
+                question="Read the metric.",
+                sql="SELECT 10 AS metric",
+                result=QueryResult(columns=("metric",), rows=((10,),)),
+            ),
+        ),
+    )
+
+    assert result.unlinked_numbers == ()
+    assert result.verified_claims[0].verification.status is VerificationStatus.SUPPORTED
+    assert result.narrative_verified is False
+
+
+def test_narrative_number_audit_handles_nontrapping_decimal_context() -> None:
+    with localcontext() as context:
+        context.traps[InvalidOperation] = False
+        result = _audited_result("Metric 1e999999999999999999999.", "1")
+
+    assert result.unlinked_numbers == ("1e999999999999999999999",)
+    assert result.narrative_numbers[0].value is None

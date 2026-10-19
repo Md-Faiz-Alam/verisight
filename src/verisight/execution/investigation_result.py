@@ -15,6 +15,10 @@ from verisight.execution.gemini import (
     GeminiTransientError,
     ProviderFailureDiagnostics,
 )
+from verisight.execution.narrative_audit import (
+    NarrativeNumberToken,
+    find_narrative_numbers,
+)
 from verisight.execution.observations import QueryObservation
 
 
@@ -74,6 +78,11 @@ class InvestigationResult:
     narrative_verified: bool = field(default=False, init=False)
     verified_claims: tuple["VerifiedNumericalClaim", ...] = field(init=False)
     quantitative_statements: tuple["ClaimLinkedStatement", ...] = field(init=False)
+    narrative_numbers: tuple[NarrativeNumberToken, ...] = field(init=False)
+    unlinked_numbers: tuple[str, ...] = field(init=False)
+    narrative_number_audit_scope: str = field(
+        default="ascii_numeric_tokens_only", init=False
+    )
     verification_scope: str = field(
         default="referenced_numeric_values_only", init=False
     )
@@ -97,6 +106,16 @@ class InvestigationResult:
         object.__setattr__(self, "verified_claims", report.verified_claims)
         object.__setattr__(
             self, "quantitative_statements", report.quantitative_statements
+        )
+        tokens = find_narrative_numbers(
+            self.conclusion,
+            tuple(item.verification.expected for item in self.verified_claims),
+        )
+        object.__setattr__(self, "narrative_numbers", tokens)
+        object.__setattr__(
+            self,
+            "unlinked_numbers",
+            tuple(token.text for token in tokens if not token.claim_indexes),
         )
 
     @property

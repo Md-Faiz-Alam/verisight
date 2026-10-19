@@ -155,6 +155,8 @@ There is no separate rounded-match verdict or application rounding policy yet.
 - Workflow status.
 - Generated numerical claims and computed `verified_claims`.
 - Computed `quantitative_statements` linked to those verified claims.
+- Computed `narrative_numbers` and `unlinked_numbers` for a limited token audit.
+- Fixed `narrative_number_audit_scope="ascii_numeric_tokens_only"`.
 - Optional `synthesis_failure` metadata.
 - Fixed `narrative_verified=False`.
 - Fixed `verification_scope="referenced_numeric_values_only"`.
@@ -218,11 +220,55 @@ Statements are rebuilt when a result is constructed, including reconstruction
 with a changed claim sequence. Empty claim sequences produce empty statement
 sequences. This does not certify an empty or number-free narrative.
 
-The original `conclusion` remains unverified. This report does not extract its
-numbers, detect every omitted claim, or establish a semantic link between its
-sentences and the submitted claims. Consumers can display the computed
-quantitative statements with their explicit verdicts and expose the generated
-conclusion as unverified interpretation.
+The original `conclusion` remains unverified. A separate numerical token audit
+reports unmatched tokens within a limited syntax. Neither the rendered statements
+nor token matching establish a semantic link between narrative sentences and
+submitted claims. Consumers can display quantitative statements with their
+explicit verdicts and expose the generated conclusion as unverified interpretation.
+
+## Numerical token audit of the conclusion
+
+`narrative_audit.py` scans the conclusion and compares detected numerical tokens
+with `generated_claims` expected values using exact Decimal equality.
+It does not match against observed values or apply claim tolerances.
+Calling `verify_claims()` with a separate claim sequence does not mutate the
+original investigation's audit.
+
+`InvestigationResult.narrative_numbers` records each detected token's text,
+zero-based Python string character offsets (`start` inclusive, `end` exclusive),
+parsed value, and matching zero-based `claim_indexes`.
+Multiple equal claims can match one token. Repeated occurrences remain separate.
+
+`unlinked_numbers` contains the original text of detected tokens without a
+matching submitted claim, in occurrence order, including repetitions.
+A conclusion containing `9999` with no corresponding claim reports that token.
+A conclusion containing a number with no submitted claims also reports it.
+
+Supported syntax includes ASCII integers, signed decimals, leading-dot decimals,
+scientific notation, and conventional three-digit comma grouping.
+A percentage suffix is retained in the token text. Matching compares the printed
+number: `25%` can match a claim of `25`, while it does not match `0.25`.
+Percentage scaling, units, and rounding are not inferred.
+
+Detected tokens longer than 128 characters, malformed grouping, leading-zero
+integer forms, and unconvertible exponents have a null parsed value and remain
+unlinked. Conversion does not use float or Python integer parsing.
+
+The lexer excludes word identifiers, dotted versions, and contiguous ASCII date
+or arithmetic forms such as `ID123`, `1.2.3`, `2026-10-19`, and `10-5`.
+Number words and unsupported Unicode signs are outside its syntax.
+Standalone years and numbered headings can still produce audit warnings.
+This audit cannot establish that every numerical assertion was detected.
+
+Linkage is independent of verification: a token can match a contradicted or
+unverifiable claim. Equal numbers also cannot establish direction, causation,
+units, filters, or whether a sentence describes the correct measurement.
+An empty `unlinked_numbers` sequence never sets `narrative_verified` to true.
+Use token counts as audit diagnostics; a hallucination metric requires
+independently labeled semantic outcomes.
+
+These computed fields are rebuilt on result construction and included in
+serialization. They preserve the original conclusion and workflow status.
 
 ## Verification boundary
 
