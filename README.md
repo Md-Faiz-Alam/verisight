@@ -217,8 +217,13 @@ Returning text does not imply valid JSON or a correct answer.
 Run the deterministic development benchmark:
 
 ```powershell
-python -m pytest tests/test_verification_benchmark.py -q
+python -m pytest tests/test_verification_benchmark.py tests/test_analytical_correctness_benchmark.py -q
 ```
+
+The [controlled correctness evaluation](docs/evaluation.md) adds ten questions
+with control SQL and intentionally incorrect queries. It exercises the pipeline
+and scorer against independent expected answers; generation is scripted, so it
+does not measure live model accuracy.
 
 The opt-in live evaluator uses five temporary synthetic fixtures: finance,
 retail, manufacturing, healthcare, and logistics. Each permits one analytical
