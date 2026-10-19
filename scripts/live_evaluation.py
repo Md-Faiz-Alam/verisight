@@ -2,12 +2,16 @@
 
 import argparse
 import json
+import platform
+import subprocess
+import sys
 from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from time import perf_counter
 
 from verisight import VeriSight
 from verisight.config import Settings
@@ -192,12 +196,49 @@ def run_case(case: Case, settings: Settings) -> dict[str, object]:
         return failure_report(error)
 
 
+def repository_metadata() -> dict[str, object]:
+    """Read local revision metadata without returning paths or Git error text."""
+    metadata: dict[str, object] = {
+        "commit": None,
+        "tracked_changes": None,
+        "status_scope": "tracked_files_only",
+    }
+    root = Path(__file__).resolve().parents[1]
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return metadata
+    metadata["commit"] = commit
+    metadata["tracked_changes"] = bool(status)
+    return metadata
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--live", action="store_true", help="Allow Gemini calls using synthetic data."
     )
     parser.add_argument("--case", choices=[*CASES, "all"], default="finance")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Save JSON to a new file; parent directory must exist.",
+    )
     args = parser.parse_args()
     if not args.live:
         parser.error("Pass --live to authorize provider calls; API charges may apply.")
@@ -217,14 +258,36 @@ def main() -> int:
         return 2
 
     selected = CASES if args.case == "all" else {args.case: CASES[args.case]}
-    results = {name: run_case(case, settings) for name, case in selected.items()}
+    revision = repository_metadata()
+    started_at = datetime.now(UTC).isoformat()
+    started = perf_counter()
+    results = {}
+    for name, case in selected.items():
+        case_started = perf_counter()
+        case_report = run_case(case, settings)
+        case_report["elapsed_seconds"] = round(perf_counter() - case_started, 3)
+        results[name] = case_report
+    elapsed = round(perf_counter() - started, 3)
     counts = Counter(str(result["outcome"]) for result in results.values())
     report = {
-        "schema_version": 1,
-        "timestamp_utc": datetime.now(UTC).isoformat(),
+        "schema_version": 2,
+        "timestamp_utc": started_at,
+        "elapsed_seconds": elapsed,
+        "revision": revision,
+        "python_version": platform.python_version(),
         "model": settings.gemini_model,
         "max_steps_per_case": 1,
-        "provider_retries": 0,
+        "provider_retries": settings.gemini_max_retries,
+        "run_settings": {
+            "allow_llm_data_disclosure": settings.allow_llm_data_disclosure,
+            "request_timeout_seconds": settings.gemini_request_timeout_seconds,
+            "retry_base_delay_seconds": settings.gemini_retry_base_delay_seconds,
+            "max_upload_size_mb": settings.max_upload_size_mb,
+            "max_query_execution_seconds": settings.max_query_execution_seconds,
+            "max_query_result_rows": settings.max_query_result_rows,
+            "max_query_memory_mb": settings.max_query_memory_mb,
+            "max_query_temp_storage_mb": settings.max_query_temp_storage_mb,
+        },
         "scoring_scope": "single_claim_numeric_answer_only",
         "limitations": (
             "No narrative or general semantic certification. No-claims responses "
@@ -236,7 +299,15 @@ def main() -> int:
         "number_audit_summary": summarize_number_audits(results),
         "results": results,
     }
-    print(json.dumps(report, indent=2))
+    serialized = json.dumps(report, indent=2)
+    print(serialized)
+    if args.output is not None:
+        try:
+            with args.output.open("x", encoding="utf-8", newline="\n") as output:
+                output.write(serialized + "\n")
+        except OSError:
+            print("Could not save evaluation report to a new file.", file=sys.stderr)
+            return 2
     return 0 if counts.get("correct_numeric", 0) == len(results) else 1
 
 

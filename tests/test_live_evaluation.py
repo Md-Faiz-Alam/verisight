@@ -1,6 +1,8 @@
 """Offline tests for the opt-in live evaluation runner; no provider calls."""
 
 import json
+import subprocess
+from collections.abc import Iterator
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -11,6 +13,7 @@ from scripts.live_evaluation import (
     CASES,
     failure_report,
     main,
+    repository_metadata,
     run_case,
     score_result,
     summarize_number_audits,
@@ -31,6 +34,19 @@ from verisight.execution.investigation_result import (
 )
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
+
+
+@pytest.fixture(autouse=True)
+def isolate_repository_metadata() -> Iterator[None]:
+    with patch(
+        "scripts.live_evaluation.repository_metadata",
+        return_value={
+            "commit": "a" * 40,
+            "tracked_changes": False,
+            "status_scope": "tracked_files_only",
+        },
+    ):
+        yield
 
 
 @pytest.fixture
@@ -361,3 +377,144 @@ def test_live_fixtures_match_independent_known_answers(
     assert query_result.columns == ("metric",)
     assert query_result.row_count == 1
     assert Decimal(str(query_result.rows[0][0])) == Decimal(expected)
+
+
+@pytest.mark.parametrize("status,dirty", [("", False), (" M private-file.py", True)])
+def test_repository_metadata_reports_revision_without_file_names(
+    status: str, dirty: bool
+) -> None:
+    with patch(
+        "scripts.live_evaluation.subprocess.run",
+        side_effect=[
+            subprocess.CompletedProcess([], 0, stdout="b" * 40 + "\n"),
+            subprocess.CompletedProcess([], 0, stdout=status),
+        ],
+    ) as run:
+        metadata = repository_metadata()
+
+    assert metadata == {
+        "commit": "b" * 40,
+        "tracked_changes": dirty,
+        "status_scope": "tracked_files_only",
+    }
+    assert "private-file" not in json.dumps(metadata)
+    assert run.call_count == 2
+    assert run.call_args.args[0] == [
+        "git",
+        "status",
+        "--porcelain",
+        "--untracked-files=no",
+    ]
+    assert run.call_args.kwargs["timeout"] == 2
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        FileNotFoundError("private-path"),
+        subprocess.CalledProcessError(128, "git", stderr="private-error"),
+        subprocess.TimeoutExpired("git", 2),
+    ],
+    ids=["git-missing", "not-a-repository", "git-timeout"],
+)
+def test_repository_metadata_is_unknown_when_git_is_unavailable(
+    error: Exception,
+) -> None:
+    with patch("scripts.live_evaluation.subprocess.run", side_effect=error):
+        assert repository_metadata() == {
+            "commit": None,
+            "tracked_changes": None,
+            "status_scope": "tracked_files_only",
+        }
+
+
+def test_saved_report_retains_failures_settings_revision_and_timings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "evaluation.json"
+    settings = Settings(
+        gemini_api_key="private-secret",
+        allow_llm_data_disclosure=True,
+        gemini_request_timeout_seconds=17,
+        gemini_max_retries=1,
+        max_query_result_rows=12,
+    )
+    with (
+        patch(
+            "sys.argv",
+            ["live_evaluation", "--live", "--case", "all", "--output", str(path)],
+        ),
+        patch("scripts.live_evaluation.Settings", return_value=settings),
+        patch(
+            "scripts.live_evaluation.run_case",
+            side_effect=[
+                {"outcome": "correct_numeric"},
+                {"outcome": "provider_error"},
+                {"outcome": "incorrect_numeric"},
+                {"outcome": "incomplete"},
+                {"outcome": "no_claims"},
+            ],
+        ),
+        patch("scripts.live_evaluation.perf_counter", side_effect=range(12)),
+        patch("scripts.live_evaluation.platform.python_version", return_value="3.11.9"),
+    ):
+        assert main() == 1
+
+    output = capsys.readouterr()
+    assert output.err == ""
+    serialized = path.read_text(encoding="utf-8")
+    assert serialized == output.out
+    assert "private-secret" not in serialized
+    report = json.loads(serialized)
+    assert report["schema_version"] == 2
+    assert report["revision"]["commit"] == "a" * 40
+    assert report["revision"]["tracked_changes"] is False
+    assert report["python_version"] == "3.11.9"
+    assert report["elapsed_seconds"] == 11
+    assert report["provider_retries"] == 1
+    assert report["run_settings"]["request_timeout_seconds"] == 17
+    assert report["run_settings"]["max_query_result_rows"] == 12
+    assert "gemini_api_key" not in report["run_settings"]
+    assert report["outcome_counts"] == {
+        "correct_numeric": 1,
+        "provider_error": 1,
+        "incorrect_numeric": 1,
+        "incomplete": 1,
+        "no_claims": 1,
+    }
+    assert set(report["results"]) == set(CASES)
+    assert all(item["elapsed_seconds"] == 1 for item in report["results"].values())
+
+
+@pytest.mark.parametrize(
+    "existing", [False, True], ids=["missing-parent", "existing-file"]
+)
+def test_report_save_failure_preserves_stdout_and_existing_files(
+    tmp_path: Path, existing: bool, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = (
+        tmp_path / "existing.json" if existing else tmp_path / "missing" / "report.json"
+    )
+    if existing:
+        path.write_text("original", encoding="utf-8")
+    with (
+        patch("sys.argv", ["live_evaluation", "--live", "--output", str(path)]),
+        patch(
+            "scripts.live_evaluation.Settings",
+            return_value=Settings(gemini_api_key="private-secret"),
+        ),
+        patch(
+            "scripts.live_evaluation.run_case",
+            return_value={"outcome": "provider_error"},
+        ),
+    ):
+        assert main() == 2
+
+    output = capsys.readouterr()
+    assert json.loads(output.out)["results"]["finance"]["outcome"] == "provider_error"
+    assert output.err == "Could not save evaluation report to a new file.\n"
+    assert str(path) not in output.err
+    if existing:
+        assert path.read_text(encoding="utf-8") == "original"
+    else:
+        assert not path.exists()
