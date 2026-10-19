@@ -151,7 +151,10 @@ def test_main_handles_missing_key(capsys: pytest.CaptureFixture[str]) -> None:
 @pytest.mark.parametrize(
     "outcome,exit_code", [("correct_numeric", 0), ("provider_error", 1)]
 )
-@pytest.mark.parametrize("selected,count", [("all", 3), ("finance", 1)])
+@pytest.mark.parametrize(
+    "selected,count",
+    [("all", 5), ("finance", 1), ("healthcare", 1), ("logistics", 1)],
+)
 def test_main_reports_all_cases_without_secrets(
     outcome: str,
     exit_code: int,
@@ -173,7 +176,10 @@ def test_main_reports_all_cases_without_secrets(
     assert run.call_count == count
     output = capsys.readouterr().out
     assert "private-secret" not in output
-    assert f'"case_count": {count}' in output
+    report = json.loads(output)
+    assert report["case_count"] == count
+    expected_names = set(CASES) if selected == "all" else {selected}
+    assert set(report["results"]) == expected_names
 
 
 @pytest.mark.parametrize(
@@ -272,6 +278,8 @@ def test_main_includes_audit_summary_without_changing_numeric_exit_status(
         score_result(replace(result, conclusion="The total is 9999."), "30"),
         score_result(result, "30"),
         score_result(replace(result, conclusion="No numerical finding."), "30"),
+        score_result(replace(result, conclusion="No numerical finding."), "30"),
+        score_result(replace(result, conclusion="No numerical finding."), "30"),
     ]
     with (
         patch("sys.argv", ["live_evaluation", "--live", "--case", "all"]),
@@ -285,9 +293,9 @@ def test_main_includes_audit_summary_without_changing_numeric_exit_status(
 
     output = capsys.readouterr().out
     report = json.loads(output)
-    assert report["outcome_counts"] == {"correct_numeric": 3}
+    assert report["outcome_counts"] == {"correct_numeric": 5}
     assert report["number_audit_summary"] == {
-        "audited_case_count": 3,
+        "audited_case_count": 5,
         "unaudited_case_count": 0,
         "detected_token_count": 2,
         "unlinked_token_count": 1,
@@ -295,3 +303,61 @@ def test_main_includes_audit_summary_without_changing_numeric_exit_status(
     }
     assert "9999" not in output
     assert "private-secret" not in output
+
+
+@pytest.mark.parametrize(
+    ("case_name", "sql", "expected"),
+    [
+        pytest.param(
+            "finance",
+            "SELECT SUM(cents) AS metric FROM ledger WHERE state = 'posted'",
+            "10050",
+            id="finance-posted-only",
+        ),
+        pytest.param(
+            "retail",
+            "SELECT SUM(lines.quantity * prices.unit_price) AS metric "
+            "FROM lines JOIN prices ON lines.sku = prices.sku",
+            "90",
+            id="retail-joined-prices",
+        ),
+        pytest.param(
+            "manufacturing",
+            "SELECT 100.0 * SUM(defective) / COUNT(defective) AS metric "
+            "FROM inspections",
+            "25",
+            id="manufacturing-known-outcomes",
+        ),
+        pytest.param(
+            "healthcare",
+            "SELECT AVG(minutes) AS metric FROM visits WHERE state = 'completed'",
+            "20",
+            id="healthcare-recorded-completed-waits",
+        ),
+        pytest.param(
+            "logistics",
+            "SELECT 100.0 * SUM(late) / COUNT(late) AS metric "
+            "FROM deliveries WHERE state = 'delivered'",
+            "50",
+            id="logistics-known-delivered-outcomes",
+        ),
+    ],
+)
+def test_live_fixtures_match_independent_known_answers(
+    tmp_path: Path, case_name: str, sql: str, expected: str
+) -> None:
+    """Exercise real ingestion and SQL with no model or provider dependency."""
+    case = CASES[case_name]
+    paths = []
+    for filename, content in case.files:
+        path = tmp_path / filename
+        path.write_text(content, encoding="utf-8")
+        paths.append(path)
+
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+    query_result = app.execute(paths, sql)
+
+    assert case.answer == expected
+    assert query_result.columns == ("metric",)
+    assert query_result.row_count == 1
+    assert Decimal(str(query_result.rows[0][0])) == Decimal(expected)

@@ -59,6 +59,33 @@ CASES = {
         ),
         answer="25",
     ),
+    "healthcare": Case(
+        files=(
+            (
+                "visits.csv",
+                "minutes,state\n10,completed\n,completed\n30,completed\n100,cancelled\n",
+            ),
+        ),
+        question=(
+            "What is the mean recorded wait in minutes for completed visits? "
+            "Exclude missing waits and cancelled visits."
+        ),
+        answer="20",
+    ),
+    "logistics": Case(
+        files=(
+            (
+                "deliveries.csv",
+                "id,late,state\n1,1,delivered\n2,0,delivered\n3,,delivered\n4,1,cancelled\n",
+            ),
+        ),
+        question=(
+            "What percentage of delivered shipments with a known late indicator "
+            "were late? Late is 1 for late and 0 otherwise. "
+            "Exclude missing indicators and cancelled shipments."
+        ),
+        answer="50",
+    ),
 }
 
 REQUEST = (
