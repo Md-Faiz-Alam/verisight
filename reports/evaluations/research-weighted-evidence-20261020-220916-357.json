@@ -1,0 +1,138 @@
+{
+  "schema_version": 2,
+  "timestamp_utc": "2026-10-20T16:39:18.066267+00:00",
+  "elapsed_seconds": 39.267,
+  "revision": {
+    "commit": "5042c5aba5244ffbaccf2a71613a6b0a1c76f32f",
+    "tracked_changes": false,
+    "status_scope": "tracked_files_only"
+  },
+  "python_version": "3.11.9",
+  "model": "gemini-3.1-flash-lite",
+  "max_steps_per_case": 1,
+  "provider_retries": 1,
+  "run_settings": {
+    "allow_llm_data_disclosure": true,
+    "request_timeout_seconds": 60.0,
+    "retry_base_delay_seconds": 1.0,
+    "max_upload_size_mb": 100,
+    "max_query_execution_seconds": 5.0,
+    "max_query_result_rows": 20,
+    "max_query_memory_mb": 512,
+    "max_query_temp_storage_mb": 1024
+  },
+  "generation_telemetry_scope": "client_calls_observed_during_case",
+  "scoring_scope": "single_claim_numeric_answer_only",
+  "limitations": "No narrative or general semantic certification. No-claims responses are not automatically proven abstentions. These are known development fixtures, not a held-out generalization benchmark.",
+  "case_count": 1,
+  "outcome_counts": {
+    "unverified_answer": 1
+  },
+  "number_audit_summary": {
+    "audited_case_count": 1,
+    "unaudited_case_count": 0,
+    "detected_token_count": 3,
+    "unlinked_token_count": 2,
+    "cases_with_unlinked_tokens": 1
+  },
+  "results": {
+    "research_weighted": {
+      "expected": "2.5",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 3,
+      "unlinked_number_count": 2,
+      "narrative_digit_coverage": {
+        "total_digit_count": 9,
+        "parsed_digit_count": 9,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "contradicted",
+      "outcome": "unverified_answer",
+      "synthetic_evidence": {
+        "observations": [
+          {
+            "sql": "SELECT\n  SUM(\"mass g\" * \"assay pct\") AS \"sum_product\",\n  SUM(\"mass g\") AS \"sum_mass\"\nFROM \"assays\"\nWHERE \"review state\" = 'accepted'\n  AND \"mass g\" > 0\n  AND \"mass g\" IS NOT NULL\n  AND \"assay pct\" IS NOT NULL",
+            "result": {
+              "columns": [
+                "sum_product",
+                "sum_mass"
+              ],
+              "rows": [
+                [
+                  1000,
+                  400
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "2.5",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "sum_product"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "contradicted",
+              "actual": "1000",
+              "expected": "2.5",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence contradicts the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "control_baseline": {
+        "kind": "supplied_sql_control",
+        "expected": "2.5",
+        "actual": "2.5",
+        "outcome": "correct_numeric",
+        "elapsed_seconds": 0.051
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 2,
+          "elapsed_seconds": 14.424,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 12.77,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 2.519,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 7.747,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 39.267
+    }
+  }
+}
