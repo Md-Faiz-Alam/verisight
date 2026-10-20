@@ -2,9 +2,10 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from threading import Event, Timer
-from typing import cast
+from uuid import UUID
 
 import duckdb
 import pandas as pd
@@ -14,8 +15,9 @@ from verisight.execution.exceptions import (
     QueryResultLimitError,
     QueryRuntimeError,
     QueryTimeoutError,
+    QueryValidationError,
 )
-from verisight.execution.models import QueryResult, QueryRow
+from verisight.execution.models import QueryResult, QueryScalar
 from verisight.execution.validation import (
     AnalyticalQueryValidator,
     validate_dataset_relations,
@@ -114,11 +116,26 @@ class DuckDBExecutor:
                 f"of {self._max_result_rows} rows."
             )
 
-        rows = tuple(cast(QueryRow, tuple(row)) for row in fetched_rows)
+        rows = tuple(
+            tuple(self._query_scalar(value) for value in row) for row in fetched_rows
+        )
 
         return QueryResult(
             columns=columns,
             rows=rows,
+        )
+
+    @staticmethod
+    def _query_scalar(value: object) -> QueryScalar:
+        """Reject unsupported SQL values before they become observations."""
+        if value is None or isinstance(
+            value,
+            (str, int, float, bool, date, datetime, time, timedelta, Decimal, UUID),
+        ):
+            return value
+        raise QueryValidationError(
+            "Analytical query returned an unsupported result type. "
+            "Return scalar columns instead of nested or binary values."
         )
 
     @contextmanager

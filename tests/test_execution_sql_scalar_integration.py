@@ -1,9 +1,10 @@
 """Integration tests for real DuckDB SQL scalar serialization."""
 
 import json
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
+from uuid import UUID
 
 import pandas as pd
 import pytest
@@ -12,7 +13,9 @@ from verisight import VeriSight
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder, DatasetAnalysisResult
 from verisight.config import Settings
-from verisight.execution.exceptions import QueryRuntimeError
+from verisight.error_reporting import ErrorCode
+from verisight.execution.exceptions import QueryRuntimeError, QueryValidationError
+from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
 from verisight.execution.generative_synthesis import (
     GenerativeInvestigationSynthesizer,
@@ -20,10 +23,12 @@ from verisight.execution.generative_synthesis import (
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
-from verisight.execution.models import QueryResult
+from verisight.execution.investigation_result import InvestigationStatus
+from verisight.execution.models import QueryResult, QueryScalar
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.execution.service import AnalyticalExecutionService
+from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 from verisight.ingestion.models import (
     LoadedDataset,
     LoadedTable,
@@ -32,6 +37,7 @@ from verisight.ingestion.models import (
 from verisight.ingestion.schema import SchemaInferer
 from verisight.ingestion.service import DatasetLoader
 from verisight.profiling.models import DatasetProfile
+from verisight.public_api import run_public_operation
 from verisight.serialization import to_jsonable
 
 
@@ -225,11 +231,22 @@ def test_real_duckdb_scalar_types_format_directly() -> None:
             "CAST(1234.567890 AS DECIMAL(18, 6))",
             Decimal("1234.567890"),
         ),
+        ("TIME '10:30:00'", time(10, 30)),
+        ("INTERVAL '1 day'", timedelta(days=1)),
+        (
+            "UUID '12345678-1234-5678-1234-567812345678'",
+            UUID("12345678-1234-5678-1234-567812345678"),
+        ),
+        ("TRUE", True),
+        ("CAST(1.25 AS DOUBLE)", 1.25),
+        ("42", 42),
+        ("'sample'", "sample"),
+        ("NULL", None),
     ],
 )
 def test_real_duckdb_expressions_are_json_safe(
     expression: str,
-    expected: date | datetime | Decimal,
+    expected: QueryScalar,
 ) -> None:
     """Verify real DuckDB scalar values survive prompt formatting."""
 
@@ -365,3 +382,111 @@ def test_large_integer_outside_sampling_range_remains_exact(tmp_path: Path) -> N
     ).execute(path, "SELECT MAX(value) AS largest FROM measurements")
 
     assert result.rows == ((Decimal("9007199254740993"),),)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT histogram(value) FROM observations",
+        "SELECT list(value) FROM observations",
+        "SELECT struct_pack(metric := value) FROM observations LIMIT 1",
+        "SELECT encode('private-binary-value') FROM observations LIMIT 1",
+    ],
+)
+def test_unsupported_sql_values_raise_a_safe_execution_error(query: str) -> None:
+    service = AnalyticalExecutionService(_dataset())
+
+    with pytest.raises(QueryValidationError, match="unsupported result type") as caught:
+        service.execute(query)
+
+    assert "private-binary-value" not in str(caught.value)
+    public = run_public_operation(lambda: service.execute(query))
+    assert not public.succeeded
+    assert public.value is None
+    assert public.error is not None
+    assert public.error.code is ErrorCode.QUERY_VALIDATION_ERROR
+    assert "private-binary-value" not in public.error.message
+    assert service.execute("SELECT COUNT(*) FROM observations").rows == ((3,),)
+
+
+@pytest.mark.parametrize("has_prior_evidence", [False, True])
+@pytest.mark.parametrize("recover", [False, True])
+def test_unsupported_results_never_enter_investigation_evidence(
+    tmp_path: Path, has_prior_evidence: bool, recover: bool
+) -> None:
+    path = tmp_path / "measurements.csv"
+    path.write_text("value\n1\n1\n2\n", encoding="utf-8")
+    questions = (["Get total"] if has_prior_evidence else []) + [
+        "Get histogram",
+        "Get grouped frequencies",
+    ]
+    decisions = [
+        json.dumps(
+            {"action": "investigate", "reasoning": "Collect evidence", "question": q}
+        )
+        for q in questions
+    ]
+    investigator_client = SequenceGenerationClient(decisions + [_finish_response()])
+    queries = (
+        ["SELECT SUM(value) AS total FROM measurements"] if has_prior_evidence else []
+    ) + [
+        "SELECT histogram(value) AS frequencies FROM measurements",
+        "SELECT value, COUNT(*) AS frequency FROM measurements GROUP BY value "
+        "ORDER BY value",
+    ]
+    planning_client = SequenceGenerationClient(queries)
+    synthesis_client = RecordingGenerationClient(
+        json.dumps(
+            {
+                "conclusion": "The highest frequency is 2.",
+                "claims": [
+                    {
+                        "operation": "value",
+                        "expected": "2",
+                        "left": {
+                            "observation_index": int(has_prior_evidence),
+                            "row_index": 0,
+                            "column": "frequency",
+                        },
+                        "right": None,
+                    }
+                ],
+            }
+        )
+    )
+    app = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False),
+        planner=GenerativeQueryPlanner(planning_client),
+        investigator=GenerativeInvestigator(investigator_client),
+        synthesizer=StructuredInvestigationSynthesizer(synthesis_client),
+    )
+
+    result = app.investigate(
+        path,
+        "Inspect the value distribution.",
+        max_steps=int(has_prior_evidence) + 1 + int(recover),
+    )
+
+    assert result.status is (
+        InvestigationStatus.COMPLETE if recover else InvestigationStatus.INCOMPLETE
+    )
+    assert result.observation_count == int(has_prior_evidence) + int(recover)
+    assert result.failed_attempt_count == 1
+    assert result.failed_attempts[0].question == "Get histogram"
+    assert result.failed_attempts[0].error_type == "QueryValidationError"
+    assert all(
+        "histogram" not in observation.sql for observation in result.observations
+    )
+    if has_prior_evidence:
+        assert result.observations[0].result.rows == ((4,),)
+    if recover:
+        assert result.observations[-1].result.rows == ((1, 2), (2, 1))
+        assert result.verified_claims[0].verification.status.value == "supported"
+        assert result.verified_claims[0].verification.actual == Decimal(2)
+    else:
+        assert result.generated_claims == ()
+        assert synthesis_client.prompts == []
+    assert len(planning_client.prompts) == int(has_prior_evidence) + 1 + int(recover)
+    payload = json.loads(json.dumps(to_jsonable(result)))
+    assert len(payload["observations"]) == result.observation_count
+    assert payload["failed_attempts"][0]["error_type"] == "QueryValidationError"
