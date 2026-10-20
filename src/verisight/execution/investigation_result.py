@@ -18,6 +18,7 @@ from verisight.execution.gemini import (
     GeminiTransientError,
     ProviderFailureDiagnostics,
 )
+from verisight.execution.investigation import FailedQueryAttempt
 from verisight.execution.narrative_audit import (
     NarrativeDigitCoverage,
     NarrativeNumberToken,
@@ -119,6 +120,7 @@ class InvestigationResult:
     generated_claims: tuple[NumericalClaim, ...] = ()
     synthesis_failure: SynthesisFailure | None = None
     investigation_failure: InvestigationFailure | None = None
+    failed_attempts: tuple[FailedQueryAttempt, ...] = field(default=(), kw_only=True)
     narrative_verified: bool = field(default=False, init=False)
     verified_claims: tuple["VerifiedNumericalClaim", ...] = field(init=False)
     quantitative_statements: tuple["ClaimLinkedStatement", ...] = field(init=False)
@@ -181,6 +183,11 @@ class InvestigationResult:
         """Return the number of executed analytical observations."""
 
         return len(self.observations)
+
+    @property
+    def failed_attempt_count(self) -> int:
+        """Return unsuccessful analytical requests, never usable as evidence."""
+        return len(self.failed_attempts)
 
     def verify_claims(
         self,

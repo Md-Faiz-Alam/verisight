@@ -1,9 +1,10 @@
 """Domain models for autonomous analytical investigations."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.execution.context import QueryContext, QueryContextBuilder
+from verisight.execution.execution import QueryRepairAttempt
 from verisight.execution.observations import QueryObservation
 
 
@@ -14,6 +15,7 @@ class FailedQueryAttempt:
     question: str
     error_type: str
     message: str
+    repair_history: tuple[QueryRepairAttempt, ...] = field(default=(), kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)

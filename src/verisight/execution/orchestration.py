@@ -10,6 +10,7 @@ from verisight.execution.exceptions import (
     QueryPlanningError,
     QueryValidationError,
 )
+from verisight.execution.execution import capture_query_repairs
 from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.incomplete_evidence import IncompleteEvidenceError
 from verisight.execution.investigation import FailedQueryAttempt, InvestigationState
@@ -112,6 +113,7 @@ class InvestigationOrchestrator:
                     ),
                     analysis=state.analysis,
                     observations=state.observations,
+                    failed_attempts=state.failed_attempts,
                 )
 
             if attempt_count >= self._max_steps:
@@ -136,52 +138,64 @@ class InvestigationOrchestrator:
             attempted_questions.add(normalized_question)
             attempt_count += 1
 
-            try:
-                execution = self._execution_service.run(investigation_question)
-            except (GeminiGenerationError, PromptBudgetExceededError) as exc:
-                if state.observation_count == 0:
-                    raise
-                return self._incomplete(
-                    state,
-                    reason="a subsequent analytical attempt could not be completed",
-                    investigation_failure=InvestigationFailure.from_exception(
-                        "query_execution", exc
-                    ),
-                )
-            except (
-                QueryValidationError,
-                QueryExecutionError,
-                QueryPlanningError,
-            ) as exc:
-                if isinstance(exc, QueryPlanningError):
-                    failure = InvestigationFailure.from_exception(
-                        "query_execution", exc
-                    )
-                    if failure.kind in {"provider_error", "provider_unavailable"}:
-                        if state.observation_count == 0:
-                            raise
-                        return self._incomplete(
-                            state,
-                            reason=(
-                                "a subsequent analytical attempt could not be completed"
-                            ),
-                            investigation_failure=failure,
+            with capture_query_repairs() as repairs:
+                try:
+                    execution = self._execution_service.run(investigation_question)
+                except (GeminiGenerationError, PromptBudgetExceededError) as exc:
+                    state = state.add_failed_attempt(
+                        FailedQueryAttempt(
+                            question=investigation_question,
+                            error_type=type(exc).__name__,
+                            message=to_public_error(exc).message,
+                            repair_history=tuple(repairs),
                         )
-
-                state = state.add_failed_attempt(
-                    FailedQueryAttempt(
-                        question=investigation_question,
-                        error_type=type(exc).__name__,
-                        message=to_public_error(exc).message,
                     )
-                )
-                continue
+                    if state.observation_count == 0:
+                        raise
+                    return self._incomplete(
+                        state,
+                        reason="a subsequent analytical attempt could not be completed",
+                        investigation_failure=InvestigationFailure.from_exception(
+                            "query_execution", exc
+                        ),
+                    )
+                except (
+                    QueryValidationError,
+                    QueryExecutionError,
+                    QueryPlanningError,
+                ) as exc:
+                    state = state.add_failed_attempt(
+                        FailedQueryAttempt(
+                            question=investigation_question,
+                            error_type=type(exc).__name__,
+                            message=to_public_error(exc).message,
+                            repair_history=tuple(repairs),
+                        )
+                    )
+                    if isinstance(exc, QueryPlanningError):
+                        failure = InvestigationFailure.from_exception(
+                            "query_execution", exc
+                        )
+                        if failure.kind in {"provider_error", "provider_unavailable"}:
+                            if state.observation_count == 0:
+                                raise
+                            return self._incomplete(
+                                state,
+                                reason=(
+                                    "a subsequent analytical attempt "
+                                    "could not be completed"
+                                ),
+                                investigation_failure=failure,
+                            )
+
+                    continue
 
             state = state.add_observation(
                 QueryObservation(
                     question=execution.plan.question,
                     sql=execution.plan.sql,
                     result=execution.result,
+                    repair_history=tuple(execution.repair_history),
                 )
             )
 
@@ -209,6 +223,7 @@ class InvestigationOrchestrator:
             ),
             analysis=state.analysis,
             observations=state.observations,
+            failed_attempts=state.failed_attempts,
             status=InvestigationStatus.INCOMPLETE,
             synthesis_failure=synthesis_failure,
             investigation_failure=investigation_failure,

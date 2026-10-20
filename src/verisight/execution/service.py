@@ -1,19 +1,27 @@
 """High-level analytical execution services for VeriSight."""
 
+from verisight.error_reporting import to_public_error
 from verisight.execution.context import QueryContext, QueryContextBuilder
 from verisight.execution.engine import DuckDBExecutor
 from verisight.execution.exceptions import (
+    QueryExecutionError,
     QueryPlanningError,
     QueryRuntimeError,
 )
-from verisight.execution.execution import QueryExecution
+from verisight.execution.execution import (
+    QueryExecution,
+    QueryRepairAttempt,
+    record_query_repair,
+)
 from verisight.execution.formatting import QueryContextFormatter
+from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.models import QueryResult
 from verisight.execution.planning import (
     QueryPlan,
     QueryPlanner,
     QueryRequest,
 )
+from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.repair import QueryRepairer, QueryRepairRequest
 from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.schema import SchemaInferer
@@ -136,19 +144,41 @@ class AnalyticalExecutionService:
             context=self._context,
         )
 
-        repaired_plan = self._repairer.repair(request)
+        repaired_plan: QueryPlan | None = None
+        try:
+            repaired_plan = self._repairer.repair(request)
+            self._validate_plan(
+                repaired_plan,
+                expected_question=question,
+                source="Query repairer",
+            )
+            result = self.execute(repaired_plan.sql)
+        except (
+            QueryExecutionError,
+            QueryPlanningError,
+            GeminiGenerationError,
+            PromptBudgetExceededError,
+        ) as exc:
+            record_query_repair(
+                QueryRepairAttempt(
+                    failed_plan=failed_plan,
+                    replacement_plan=repaired_plan,
+                    outcome="failed",
+                    error_code=to_public_error(exc).code.value,
+                )
+            )
+            raise
 
-        self._validate_plan(
-            repaired_plan,
-            expected_question=question,
-            source="Query repairer",
+        repair = QueryRepairAttempt(
+            failed_plan=failed_plan,
+            replacement_plan=repaired_plan,
+            outcome="succeeded",
         )
-
-        result = self.execute(repaired_plan.sql)
-
+        record_query_repair(repair)
         return QueryExecution(
             plan=repaired_plan,
             result=result,
+            repair_history=(repair,),
         )
 
     @staticmethod
