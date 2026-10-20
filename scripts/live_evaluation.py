@@ -24,6 +24,7 @@ from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
 )
+from verisight.serialization import to_jsonable
 
 
 @dataclass(frozen=True)
@@ -314,6 +315,15 @@ def run_case(case: Case, settings: Settings) -> dict[str, object]:
                         }
                 result = app.investigate(paths, case.question + REQUEST, max_steps=1)
                 report = score_result(result, case.answer)
+                report["synthetic_evidence"] = to_jsonable(
+                    {
+                        "observations": [
+                            {"sql": item.sql, "result": item.result}
+                            for item in result.observations
+                        ],
+                        "verified_claims": result.verified_claims,
+                    }
+                )
         except Exception as error:
             report = failure_report(error)
     if baseline is not None:

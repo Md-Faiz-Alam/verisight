@@ -233,6 +233,7 @@ def test_score_reports_token_occurrences_without_certifying_narrative(
     assert report["narrative_number_audit_scope"] == "ascii_numeric_tokens_only"
     assert report["narrative_verified"] is False
     assert "conclusion" not in report
+    assert "synthetic_evidence" not in report
     assert "9999" not in json.dumps(report)
 
 
@@ -722,3 +723,66 @@ def test_control_baseline_requires_supplied_sql() -> None:
     ):
         control_baseline(CASES["finance"], app, [])
     execute.assert_not_called()
+
+
+@pytest.mark.parametrize("column", ["metric", "missing_column"])
+@pytest.mark.parametrize("incomplete", [False, True])
+def test_run_case_retains_exact_synthetic_evidence_for_failed_answers(
+    result: InvestigationResult, column: str, incomplete: bool
+) -> None:
+    actual = Decimal("2.500000000000000001")
+    sql = "SELECT measured_value AS metric FROM assays"
+    observation = QueryObservation(
+        question="synthetic-question-not-for-report",
+        sql=sql,
+        result=QueryResult(columns=("metric",), rows=((actual,),)),
+    )
+    claim = NumericalClaim(
+        ClaimOperation.VALUE,
+        Decimal("2.5"),
+        EvidenceReference(0, 0, column),
+    )
+    investigation = replace(
+        result,
+        conclusion="synthetic-conclusion-not-for-report",
+        observations=(observation,),
+        generated_claims=(claim,),
+        status=InvestigationStatus.INCOMPLETE
+        if incomplete
+        else InvestigationStatus.COMPLETE,
+    )
+    with patch.object(VeriSight, "investigate", return_value=investigation):
+        report = run_case(
+            CHALLENGE_CASES["research_weighted"],
+            Settings(gemini_api_key=None, allow_llm_data_disclosure=False),
+        )
+
+    serialized = json.dumps(report, allow_nan=False)
+    saved = json.loads(serialized)
+    assert saved["expected"] == "2.5"
+    assert saved["outcome"] == ("incomplete" if incomplete else "unverified_answer")
+    assert saved["control_baseline"]["outcome"] == "correct_numeric"
+    evidence = saved["synthetic_evidence"]
+    assert set(evidence) == {"observations", "verified_claims"}
+    assert evidence["observations"] == [
+        {"sql": sql, "result": {"columns": ["metric"], "rows": [[str(actual)]]}}
+    ]
+    item = evidence["verified_claims"][0]
+    assert item["claim"]["operation"] == "value"
+    assert item["claim"]["expected"] == "2.5"
+    assert item["claim"]["left"] == {
+        "observation_index": 0,
+        "row_index": 0,
+        "column": column,
+    }
+    assert item["claim"]["right"] is None
+    verification = item["verification"]
+    assert verification["expected"] == "2.5"
+    assert verification["absolute_tolerance"] == "0"
+    assert verification["actual"] == (str(actual) if column == "metric" else None)
+    assert verification["status"] == (
+        "contradicted" if column == "metric" else "unverifiable"
+    )
+    assert verification["reason"]
+    assert "synthetic-question-not-for-report" not in serialized
+    assert "synthetic-conclusion-not-for-report" not in serialized
