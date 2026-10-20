@@ -7,6 +7,10 @@ import pandas as pd
 
 from verisight.ingestion.exceptions import TableValidationError
 
+_ASCII_LOWERCASE = str.maketrans(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"
+)
+
 
 @dataclass(frozen=True, slots=True)
 class SourceMetadata:
@@ -35,19 +39,34 @@ class LoadedTable:
         self.relation_name = self.name
 
     def _validate_unique_columns(self) -> None:
-        """Reject tables containing duplicate column names."""
+        """Reject duplicate names and names that collide as SQL identifiers."""
 
         duplicated = self.data.columns.duplicated(keep=False)
 
-        if not duplicated.any():
-            return
+        if duplicated.any():
+            duplicate_columns = self.data.columns[duplicated].unique().tolist()
+            formatted_columns = ", ".join(repr(column) for column in duplicate_columns)
+            raise TableValidationError(
+                f"Table '{self.name}' contains duplicate column names: "
+                f"{formatted_columns}."
+            )
 
-        duplicate_columns = self.data.columns[duplicated].unique().tolist()
-        formatted_columns = ", ".join(repr(column) for column in duplicate_columns)
-
-        raise TableValidationError(
-            f"Table '{self.name}' contains duplicate column names: {formatted_columns}."
+        # DuckDB stringifies column labels and compares identifiers using
+        # ASCII case-insensitive matching, even when they are quoted.
+        # Unicode casefolding would incorrectly merge distinct identifiers.
+        identifiers = pd.Index(
+            str(column).translate(_ASCII_LOWERCASE) for column in self.data.columns
         )
+        ambiguous = identifiers.duplicated(keep=False)
+        if ambiguous.any():
+            formatted_columns = ", ".join(
+                repr(column) for column in self.data.columns[ambiguous]
+            )
+            raise TableValidationError(
+                f"Table '{self.name}' contains ambiguous SQL column names: "
+                f"{formatted_columns}. Column names must remain distinct after "
+                "conversion to strings and ASCII case-insensitive matching."
+            )
 
     @property
     def row_count(self) -> int:
