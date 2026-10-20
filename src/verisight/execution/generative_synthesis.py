@@ -22,7 +22,6 @@ class GenerativeInvestigationSynthesizer:
         """Initialize the generative investigation synthesizer."""
 
         self._client = client
-        self._prompt_builder = InvestigationSynthesisPromptBuilder()
 
     def synthesize(self, state: InvestigationState) -> str:
         """Generate a conclusion only from fully represented evidence."""
@@ -31,8 +30,7 @@ class GenerativeInvestigationSynthesizer:
 
         # Use a fresh builder so the formatter is not shared across
         # concurrent calls or successive investigations.
-        builder = InvestigationSynthesisPromptBuilder()
-        builder._state_formatter = formatter
+        builder = InvestigationSynthesisPromptBuilder(state_formatter=formatter)
 
         prompt = builder.build(state)
 

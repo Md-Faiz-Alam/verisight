@@ -10,10 +10,19 @@ from verisight.execution.prompt_budget import PromptBudget
 class InvestigationSynthesisPromptBuilder:
     """Build deterministic prompts for investigation synthesis."""
 
-    def __init__(self, *, max_prompt_chars: int = 60_000) -> None:
-        """Initialize the synthesis prompt builder."""
+    def __init__(
+        self,
+        *,
+        max_prompt_chars: int = 60_000,
+        state_formatter: InvestigationStateFormatter | None = None,
+    ) -> None:
+        """Initialize the prompt budget and optional evidence formatter."""
 
-        self._state_formatter = InvestigationStateFormatter()
+        self._state_formatter = (
+            InvestigationStateFormatter()
+            if state_formatter is None
+            else state_formatter
+        )
         self._prompt_budget = PromptBudget(max_prompt_chars=max_prompt_chars)
 
     def build(self, state: InvestigationState) -> str:
