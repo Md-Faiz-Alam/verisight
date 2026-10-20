@@ -148,6 +148,7 @@ class SequencedGeminiModels:
     ) -> None:
         self.outcomes = list(outcomes)
         self.calls: list[tuple[str, str]] = []
+        self.configs: list[types.GenerateContentConfig | None] = []
 
     def generate_content(
         self,
@@ -157,6 +158,7 @@ class SequencedGeminiModels:
         config: types.GenerateContentConfig | None = None,
     ) -> StubGeminiResponse:
         self.calls.append((model, contents))
+        self.configs.append(config)
 
         outcome = self.outcomes.pop(0)
 
@@ -194,7 +196,7 @@ def make_api_error(status_code: int) -> errors.APIError:
 
 
 def test_generates_text_with_configured_model() -> None:
-    sdk_client = StubGeminiClient("SELECT COUNT(*) FROM orders")
+    sdk_client = ConfiguredGeminiClient("SELECT COUNT(*) FROM orders")
 
     client = GeminiTextGenerationClient(
         api_key="test-api-key",
@@ -205,7 +207,15 @@ def test_generates_text_with_configured_model() -> None:
     result = client.generate("Generate SQL.")
 
     assert result == "SELECT COUNT(*) FROM orders"
-    assert sdk_client.models.calls == [("test-model", "Generate SQL.")]
+    assert len(sdk_client.models.calls) == 1
+    model, prompt, config = sdk_client.models.calls[0]
+    assert (model, prompt) == ("test-model", "Generate SQL.")
+    assert config is not None
+    assert config.automatic_function_calling is not None
+    assert config.automatic_function_calling.disable is True
+    assert config.tools is None
+    assert config.response_mime_type is None
+    assert config.response_json_schema is None
 
 
 def test_requests_gemini_structured_json_when_schema_is_configured() -> None:
@@ -229,6 +239,9 @@ def test_requests_gemini_structured_json_when_schema_is_configured() -> None:
     assert config is not None
     assert config.response_mime_type == "application/json"
     assert config.response_json_schema == schema
+    assert config.automatic_function_calling is not None
+    assert config.automatic_function_calling.disable is True
+    assert config.tools is None
 
 
 @pytest.mark.parametrize("api_key", ["", " ", "\n\t"])
@@ -650,6 +663,12 @@ def test_retries_api_error_then_succeeds() -> None:
     assert client.generate("Generate SQL.") == "SELECT 1"
     assert len(sdk_client.models.calls) == 2
     assert delays == [1.0]
+
+    assert len(sdk_client.models.configs) == 2
+    for config in sdk_client.models.configs:
+        assert config is not None
+        assert config.automatic_function_calling is not None
+        assert config.automatic_function_calling.disable is True
 
 
 def test_configures_sdk_timeout_and_single_attempt() -> None:

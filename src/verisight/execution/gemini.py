@@ -128,13 +128,14 @@ class GeminiTextGenerationClient:
         self._max_retries = max_retries
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._sleep = sleep
-        self._response_config = (
-            types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_json_schema=response_json_schema,
-            )
-            if response_json_schema is not None
-            else None
+        self._response_config = types.GenerateContentConfig(
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
+            response_mime_type=(
+                "application/json" if response_json_schema is not None else None
+            ),
+            response_json_schema=response_json_schema,
         )
 
         self._client = (
@@ -160,17 +161,11 @@ class GeminiTextGenerationClient:
             for attempt in range(self._max_retries + 1):
                 call.attempts = attempt + 1
                 try:
-                    if self._response_config is None:
-                        response = self._client.models.generate_content(
-                            model=self._model,
-                            contents=prompt,
-                        )
-                    else:
-                        response = self._client.models.generate_content(
-                            model=self._model,
-                            contents=prompt,
-                            config=self._response_config,
-                        )
+                    response = self._client.models.generate_content(
+                        model=self._model,
+                        contents=prompt,
+                        config=self._response_config,
+                    )
                 except Exception as exc:
                     http_status = exc.code if isinstance(exc, errors.APIError) else None
                     retryable = _is_retryable(exc)
