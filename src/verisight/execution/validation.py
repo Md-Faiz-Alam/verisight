@@ -5,7 +5,7 @@ import re
 import duckdb
 import sqlglot
 from sqlglot import exp
-from sqlglot.errors import ParseError
+from sqlglot.errors import OptimizeError, ParseError
 from sqlglot.optimizer.scope import Scope, ScopeType, traverse_scope
 
 from verisight.execution.exceptions import (
@@ -231,7 +231,8 @@ def validate_dataset_relations(
         )
 
         scopes = list(traverse_scope(expression))
-    except (ParseError, ValueError) as exc:
+        selected_sources = [scope.selected_sources for scope in scopes]
+    except (OptimizeError, ParseError, ValueError) as exc:
         raise QueryValidationError(
             "Dataset access is not allowed: SQL analysis failed."
         ) from exc
@@ -264,8 +265,8 @@ def validate_dataset_relations(
                 "Dataset access is not allowed: internal metadata function."
             )
 
-    for scope in scopes:
-        for _, source in scope.selected_sources.values():
+    for sources in selected_sources:
+        for _, source in sources.values():
             if isinstance(source, Scope):
                 if source.scope_type == ScopeType.UDTF and not isinstance(
                     source.expression,

@@ -7,10 +7,16 @@ from unittest.mock import Mock
 
 import pytest
 from scripts.live_evaluation import score_result
+from sqlglot.errors import OptimizeError
 
 from verisight import VeriSight
 from verisight.config import Settings
-from verisight.execution.exceptions import InvestigationError, QueryPlanningError
+from verisight.error_reporting import ErrorCode
+from verisight.execution.exceptions import (
+    InvestigationError,
+    QueryPlanningError,
+    QueryValidationError,
+)
 from verisight.execution.gemini import (
     GeminiGenerationError,
     GeminiTransientError,
@@ -219,3 +225,112 @@ def test_failure_metadata_handles_nested_and_cyclic_causes() -> None:
     failure = InvestigationFailure.from_exception("query_execution", outer)
     assert failure == InvestigationFailure("query_execution", "query_planning_error")
     assert SECRET not in json.dumps(to_jsonable(failure))
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT * FROM measurements private_alias "
+        "JOIN measurements private_alias ON true",
+        "SELECT * FROM (SELECT 1 AS value) private_alias "
+        "JOIN (SELECT 2 AS value) private_alias ON true",
+        "WITH x AS (SELECT * FROM measurements) "
+        "SELECT * FROM x private_alias JOIN x private_alias ON true",
+    ],
+    ids=["tables", "subqueries", "cte"],
+)
+def test_duplicate_aliases_have_a_safe_public_validation_error(
+    tmp_path: Path, sql: str
+) -> None:
+    path = tmp_path / "measurements.csv"
+    path.write_text("value\n10\n20\n", encoding="utf-8")
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+
+    with pytest.raises(QueryValidationError) as caught:
+        app.execute(path, sql)
+
+    assert isinstance(caught.value.__cause__, OptimizeError)
+    assert str(caught.value) == "Dataset access is not allowed: SQL analysis failed."
+    assert "private_alias" not in str(caught.value)
+    public = run_public_operation(lambda: app.execute(path, sql))
+    assert public.succeeded is False
+    assert public.value is None
+    assert public.error is not None
+    assert public.error.code is ErrorCode.QUERY_VALIDATION_ERROR
+    assert "private_alias" not in json.dumps(to_jsonable(public))
+    valid = app.execute(
+        path,
+        "SELECT SUM(a.value) AS total FROM measurements a "
+        "JOIN measurements b ON a.value = b.value",
+    )
+    assert valid.rows == ((30,),)
+
+
+@pytest.mark.parametrize("recover", [False, True])
+def test_duplicate_alias_failure_preserves_evidence_and_allows_recovery(
+    tmp_path: Path, recover: bool
+) -> None:
+    path = tmp_path / "measurements.csv"
+    path.write_text("value\n10\n20\n", encoding="utf-8")
+    third = json.dumps(
+        {
+            "action": "investigate",
+            "reasoning": "Use distinct aliases",
+            "question": "Retry",
+        }
+    )
+    finish = json.dumps(
+        {"action": "finish", "reasoning": "Evidence collected", "question": None}
+    )
+    decisions = Mock()
+    decisions.generate.side_effect = [FIRST, SECOND, third, finish]
+    planning = Mock()
+    valid_join = (
+        "SELECT SUM(a.value) AS total FROM measurements a "
+        "JOIN measurements b ON a.value = b.value"
+    )
+    planning.generate.side_effect = [
+        SQL,
+        "SELECT * FROM measurements a JOIN measurements a ON true",
+        valid_join,
+    ]
+    repair = Mock()
+    synthesis = Mock()
+    synthesis.synthesize.return_value = "The queries produced matching totals."
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        planner=GenerativeQueryPlanner(planning),
+        repairer=GenerativeQueryRepairer(repair),
+        investigator=GenerativeInvestigator(decisions),
+        synthesizer=synthesis,
+    )
+
+    public = run_public_operation(
+        lambda: app.investigate(path, "Compare totals", max_steps=2 + int(recover))
+    )
+
+    assert public.succeeded is True
+    result = public.value
+    assert result is not None
+    assert result.status is (
+        InvestigationStatus.COMPLETE if recover else InvestigationStatus.INCOMPLETE
+    )
+    assert result.observation_count == 1 + int(recover)
+    assert result.observations[0].sql == SQL
+    assert result.observations[0].result.rows == ((30,),)
+    assert len(result.failed_attempts) == 1
+    failure = result.failed_attempts[0]
+    assert failure.question == "Compare"
+    assert failure.error_type == "QueryValidationError"
+    assert failure.repair_history == ()
+    assert result.investigation_failure is None
+    assert planning.generate.call_count == 2 + int(recover)
+    repair.generate.assert_not_called()
+    serialized = json.loads(json.dumps(to_jsonable(result)))
+    assert serialized["failed_attempts"][0]["error_type"] == "QueryValidationError"
+    if recover:
+        assert result.observations[1].sql == valid_join
+        assert result.observations[1].result.rows == ((30,),)
+        synthesis.synthesize.assert_called_once()
+    else:
+        synthesis.synthesize.assert_not_called()
