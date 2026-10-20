@@ -1,0 +1,67 @@
+{
+  "schema_version": 2,
+  "timestamp_utc": "2026-10-20T15:44:55.972097+00:00",
+  "elapsed_seconds": 121.218,
+  "revision": {
+    "commit": "ef4f84ea1f116240578246a7de5318ba179588fc",
+    "tracked_changes": false,
+    "status_scope": "tracked_files_only"
+  },
+  "python_version": "3.11.9",
+  "model": "gemini-3.8-flash",
+  "max_steps_per_case": 1,
+  "provider_retries": 1,
+  "run_settings": {
+    "allow_llm_data_disclosure": true,
+    "request_timeout_seconds": 60.0,
+    "retry_base_delay_seconds": 1.0,
+    "max_upload_size_mb": 100,
+    "max_query_execution_seconds": 5.0,
+    "max_query_result_rows": 20,
+    "max_query_memory_mb": 512,
+    "max_query_temp_storage_mb": 1024
+  },
+  "generation_telemetry_scope": "client_calls_observed_during_case",
+  "scoring_scope": "single_claim_numeric_answer_only",
+  "limitations": "No narrative or general semantic certification. No-claims responses are not automatically proven abstentions. These are known development fixtures, not a held-out generalization benchmark.",
+  "case_count": 1,
+  "outcome_counts": {
+    "provider_error": 1
+  },
+  "number_audit_summary": {
+    "audited_case_count": 0,
+    "unaudited_case_count": 1,
+    "detected_token_count": 0,
+    "unlinked_token_count": 0,
+    "cases_with_unlinked_tokens": 0
+  },
+  "results": {
+    "energy_grain": {
+      "outcome": "provider_error",
+      "diagnostics": {
+        "http_status": 504,
+        "retryable": true,
+        "attempts": 2,
+        "stage": "investigator",
+        "call_number": 1
+      },
+      "control_baseline": {
+        "kind": "supplied_sql_control",
+        "expected": "30",
+        "actual": "30.0",
+        "outcome": "correct_numeric",
+        "elapsed_seconds": 0.056
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 2,
+          "elapsed_seconds": 119.428,
+          "returned_text": false
+        }
+      ],
+      "elapsed_seconds": 121.218
+    }
+  }
+}
