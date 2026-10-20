@@ -31,6 +31,7 @@ class Case:
     files: tuple[tuple[str, str], ...]
     question: str
     answer: str
+    control_sql: str | None = None
 
 
 CASES = {
@@ -90,6 +91,88 @@ CASES = {
             "Exclude missing indicators and cancelled shipments."
         ),
         answer="50",
+    ),
+}
+
+CHALLENGE_CASES = {
+    "energy_grain": Case(
+        files=(
+            (
+                "generation.csv",
+                "reading id,output kWh,record type\n"
+                "R1,11.25,production\nR2,11.25,production\n"
+                "R3,7.5,production\nR4,100,production\nR5,999,test\n",
+            ),
+            (
+                "reviews.csv",
+                "reading id,decision\nR1,approved\nR1,approved\n"
+                "R2,approved\nR3,approved\nR3,rejected\n"
+                "R4,rejected\nR5,approved\n",
+            ),
+        ),
+        question=(
+            "What is the total production output in kWh for readings with at least "
+            "one approved review? Count each reading id once, even if it has "
+            "multiple approved reviews. Distinct readings with equal output "
+            "both count. Exclude test records."
+        ),
+        answer="30",
+        control_sql=(
+            'SELECT SUM(g."output kWh") AS metric FROM generation g '
+            "WHERE g.\"record type\" = 'production' AND EXISTS ("
+            'SELECT 1 FROM reviews r WHERE r."reading id" = g."reading id" '
+            "AND r.decision = 'approved')"
+        ),
+    ),
+    "research_weighted": Case(
+        files=(
+            (
+                "assays.csv",
+                "sample code,mass g,assay pct,review state\n"
+                "A,100,1,accepted\nB,300,3,accepted\n"
+                "C,200,,accepted\nD,,90,accepted\n"
+                "E,50,99,rejected\nF,0,100,accepted\n",
+            ),
+        ),
+        question=(
+            "What is the mass-weighted mean assay percentage for accepted samples? "
+            "Include only rows with a recorded assay percentage and recorded "
+            "positive mass. Return the result in percentage units, not a fraction."
+        ),
+        answer="2.5",
+        control_sql=(
+            'SELECT SUM("mass g" * "assay pct") / SUM("mass g") AS metric '
+            "FROM assays WHERE \"review state\" = 'accepted' "
+            'AND "mass g" > 0 AND "assay pct" IS NOT NULL'
+        ),
+    ),
+    "education_entities": Case(
+        files=(
+            (
+                "enrolments.csv",
+                "learner id,cohort,enrolment state,outcome\n"
+                "A,2026,active,complete\nA,2026,active,complete\n"
+                "A,2026,active,complete\nB,2026,active,complete\n"
+                "C,2026,active,complete\nD,2026,active,incomplete\n"
+                "E,2026,active,incomplete\nF,2026,active,incomplete\n"
+                "G,2026,active,incomplete\nH,2026,active,incomplete\n"
+                "I,2026,cancelled,complete\nJ,2026,active,\n"
+                "K,2025,active,complete\n",
+            ),
+        ),
+        question=(
+            "Among distinct active learners in cohort 2026 with a known outcome, "
+            "what percentage completed? Outcomes are complete or incomplete. "
+            "Count learner identities, not enrolment rows. Exclude cancelled "
+            "enrolments, missing outcomes, and other cohorts."
+        ),
+        answer="37.5",
+        control_sql=(
+            "SELECT 100.0 * COUNT(DISTINCT CASE WHEN outcome = 'complete' "
+            'THEN "learner id" END) / COUNT(DISTINCT "learner id") AS metric '
+            "FROM enrolments WHERE cohort = 2026 AND \"enrolment state\" = 'active' "
+            "AND outcome IN ('complete', 'incomplete')"
+        ),
     ),
 }
 
@@ -183,8 +266,36 @@ def failure_report(error: Exception) -> dict[str, object]:
     return {"outcome": "application_error", "code": to_public_error(error).code.value}
 
 
+def control_baseline(
+    case: Case, app: VeriSight, paths: list[Path]
+) -> dict[str, object]:
+    """Check supplied control SQL against a separately specified expected answer."""
+    if case.control_sql is None:
+        raise ValueError("A control query is required.")
+    started = perf_counter()
+    result = app.execute(paths, case.control_sql)
+    if result.row_count != 1 or result.column_count != 1:
+        raise ValueError("The control must return one numerical cell.")
+    value = result.rows[0][0]
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        raise ValueError("The control must return a numerical value.")
+    actual = Decimal(str(value))
+    if not actual.is_finite():
+        raise ValueError("The control must return a finite value.")
+    return {
+        "kind": "supplied_sql_control",
+        "expected": case.answer,
+        "actual": str(actual),
+        "outcome": (
+            "correct_numeric" if actual == Decimal(case.answer) else "incorrect_numeric"
+        ),
+        "elapsed_seconds": round(perf_counter() - started, 3),
+    }
+
+
 def run_case(case: Case, settings: Settings) -> dict[str, object]:
     """Use temporary synthetic files and the real default investigation path."""
+    baseline: dict[str, object] | None = None
     with capture_generation_calls() as calls:
         try:
             with TemporaryDirectory(prefix="verisight-evaluation-") as directory:
@@ -193,12 +304,20 @@ def run_case(case: Case, settings: Settings) -> dict[str, object]:
                     path = Path(directory) / filename
                     path.write_text(content, encoding="utf-8")
                     paths.append(path)
-                result = VeriSight(settings=settings).investigate(
-                    paths, case.question + REQUEST, max_steps=1
-                )
+                app = VeriSight(settings=settings)
+                if case.control_sql is not None:
+                    baseline = control_baseline(case, app, paths)
+                    if baseline["outcome"] != "correct_numeric":
+                        return {
+                            "outcome": "baseline_error",
+                            "control_baseline": baseline,
+                        }
+                result = app.investigate(paths, case.question + REQUEST, max_steps=1)
                 report = score_result(result, case.answer)
         except Exception as error:
             report = failure_report(error)
+    if baseline is not None:
+        report["control_baseline"] = baseline
     if calls:
         report["generation_calls"] = [asdict(call) for call in calls]
     return report
@@ -254,7 +373,11 @@ def main() -> int:
     parser.add_argument(
         "--live", action="store_true", help="Allow Gemini calls using synthetic data."
     )
-    parser.add_argument("--case", choices=[*CASES, "all"], default="finance")
+    parser.add_argument(
+        "--case",
+        choices=[*CASES, *CHALLENGE_CASES, "all", "challenge"],
+        default="finance",
+    )
     parser.add_argument(
         "--request-timeout-seconds",
         type=_positive_timeout,
@@ -291,7 +414,13 @@ def main() -> int:
         print(json.dumps(failure_report(error), indent=2))
         return 2
 
-    selected = CASES if args.case == "all" else {args.case: CASES[args.case]}
+    if args.case == "all":
+        selected = CASES
+    elif args.case == "challenge":
+        selected = CHALLENGE_CASES
+    else:
+        available = {**CASES, **CHALLENGE_CASES}
+        selected = {args.case: available[args.case]}
     revision = repository_metadata()
     started_at = datetime.now(UTC).isoformat()
     started = perf_counter()

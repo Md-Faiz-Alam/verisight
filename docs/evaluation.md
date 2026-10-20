@@ -122,6 +122,72 @@ The live evaluator currently scores one VALUE claim. These multi-step DIFFERENCE
 claims are checked directly against their independent fixture oracle; the live
 runner and its scoring contract are not expanded by this test module.
 
+## Live schema challenge suite
+
+The opt-in runner adds three synthetic development cases under `--case challenge`.
+The original `--case all` still selects the original five cases. Individual
+challenge names can be selected to fit provider request limits.
+
+| Case | Analytical requirement | Independent calculation | Expected |
+| --- | --- | --- | --- |
+| `energy_grain` | Include production readings with an approved review; count each reading identity once | `11.25 + 11.25 + 7.5` kWh | `30` |
+| `research_weighted` | Accepted assays with known percentage and positive known mass; weight by mass | `(100 * 1 + 300 * 3) / 400` percentage units | `2.5` |
+| `education_entities` | Active learners in cohort 2026 with known outcomes; count identities rather than enrolment rows | `100 * 3 / 8` percent | `37.5` |
+
+The energy fixture has repeated approved reviews and distinct readings with
+equal output. Summing a raw join or deduplicating output values gives a wrong
+answer. The research fixture includes unknown mass/assay values, zero mass, and
+a rejected sample. The education fixture repeats one learner and includes a
+cancelled enrolment, an unknown outcome, and another cohort.
+
+Answers are specified before execution. Supplied control SQL must produce one
+finite numerical cell and match the independent answer before the model runs.
+A disagreement produces `baseline_error` and skips generation. Control execution
+errors remain classified application failures. A successful control report is
+retained even when subsequent model generation fails.
+
+`control_baseline` records its kind, expected and actual values, outcome, and
+elapsed time. It is a supplied-query control through the same ingestion and SQL
+engine, not an independent implementation or a competing model. The arithmetic
+above is the independent oracle. The control SQL, its result, and the oracle are
+not inserted into the investigator's question or observations.
+
+The live path uses default planning, investigation, and structured synthesis.
+It still allows one analytical attempt and asks for one final VALUE claim.
+These cases test generated analytical SQL, not autonomous multi-step reasoning.
+No rounding tolerance is used; all three answers have finite decimal forms.
+
+After offline gates pass, commit the fixture definitions before live execution.
+Confirm no tracked changes with `git status --short`. Run one case at a time if
+provider limits make a combined run impractical:
+
+```powershell
+New-Item -ItemType Directory -Force reports/evaluations | Out-Null
+$evaluationStamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
+python -m scripts.live_evaluation --live --case energy_grain --request-timeout-seconds 60 --provider-retries 1 --output "reports/evaluations/energy-grain-$evaluationStamp.json"
+```
+
+Select `research_weighted` or `education_entities` for the other cases. A single
+`--case challenge` run selects all three under the same revision and settings.
+No pacing between provider calls is added by this increment. A 429 may reflect
+minute or daily limits; repeated immediate runs do not resolve exhausted quota.
+
+Retain every attempt, including failed controls, provider errors, incomplete
+results, and repeated runs. For this suite, report:
+
+- Exact correct supported answers divided by all attempted cases.
+- Incorrect supported answers separately from contradicted/unverifiable claims.
+- Provider failures, application/control failures, and incomplete workflows.
+- Case elapsed time and retry attempts where telemetry exists.
+
+Case elapsed time includes control execution and investigation. Control timing
+alone is not a comparable model-performance latency baseline. Do not select the
+best retry per case and call that an overall success rate.
+
+These fixtures are public development cases. They are not held out once used
+to guide implementation, and three cases cannot establish cross-domain accuracy.
+No live outcome is claimed until reports from the implemented revision exist.
+
 ## Limits and next evaluation work
 
 These tests establish controlled pipeline and scorer behavior. They do not show
@@ -132,7 +198,8 @@ Next work includes unscripted multi-step evaluations, held-out fixtures,
 insufficient-evidence cases, a defined model or system comparison, and
 reproducible live runs. Report all attempted cases and distinguish provider
 availability, completion, correctness, and latency. The live runner's five
-fixtures remain separate from this ten-question offline increment.
+default fixtures and the schema challenge suite remain separate from this
+ten-question offline increment.
 
 See [Development](development.md) for the full gate and live evaluation controls,
 and [Architecture](architecture.md) for verification boundaries.

@@ -12,6 +12,8 @@ from unittest.mock import patch
 import pytest
 from scripts.live_evaluation import (
     CASES,
+    CHALLENGE_CASES,
+    control_baseline,
     failure_report,
     main,
     repository_metadata,
@@ -170,7 +172,14 @@ def test_main_handles_missing_key(capsys: pytest.CaptureFixture[str]) -> None:
 )
 @pytest.mark.parametrize(
     "selected,count",
-    [("all", 5), ("finance", 1), ("healthcare", 1), ("logistics", 1)],
+    [
+        ("all", 5),
+        ("finance", 1),
+        ("healthcare", 1),
+        ("logistics", 1),
+        ("challenge", 3),
+        ("energy_grain", 1),
+    ],
 )
 def test_main_reports_all_cases_without_secrets(
     outcome: str,
@@ -195,7 +204,13 @@ def test_main_reports_all_cases_without_secrets(
     assert "private-secret" not in output
     report = json.loads(output)
     assert report["case_count"] == count
-    expected_names = set(CASES) if selected == "all" else {selected}
+    expected_names = (
+        set(CASES)
+        if selected == "all"
+        else set(CHALLENGE_CASES)
+        if selected == "challenge"
+        else {selected}
+    )
     assert set(report["results"]) == expected_names
 
 
@@ -601,3 +616,109 @@ def test_cli_rejects_invalid_provider_controls_before_any_run(
     settings.assert_not_called()
     run.assert_not_called()
     assert "error:" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("name", list(CHALLENGE_CASES))
+def test_challenge_controls_match_independent_arithmetic(
+    tmp_path: Path, name: str
+) -> None:
+    case = CHALLENGE_CASES[name]
+    paths = []
+    for filename, content in case.files:
+        path = tmp_path / filename
+        path.write_text(content, encoding="utf-8")
+        paths.append(path)
+    expected = {
+        "energy_grain": Decimal("11.25") + Decimal("11.25") + Decimal("7.5"),
+        "research_weighted": (Decimal(100) * 1 + Decimal(300) * 3) / 400,
+        "education_entities": Decimal(100) * 3 / 8,
+    }[name]
+    app = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
+    )
+    with patch.object(app, "investigate") as investigate:
+        report = control_baseline(case, app, paths)
+    investigate.assert_not_called()
+    assert Decimal(case.answer) == expected
+    assert Decimal(str(report["actual"])) == expected
+    assert report["outcome"] == "correct_numeric"
+    assert report["kind"] == "supplied_sql_control"
+    assert isinstance(report["elapsed_seconds"], float)
+
+
+@pytest.mark.parametrize("provider_failure", [False, True])
+def test_challenge_baseline_is_retained_without_leaking_answers_to_generation(
+    result: InvestigationResult, provider_failure: bool
+) -> None:
+    case = CHALLENGE_CASES["energy_grain"]
+    with patch.object(
+        VeriSight,
+        "investigate",
+        side_effect=GeminiGenerationError("private-secret")
+        if provider_failure
+        else None,
+        return_value=result,
+    ) as investigate:
+        report = run_case(
+            case, Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
+        )
+    baseline = report["control_baseline"]
+    assert isinstance(baseline, dict)
+    assert baseline["outcome"] == "correct_numeric"
+    assert Decimal(baseline["actual"]) == Decimal(30)
+    assert report["outcome"] == (
+        "provider_error" if provider_failure else "correct_numeric"
+    )
+    prompt = investigate.call_args.args[1]
+    assert prompt.startswith(case.question)
+    assert case.control_sql not in prompt
+    assert case.answer not in prompt
+    assert investigate.call_args.kwargs == {"max_steps": 1}
+    assert all(not path.exists() for path in investigate.call_args.args[0])
+    assert "private-secret" not in json.dumps(report)
+
+
+def test_challenge_stops_before_generation_when_control_disagrees() -> None:
+    case = replace(CHALLENGE_CASES["energy_grain"], answer="31")
+    with patch.object(VeriSight, "investigate") as investigate:
+        report = run_case(
+            case, Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
+        )
+    investigate.assert_not_called()
+    assert report["outcome"] == "baseline_error"
+    baseline = report["control_baseline"]
+    assert isinstance(baseline, dict)
+    assert baseline["outcome"] == "incorrect_numeric"
+    assert baseline["expected"] == "31"
+
+
+@pytest.mark.parametrize(
+    "query_result",
+    [
+        QueryResult(columns=("metric",), rows=()),
+        QueryResult(columns=("a", "b"), rows=((1, 2),)),
+        QueryResult(columns=("metric",), rows=((None,),)),
+        QueryResult(columns=("metric",), rows=((True,),)),
+        QueryResult(columns=("metric",), rows=(("30",),)),
+        QueryResult(columns=("metric",), rows=((float("nan"),),)),
+        QueryResult(columns=("metric",), rows=((float("inf"),),)),
+    ],
+    ids=["no-rows", "two-columns", "null", "boolean", "text", "nan", "infinite"],
+)
+def test_control_baseline_rejects_nonmetric_results(query_result: QueryResult) -> None:
+    app = VeriSight(settings=Settings(gemini_api_key=None))
+    with (
+        patch.object(app, "execute", return_value=query_result),
+        pytest.raises(ValueError, match="control must return"),
+    ):
+        control_baseline(CHALLENGE_CASES["energy_grain"], app, [])
+
+
+def test_control_baseline_requires_supplied_sql() -> None:
+    app = VeriSight(settings=Settings(gemini_api_key=None))
+    with (
+        patch.object(app, "execute") as execute,
+        pytest.raises(ValueError, match="control query is required"),
+    ):
+        control_baseline(CASES["finance"], app, [])
+    execute.assert_not_called()

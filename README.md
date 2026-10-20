@@ -256,7 +256,7 @@ does not measure live model accuracy. The bounded multi-step cases add
 cross-observation differences, misleading intermediate results, and partial
 failure/step-budget checks, also with scripted generation.
 
-The opt-in live evaluator uses five temporary synthetic fixtures: finance,
+The default live suite (`--case all`) uses five temporary synthetic fixtures: finance,
 retail, manufacturing, healthcare, and logistics. Each permits one analytical
 step and scores one numerical answer against an independent expected value.
 
@@ -266,6 +266,12 @@ New-Item -ItemType Directory -Force reports/evaluations | Out-Null
 $evaluationStamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
 python -m scripts.live_evaluation --live --case all --request-timeout-seconds 60 --provider-retries 1 --output "reports/evaluations/live-$evaluationStamp.json"
 ```
+
+An additional `--case challenge` suite tests join duplication, a weighted mean,
+and a distinct-learner denominator on energy, research, and education schemas.
+Each case checks supplied control SQL against an independently specified answer
+before model generation. These are development fixtures, not held-out evidence;
+see [Evaluation](docs/evaluation.md) for the questions, arithmetic, and protocol.
 
 Live calls require a key and may incur charges. The evaluator enables disclosure
 for its synthetic fixtures. Defaults remain 20 seconds per request and zero
