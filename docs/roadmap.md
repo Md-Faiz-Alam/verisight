@@ -19,28 +19,17 @@ exist. Reports span different revisions and settings. They establish examples
 of working behavior and failures, not general accuracy or production readiness.
 Narrative verification remains false.
 
-## 1. Integrate per-metric rounding deliberately
+The next milestone is independent evaluation on unfamiliar schemas. The recent
+boundary corrections reject ambiguous column identities, hidden CSV index
+fields, unsupported SQL result cells, and unresolved duplicate aliases; they
+also preserve supported numerical inputs and handle nested duplicate profiling.
+Regression coverage establishes these cases, not general domain accuracy.
 
-An opt-in `DecimalRoundingPolicy` now supports 0–12 decimal places with fixed
-half-even rounding. Explicit reverification retains original evidence and the
-policy, distinguishing `supported_rounded` from ordinary support. Model-selected
-precision and combinations with nonzero absolute tolerance are rejected.
+Keep further implementation driven by observed failures and the minimum user
+workflow needed to inspect evidence. Adding more internal metadata is not a
+substitute for demonstrating useful, correct investigations.
 
-Default structured investigations and live evaluation still use strict
-comparison. A separate rounded report does not mutate the investigation.
-
-Remaining work:
-
-- Define which metrics and units permit which presentation precision.
-- Integrate explicit application policies into report consumers where justified.
-- Decide how a future evaluator scores rounded answers against independent
-  ground truth while preserving the strict baseline.
-
-Acceptance: metric policies are explicit; boundary, negative, percentage,
-large-value, and incorrect-value cases remain covered. There is no implicit unit
-conversion or general forgiveness of floating-point differences.
-
-## 2. Expand independent correctness evaluation
+## 1. Expand independent correctness evaluation
 
 Current live fixtures are easy single-metric development cases with one
 analytical step each. They do not establish autonomous multi-step reasoning.
@@ -64,6 +53,27 @@ Acceptance: answers are independent of generated SQL, every attempt is
 accounted for, and results can be reproduced and compared with a defined
 baseline. Missing claims do not automatically count as justified abstention.
 
+## 2. Integrate per-metric rounding deliberately
+
+An opt-in `DecimalRoundingPolicy` now supports 0–12 decimal places with fixed
+half-even rounding. Explicit reverification retains original evidence and the
+policy, distinguishing `supported_rounded` from ordinary support. Model-selected
+precision and combinations with nonzero absolute tolerance are rejected.
+
+Default structured investigations and live evaluation still use strict
+comparison. A separate rounded report does not mutate the investigation.
+
+Remaining work:
+
+- Define which metrics and units permit which presentation precision.
+- Integrate explicit application policies into report consumers where justified.
+- Decide how a future evaluator scores rounded answers against independent
+  ground truth while preserving the strict baseline.
+
+Acceptance: metric policies are explicit; boundary, negative, percentage,
+large-value, and incorrect-value cases remain covered. There is no implicit unit
+conversion or general forgiveness of floating-point differences.
+
 ## 3. Strengthen report meaning and provenance
 
 Claim-linked statements and token/digit diagnostics now exist. Semantic linkage
@@ -74,7 +84,8 @@ Required work:
 
 - Represent findings with explicit claim references and analytical scope.
 - Separate measurements, interpretations, hypotheses, and unanswered questions.
-- Return bounded failed-attempt and repair history.
+- Review how existing failed-attempt and query repair history is presented and
+  redacted in API responses and exports.
 - Decide whether `ask()` needs a richer return contract.
 - Evaluate unsupported formats and number words without silently guessing
   their meaning.
@@ -86,10 +97,10 @@ Narrative error rates require independently labeled semantic evaluation.
 
 ## 4. Improve unfamiliar-data handling and planning
 
-Required work includes identifier-quoting instructions, removal of private
-cross-object configuration in legacy synthesis,
-relationship discovery, semantic roles, units, schema ambiguity, useful competing
-hypotheses, and stopping rules for insufficient evidence.
+Identifier-quoting instructions and constructor-based legacy synthesis
+configuration are implemented. Remaining work includes relationship discovery,
+semantic roles, units, schema ambiguity, useful competing hypotheses, and stopping
+rules for insufficient evidence, guided by independent evaluation failures.
 
 Acceptance: targeted regressions preserve existing precision guarantees;
 unfamiliar schemas and ambiguous questions are handled or explicitly reported.

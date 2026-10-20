@@ -93,6 +93,18 @@ distinct from native booleans. Mixed boolean/numeric or boolean/text columns
 retain their scalar types in loaded data and infer as `unknown`. This does not
 guarantee heterogeneous scalar types survive conversion into a SQL column.
 
+The data boundary also rejects column names that collide under DuckDB's
+ASCII case-insensitive identifier rules and CSV inputs that pandas would turn
+into an implicit row index. Decimal fallback and explicit SQL binding protect
+supported mixed numerical columns from silent float conversion; exact decimal
+binding has a 38-digit precision limit. Existing floating-point values do not
+recover digits already lost upstream.
+
+Duplicate profiling supports nested JSON lists and objects. SQL results must
+contain supported scalar cells; maps, lists, structs, and binary values are
+rejected before becoming observations. These protections do not establish
+support for arbitrary file formats, data sizes, or domain semantics.
+
 ## Gemini investigations
 
 Configure a local `.env` file or environment variables:
@@ -196,8 +208,19 @@ or completeness of generated claims.
 
 ## Partial results and safe diagnostics
 
-Observations retain questions, SQL, and query results. Expected synthesis
-failures return `incomplete` with observations and optional `synthesis_failure`.
+Observations retain questions, SQL, query results, and available
+`repair_history`. `InvestigationResult.failed_attempts` exposes recorded failed
+attempts with public messages and available repair history. Repair records can
+include both failed and replacement SQL, their outcome, and a public error code.
+SQL can contain dataset values: this provenance is sensitive result content,
+not content-free telemetry. `ask()` still returns only `QueryResult`.
+
+Duplicate-alias SQL analysis failures and unsupported SQL result cells are
+classified as query validation failures. During an investigation, these can be
+recorded as failed attempts so another query can be tried within the step budget.
+Earlier observations remain available when that budget is exhausted.
+
+Expected synthesis failures return `incomplete` with observations and optional `synthesis_failure`.
 After at least one successful observation, expected investigator failures and
 provider failures during planning or repair return `incomplete` with
 `investigation_failure`. Later query-attempt prompt-budget failures also
@@ -274,12 +297,12 @@ statement and branch coverage measures exercised paths, not universal accuracy.
 
 ## Remaining work
 
-- Integrate explicit per-metric rounding where appropriate and evaluate analytical semantics independently.
-- Expand held-out questions, multi-step cases, and baseline comparisons.
-- Expose failed-attempt and repair history.
-- Improve identifier-quoting guidance for planning and repair.
-- Remove private cross-object configuration in legacy synthesis.
-- Build the user workflow, report export, and deployment acceptance evidence.
+- Evaluate unfamiliar schemas and multi-step questions against independent
+  answers, with a defined baseline and all attempted cases reported.
+- Define and integrate per-metric rounding conventions where justified; the
+  current opt-in policy uses half-even, which can differ from SQL tie rounding.
+- Build dataset onboarding, evidence inspection, partial-result presentation,
+  report export, and deployment acceptance evidence.
 
 See [Architecture](docs/architecture.md), [Development](docs/development.md),
 and [Roadmap](docs/roadmap.md).

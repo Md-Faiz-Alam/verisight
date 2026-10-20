@@ -33,6 +33,26 @@ All-blank columns remain unknown. SQL engines can still coerce heterogeneous
 object columns; preserving mixed source scalars at ingestion is not a guarantee
 of mixed scalar types in SQL results.
 
+Loaded tables reject column identities that collide after string conversion
+and ASCII case normalization, matching DuckDB's identifier behavior even for
+quoted names. This is not Unicode case folding. CSV loading rejects implicit
+pandas row indexes that would otherwise hide extra source fields. Short records
+can still produce missing trailing cells; this guard is not a complete CSV
+record-width validator.
+
+For inferred CSV numerical columns that cannot retain their source decimal
+values through ordinary numeric conversion, loading falls back to Decimal.
+Object-backed numerical columns are bound through explicitly checked DuckDB
+DECIMAL precision and scale. Non-finite values in that binding path or a required
+precision above 38 digits raise a query runtime error. Native float columns keep
+their existing floating-point semantics, and digits lost before ingestion cannot
+be recovered. These protections do not make every SQL operation exact.
+
+Duplicate profiling falls back to structural snapshots for nested lists and
+objects when pandas cannot hash their cells. Mapping order is immaterial;
+sequence order and container kinds remain distinct. Source cells are unchanged.
+This supports nested JSON values, not arbitrary custom Python objects.
+
 Planner, investigator, repairer, and synthesizer dependencies support injection
 for deterministic tests and alternative behavior.
 
@@ -44,18 +64,33 @@ external access and automatic extension loading/installation. Configured limits
 cover result rows, query execution time, memory, and temporary storage.
 These controls are not a complete deployment security assessment.
 
-A runtime SQL failure can trigger one query repair. The returned `QueryExecution`
-contains the successful plan and result; it does not retain a complete repair
-history. `ask()` returns only `QueryResult`.
+Planner and repair prompts specify double-quoted identifiers, exact supplied
+names, and the distinction between relation identifiers and display names.
+Quoting does not authorize an unavailable relation.
 
-The orchestrator tracks successful observations and internal failed attempts.
+Expected SQL parsing and source-resolution errors, including duplicate aliases,
+become `QueryValidationError`. Relation analysis must succeed before execution;
+analysis failure does not bypass authorization. The built-in executor rejects
+nested or binary result cells before constructing `QueryResult`. Use scalar
+columns and grouped rows instead of map, list, struct, or BLOB results.
+
+A runtime SQL failure can trigger one query repair. `QueryExecution` retains the
+successful plan, result, and available `repair_history`. Each `QueryRepairAttempt`
+records the failed plan, optional replacement, outcome, and optional public error
+code. Successful observations inherit repair history; recorded failed attempts
+can retain unsuccessful repairs. This is query provenance, not a complete trace
+of provider requests or synthesis-format repair. `ask()` returns only `QueryResult`.
+
+The orchestrator tracks successful observations and recorded failed attempts.
 `max_steps` limits analytical attempts, including failures. It does not cap
 provider requests. Repeated normalized questions and exhausted step budgets
 produce incomplete results.
 
 Ordinary query validation, execution, and nonprovider planning failures can be
-recorded internally so the investigator can choose another bounded attempt.
-The final result does not yet expose those internal failed-attempt records.
+recorded so the investigator can choose another bounded attempt.
+`InvestigationResult.failed_attempts` exposes the recorded question, exception
+type, fixed public message, and available repair history. Exhausting the budget
+returns incomplete results with prior observations and recorded failures.
 
 ## Structured synthesis
 
@@ -76,7 +111,8 @@ must pass the character budget before generation.
 Provider failures bypass format repair; bounded provider retries apply
 independently to each generation call. Contradicted claims do not trigger
 format repair. Legacy injected synthesizers may return plain text without
-structured claims.
+structured claims. Legacy synthesis formatter dependencies are configured
+through the prompt builder's constructor.
 
 ## Numerical verification and rendered statements
 
@@ -223,9 +259,11 @@ incomplete investigation is a successful operation value; consumers must
 inspect its workflow status and metadata.
 
 `to_jsonable` serializes supported domain results, including derived audits and
-safe failure metadata. Decimal values become strings. Full investigation results
-contain source evidence; content-free diagnostic metadata does not make the
-whole result safe to publish automatically.
+safe failure metadata and query provenance. Decimal values become strings.
+Observations and repair plans contain SQL that may embed dataset values.
+Questions and source evidence can also be sensitive. Content-free diagnostic
+metadata does not make a whole investigation result safe to publish automatically;
+API and export consumers need an explicit disclosure policy.
 
 The live evaluator uses the default investigation path with five temporary
 synthetic fixtures. It scores one VALUE claim against an independent expected

@@ -89,8 +89,9 @@ specified, implemented, and evaluated contract replaces them.
 
 Recovery tests should cover failures after real successful SQL execution,
 serialization of retained evidence, and failure redaction. Unexpected programming
-errors must remain distinguishable. Current expected-failure recovery does not
-provide complete attempt or repair history.
+errors must remain distinguishable. Results retain recorded failed attempts and
+available query repair history; they are not a complete provider-call trace.
+Reuse relevant existing test modules when adding regressions for concrete bugs.
 
 ## Deterministic and live evaluation
 
@@ -169,7 +170,10 @@ Built-in generation requires disclosure permission and can send schema,
 profiles, questions, and query results. Never send local datasets merely because
 they exist in the working directory. Keep credentials, private datasets, raw
 provider messages, and rejected responses out of diagnostic artifacts.
-Full investigation results contain evidence and may be sensitive.
+Full investigation results contain evidence and may be sensitive. In particular,
+repair history can serialize failed and replacement SQL containing dataset values.
+Do not treat query provenance as content-free telemetry or publish it without
+review.
 
 ## Review and commit workflow
 
