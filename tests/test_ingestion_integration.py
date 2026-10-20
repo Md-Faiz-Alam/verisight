@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from verisight import VeriSight
 from verisight.config import Settings
 from verisight.ingestion.exceptions import (
     DataLoadError,
@@ -158,3 +159,60 @@ def test_dataset_loader_propagates_data_load_failure(
 
     with pytest.raises(DataLoadError):
         loader.load([file_path])
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "a,b\n1,2,3\n4,5,6\n",
+        "a,b\n0,2,3\n1,5,6\n",
+        "a,b\nfirst,second,third,fourth\n",
+        "a,b\n1,2,\n3,4,\n",
+        "a,b\n1,2\n3,4,5\n",
+    ],
+)
+def test_dataset_loader_rejects_csv_fields_without_headers(
+    tmp_path: Path, content: str
+) -> None:
+    path = tmp_path / "measurements.csv"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(DataLoadError):
+        DatasetLoader(Settings()).load([path])
+
+
+def test_csv_implicit_index_cannot_become_query_evidence(tmp_path: Path) -> None:
+    path = tmp_path / "measurements.csv"
+    path.write_text("a,b\nprivate-key,10,900\n", encoding="utf-8")
+    app = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
+    )
+
+    with pytest.raises(DataLoadError, match="Implicit row indexes") as caught:
+        app.execute(path, "SELECT a, b FROM measurements")
+
+    assert "private-key" not in str(caught.value)
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_csv_complex_fields_and_explicit_row_ids_survive_sql(
+    tmp_path: Path, newline: str
+) -> None:
+    path = tmp_path / "measurements.csv"
+    content = (
+        '\nrow_id,note,value\n\n0,"First, line\nSecond line",\n'
+        '1,"He said ""Hello"".",5\n\n'
+    )
+    path.write_bytes(content.replace("\n", newline).encode("utf-8"))
+    app = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
+    )
+
+    result = app.execute(
+        path, "SELECT row_id, note, value FROM measurements ORDER BY row_id"
+    )
+
+    assert result.rows == (
+        (0, f"First, line{newline}Second line", None),
+        (1, 'He said "Hello".', 5),
+    )

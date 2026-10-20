@@ -74,6 +74,12 @@ class CsvLoader(BaseTableLoader):
                 na_values=[""],
             )
 
+            if not isinstance(data.index, pd.RangeIndex):
+                raise DataLoadError(
+                    "CSV rows contain more fields than the header. "
+                    "Implicit row indexes are not supported."
+                )
+
             data = self._infer_safe_column_types(data)
 
         except DataLoadError:
