@@ -2,6 +2,7 @@
 
 import codecs
 import csv
+from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
@@ -225,10 +226,19 @@ class CsvLoader(BaseTableLoader):
 
                 continue
 
-            data[column] = pd.to_numeric(
+            numeric = pd.to_numeric(
                 series,
                 errors="raise",
             )
+            if any(
+                Decimal(original) != Decimal(str(converted))
+                for original, converted in zip(values, numeric.dropna(), strict=True)
+            ):
+                data[column] = series.map(
+                    lambda value: None if pd.isna(value) else Decimal(value)
+                )
+            else:
+                data[column] = numeric
 
         return data
 

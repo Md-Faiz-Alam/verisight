@@ -1,5 +1,6 @@
 """Integration tests for real DuckDB SQL scalar serialization."""
 
+import json
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -7,8 +8,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from verisight import VeriSight
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder, DatasetAnalysisResult
+from verisight.config import Settings
+from verisight.execution.exceptions import QueryRuntimeError
 from verisight.execution.generative_investigator import GenerativeInvestigator
 from verisight.execution.generative_synthesis import (
     GenerativeInvestigationSynthesizer,
@@ -26,7 +30,9 @@ from verisight.ingestion.models import (
     SourceMetadata,
 )
 from verisight.ingestion.schema import SchemaInferer
+from verisight.ingestion.service import DatasetLoader
 from verisight.profiling.models import DatasetProfile
+from verisight.serialization import to_jsonable
 
 
 class SequenceGenerationClient:
@@ -241,3 +247,121 @@ def test_real_duckdb_expressions_are_json_safe(
     assert "Columns: value" in formatted
     assert "Row count: 1" in formatted
     assert "Rows:" in formatted
+
+
+@pytest.mark.parametrize("extension", ["csv", "json"])
+@pytest.mark.parametrize(
+    ("integer", "fraction"),
+    [
+        (9007199254740993, "0.5"),
+        (-9007199254740993, "-0.25"),
+        (9007199254740993, "2e-2"),
+    ],
+)
+def test_mixed_large_integers_and_fractions_remain_exact_through_sql(
+    tmp_path: Path, extension: str, integer: int, fraction: str
+) -> None:
+    path = tmp_path / f"measurements.{extension}"
+    if extension == "csv":
+        path.write_text(f"id,value\n1,{integer}\n2,{fraction}\n3,\n", encoding="utf-8")
+    else:
+        path.write_text(
+            json.dumps(
+                [
+                    {"id": 1, "value": integer},
+                    {"id": 2, "value": float(fraction)},
+                    {"id": 3, "value": None},
+                ]
+            ),
+            encoding="utf-8",
+        )
+    settings = Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
+    table = DatasetLoader(settings).load([path]).tables[0]
+    assert Decimal(str(table.data.loc[0, "value"])) == Decimal(integer)
+    original = table.data.copy(deep=True)
+    service = AnalyticalExecutionService(LoadedDataset(tables=[table]))
+
+    result = service.execute("SELECT value FROM measurements ORDER BY id")
+    total = VeriSight(settings=settings).execute(
+        path, "SELECT SUM(value) AS total FROM measurements"
+    )
+
+    assert result.rows == ((Decimal(integer),), (Decimal(fraction),), (None,))
+    assert all(type(row[0]) is Decimal for row in result.rows[:2])
+    assert total.rows == ((Decimal(integer) + Decimal(fraction),),)
+    payload = json.loads(json.dumps(to_jsonable(result)))
+    assert payload["rows"][2] == [None]
+    pd.testing.assert_frame_equal(table.data, original)
+
+
+def test_csv_preserves_fractional_digits_lost_by_float_conversion(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "measurements.csv"
+    path.write_text("value\n0.12345678901234567\n0.5\n", encoding="utf-8")
+
+    result = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
+    ).execute(path, "SELECT value FROM measurements ORDER BY value")
+
+    assert result.rows == ((Decimal("0.12345678901234567"),), (Decimal("0.5"),))
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        [Decimal("1e-38"), Decimal(0)],
+        [Decimal("1.2300"), Decimal("0.5")],
+        [2**100, 0],
+        [0.1, 0.2],
+        [Decimal("0E+1000000"), Decimal("0E-1000000")],
+    ],
+)
+def test_explicit_decimal_binding_preserves_object_backed_numbers(
+    values: list[int | float | Decimal],
+) -> None:
+    dataset = _dataset()
+    dataset.tables[0].data = pd.DataFrame(
+        {
+            "row_id": [0, 1],
+            'gross"amount': pd.Series(values, dtype=object),
+            "adjustment": pd.Series([Decimal("0.125"), Decimal("0.25")], dtype=object),
+        }
+    )
+    original = dataset.tables[0].data.copy(deep=True)
+
+    result = AnalyticalExecutionService(dataset).execute(
+        'SELECT "gross""amount", adjustment FROM observations ORDER BY row_id'
+    )
+
+    assert result.rows == (
+        (Decimal(str(values[0])), Decimal("0.125")),
+        (Decimal(str(values[1])), Decimal("0.25")),
+    )
+    assert all(type(value) is Decimal for row in result.rows for value in row)
+    pd.testing.assert_frame_equal(dataset.tables[0].data, original)
+
+
+@pytest.mark.parametrize("value", [Decimal("1e38"), Decimal("1e-39"), float("inf")])
+def test_exact_sql_binding_rejects_unsupported_precision_or_nonfinite_values(
+    value: Decimal | float,
+) -> None:
+    dataset = _dataset()
+    dataset.tables[0].data = pd.DataFrame({"value": pd.Series([value], dtype=object)})
+
+    with pytest.raises(QueryRuntimeError, match="Object-backed numerical data"):
+        AnalyticalExecutionService(dataset).execute("SELECT value FROM observations")
+
+
+def test_large_integer_outside_sampling_range_remains_exact(tmp_path: Path) -> None:
+    path = tmp_path / "measurements.json"
+    path.write_text(
+        json.dumps([{"value": 0.5}] * 10000 + [{"value": 9007199254740993}]),
+        encoding="utf-8",
+    )
+
+    result = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
+    ).execute(path, "SELECT MAX(value) AS largest FROM measurements")
+
+    assert result.rows == ((Decimal("9007199254740993"),),)

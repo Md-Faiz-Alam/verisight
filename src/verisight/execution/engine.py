@@ -2,10 +2,13 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from decimal import Decimal
 from threading import Event, Timer
 from typing import cast
 
 import duckdb
+import pandas as pd
+from pandas.api.types import is_object_dtype
 
 from verisight.execution.exceptions import (
     QueryResultLimitError,
@@ -17,7 +20,7 @@ from verisight.execution.validation import (
     AnalyticalQueryValidator,
     validate_dataset_relations,
 )
-from verisight.ingestion.models import LoadedDataset
+from verisight.ingestion.models import LoadedDataset, LoadedTable
 
 
 class DuckDBExecutor:
@@ -138,11 +141,68 @@ class DuckDBExecutor:
 
         try:
             for table in dataset.tables:
-                connection.register(
-                    table.relation_name,
-                    table.data,
-                )
+                self._register_table(connection, table)
 
             yield connection
         finally:
             connection.close()
+
+    @staticmethod
+    def _register_table(
+        connection: duckdb.DuckDBPyConnection, table: LoadedTable
+    ) -> None:
+        """Bind object-backed numbers through explicit lossless decimal types.
+
+        DuckDB may infer DOUBLE for mixed integers/floats or even Decimal
+        columns. Bind decimal text and cast to an explicitly checked common
+        precision and scale instead. Source frames are never modified.
+        """
+        prepared: pd.DataFrame | None = None
+        projections: list[str] = []
+        for column in table.data.columns:
+            quoted = '"' + str(column).replace('"', '""') + '"'
+            series = table.data[column]
+            if not is_object_dtype(series.dtype):
+                projections.append(quoted)
+                continue
+            values = series.dropna()
+            if values.empty or not all(
+                type(value) in (int, float, Decimal) for value in values
+            ):
+                projections.append(quoted)
+                continue
+
+            decimals = [Decimal(str(value)) for value in values]
+            if not all(value.is_finite() for value in decimals):
+                raise QueryRuntimeError(
+                    "Object-backed numerical data must be finite for exact SQL binding."
+                )
+            decimals = [value if value else Decimal(0) for value in decimals]
+            scale = max(max(0, -int(value.as_tuple().exponent)) for value in decimals)
+            integer_digits = max(
+                (max(0, value.adjusted() + 1) for value in decimals if value),
+                default=0,
+            )
+            precision = max(1, integer_digits + scale)
+            if precision > 38:
+                raise QueryRuntimeError(
+                    "Object-backed numerical data exceeds DuckDB's exact "
+                    "decimal precision limit of 38 digits."
+                )
+
+            if prepared is None:
+                prepared = table.data.copy(deep=True)
+            formatted = iter(format(value, "f") for value in decimals)
+            prepared[column] = [
+                None if missing else next(formatted) for missing in series.isna()
+            ]
+            projections.append(
+                f"CAST({quoted} AS DECIMAL({precision},{scale})) AS {quoted}"
+            )
+
+        if prepared is None:
+            connection.register(table.relation_name, table.data)
+        else:
+            connection.from_df(prepared).project(", ".join(projections)).create_view(
+                table.relation_name, replace=True
+            )
