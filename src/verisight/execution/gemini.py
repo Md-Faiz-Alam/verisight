@@ -1,7 +1,9 @@
 """Gemini text-generation client for analytical query planning."""
 
+import asyncio
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -93,7 +95,14 @@ def _generation_stage(schema: dict[str, object] | None) -> GenerationStage:
 
 
 class GeminiTextGenerationClient:
-    """Generate text with bounded retries for transient Gemini failures."""
+    """Generate text with cancellable SDK requests and bounded retries.
+
+    The default SDK request is cancelled after request_timeout_seconds per
+    attempt. Client setup and cancellation/connection cleanup add overhead;
+    this is not an operating-system hard deadline for the whole investigation.
+    Injected synchronous clients remain caller-owned and must enforce their
+    own request deadlines.
+    """
 
     def __init__(
         self,
@@ -138,17 +147,45 @@ class GeminiTextGenerationClient:
             response_json_schema=response_json_schema,
         )
 
-        self._client = (
-            client
-            if client is not None
-            else genai.Client(
-                api_key=api_key,
-                http_options=types.HttpOptions(
-                    timeout=max(1, int(request_timeout_seconds * 1000)),
-                    retry_options=types.HttpRetryOptions(attempts=1),
-                ),
-            )
+        self._client = client
+        self._api_key = api_key
+        self._request_timeout_seconds = request_timeout_seconds
+        self._http_options = types.HttpOptions(
+            timeout=max(1, int(request_timeout_seconds * 1000)),
+            retry_options=types.HttpRetryOptions(attempts=1),
         )
+
+    async def _request_async(self, prompt: str) -> _GeminiResponse:
+        """Cancel the SDK coroutine and close both clients before returning."""
+        # A fresh client stays on one event loop and is closed on every path.
+        with genai.Client(
+            api_key=self._api_key, http_options=self._http_options
+        ) as client:
+            async with client.aio as async_client:
+                async with asyncio.timeout(self._request_timeout_seconds):
+                    return await async_client.models.generate_content(
+                        model=self._model,
+                        contents=prompt,
+                        config=self._response_config,
+                    )
+
+    def _request(self, prompt: str) -> _GeminiResponse:
+        """Keep the public API synchronous without abandoning timed-out work."""
+        if self._client is not None:
+            return self._client.models.generate_content(
+                model=self._model,
+                contents=prompt,
+                config=self._response_config,
+            )
+
+        # The worker owns its event loop, even if the caller already has one.
+        # Cancellation happens inside that loop; result() waits for cleanup.
+        # A timeout on Future.result() alone would leave the request running.
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            return executor.submit(self._run_request, prompt).result()
+
+    def _run_request(self, prompt: str) -> _GeminiResponse:
+        return asyncio.run(self._request_async(prompt))
 
     def generate(self, prompt: str) -> str:
         """Generate text, retrying only transient request failures."""
@@ -161,11 +198,7 @@ class GeminiTextGenerationClient:
             for attempt in range(self._max_retries + 1):
                 call.attempts = attempt + 1
                 try:
-                    response = self._client.models.generate_content(
-                        model=self._model,
-                        contents=prompt,
-                        config=self._response_config,
-                    )
+                    response = self._request(prompt)
                 except Exception as exc:
                     http_status = exc.code if isinstance(exc, errors.APIError) else None
                     retryable = _is_retryable(exc)

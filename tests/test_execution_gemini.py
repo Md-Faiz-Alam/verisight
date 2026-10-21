@@ -1,10 +1,12 @@
 """Tests for the Gemini text-generation adapter."""
 
-from collections.abc import Sequence
-from unittest.mock import patch
+import asyncio
+from collections.abc import AsyncIterator, Sequence
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
+from google import genai
 from google.genai import errors, types
 
 from verisight.exceptions import VeriSightError
@@ -673,11 +675,21 @@ def test_retries_api_error_then_succeeds() -> None:
 
 def test_configures_sdk_timeout_and_single_attempt() -> None:
     with patch("verisight.execution.gemini.genai.Client") as factory:
-        GeminiTextGenerationClient(
+        sdk = factory.return_value.__enter__.return_value
+        async_sdk = sdk.aio.__aenter__.return_value
+        async_sdk.models.generate_content = AsyncMock(
+            return_value=StubGeminiResponse("SELECT 1")
+        )
+        client = GeminiTextGenerationClient(
             api_key="test-api-key",
             model="test-model",
             request_timeout_seconds=12.5,
         )
+        factory.assert_not_called()
+        assert client.generate("Generate SQL.") == "SELECT 1"
+        async_sdk.models.generate_content.assert_awaited_once()
+        sdk.aio.__aexit__.assert_awaited_once()
+        factory.return_value.__exit__.assert_called_once()
 
     factory.assert_called_once()
 
@@ -692,11 +704,17 @@ def test_configures_sdk_timeout_and_single_attempt() -> None:
 
 def test_minimum_sdk_timeout_is_one_millisecond() -> None:
     with patch("verisight.execution.gemini.genai.Client") as factory:
-        GeminiTextGenerationClient(
+        sdk = factory.return_value.__enter__.return_value
+        async_sdk = sdk.aio.__aenter__.return_value
+        async_sdk.models.generate_content = AsyncMock(
+            return_value=StubGeminiResponse("SELECT 1")
+        )
+        client = GeminiTextGenerationClient(
             api_key="test-api-key",
             model="test-model",
             request_timeout_seconds=0.0001,
         )
+        assert client.generate("Generate SQL.") == "SELECT 1"
 
     options = factory.call_args.kwargs["http_options"]
 
@@ -796,3 +814,164 @@ def test_response_extraction_failure_has_no_raw_context() -> None:
 
     assert exc_info.value.__cause__ is None
     assert exc_info.value.__context__ is None
+
+
+@pytest.mark.parametrize("max_retries", [0, 1])
+def test_default_request_deadline_cancels_before_retry(max_retries: int) -> None:
+    events: list[str] = []
+
+    async def slow_response(**kwargs: object) -> StubGeminiResponse:
+        events.append("started")
+        try:
+            await asyncio.sleep(0.5)
+        finally:
+            events.append("cancelled")
+        return StubGeminiResponse("too late")
+
+    def retry_delay(seconds: float) -> None:
+        assert events[-1] == "cancelled"
+        events.append("retry")
+
+    with patch("verisight.execution.gemini.genai.Client") as factory:
+        sdk = factory.return_value.__enter__.return_value
+        async_sdk = sdk.aio.__aenter__.return_value
+        async_sdk.models.generate_content = AsyncMock(side_effect=slow_response)
+        client = GeminiTextGenerationClient(
+            api_key="synthetic-key",
+            model="test-model",
+            request_timeout_seconds=0.02,
+            max_retries=max_retries,
+            sleep=retry_delay,
+        )
+        with pytest.raises(GeminiTransientError) as caught:
+            client.generate("Synthetic request")
+
+        assert factory.call_count == max_retries + 1
+        assert sdk.aio.__aexit__.await_count == max_retries + 1
+        assert factory.return_value.__exit__.call_count == max_retries + 1
+    assert events == (
+        ["started", "cancelled"]
+        if max_retries == 0
+        else ["started", "cancelled", "retry", "started", "cancelled"]
+    )
+    assert caught.value.diagnostics is not None
+    assert caught.value.diagnostics.attempts == max_retries + 1
+    assert caught.value.diagnostics.http_status is None
+    assert caught.value.__context__ is None
+
+
+def test_default_request_retries_after_cancellation_and_preserves_telemetry() -> None:
+    from verisight.execution.generation_telemetry import capture_generation_calls
+
+    attempts = 0
+    cancelled = False
+
+    async def response(**kwargs: object) -> StubGeminiResponse:
+        nonlocal attempts, cancelled
+        attempts += 1
+        if attempts == 1:
+            try:
+                await asyncio.sleep(0.5)
+            finally:
+                cancelled = True
+        assert cancelled
+        return StubGeminiResponse("SELECT 1")
+
+    with patch("verisight.execution.gemini.genai.Client") as factory:
+        sdk = factory.return_value.__enter__.return_value
+        async_sdk = sdk.aio.__aenter__.return_value
+        async_sdk.models.generate_content = AsyncMock(side_effect=response)
+
+        def retry_delay(seconds: float) -> None:
+            assert seconds == 1.0
+            sdk.aio.__aexit__.assert_awaited_once()
+            factory.return_value.__exit__.assert_called_once()
+
+        client = GeminiTextGenerationClient(
+            api_key="synthetic-key",
+            model="test-model",
+            request_timeout_seconds=0.02,
+            max_retries=1,
+            sleep=retry_delay,
+        )
+        with capture_generation_calls() as calls:
+            assert client.generate("Synthetic request") == "SELECT 1"
+        assert factory.call_count == 2
+        assert calls[0].attempts == 2
+        assert calls[0].returned_text is True
+
+
+def test_sync_generation_works_inside_running_event_loop() -> None:
+    async def invoke() -> None:
+        with patch("verisight.execution.gemini.genai.Client") as factory:
+            sdk = factory.return_value.__enter__.return_value
+            async_sdk = sdk.aio.__aenter__.return_value
+            async_sdk.models.generate_content = AsyncMock(
+                return_value=StubGeminiResponse("SELECT 1")
+            )
+            client = GeminiTextGenerationClient(
+                api_key="synthetic-key", model="test-model"
+            )
+            assert client.generate("First request") == "SELECT 1"
+            assert client.generate("Second request") == "SELECT 1"
+            assert factory.call_count == 2
+            assert sdk.aio.__aexit__.await_count == 2
+
+    asyncio.run(invoke())
+
+
+def test_real_sdk_trickling_response_is_cancelled_and_closed() -> None:
+    class TrickleStream(httpx.AsyncByteStream):
+        def __init__(self) -> None:
+            self.cancelled = False
+            self.closed = False
+            self.chunks = 0
+
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            try:
+                for _ in range(100):
+                    await asyncio.sleep(0.005)
+                    self.chunks += 1
+                    yield b" "
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+            yield b'{"candidates":[{"content":{"parts":[{"text":"late"}]}}]}'
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    stream = TrickleStream()
+    sync_http = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(500)),
+        trust_env=False,
+    )
+    async_http = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, stream=stream)
+        ),
+        trust_env=False,
+    )
+    sdk = genai.Client(
+        api_key="synthetic-key",
+        http_options=types.HttpOptions(
+            httpx_client=sync_http,
+            httpx_async_client=async_http,
+            retry_options=types.HttpRetryOptions(attempts=1),
+        ),
+    )
+    with patch("verisight.execution.gemini.genai.Client", return_value=sdk):
+        client = GeminiTextGenerationClient(
+            api_key="synthetic-key",
+            model="test-model",
+            request_timeout_seconds=0.05,
+            max_retries=0,
+        )
+        with pytest.raises(GeminiTransientError):
+            client.generate("Synthetic request")
+    assert stream.cancelled
+    assert stream.closed
+    assert stream.chunks < 100
+    # SDK leaves explicitly supplied HTTP clients owned by the caller.
+    sync_http.close()
+    asyncio.run(async_http.aclose())
