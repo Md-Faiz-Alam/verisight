@@ -819,3 +819,11 @@ def test_investigation_prompt_rejects_budget_that_cannot_fit_security_rules() ->
 
     assert exc_info.value.max_prompt_chars == 100
     assert exc_info.value.actual_prompt_chars > 100
+
+
+def test_investigator_requires_final_metric_instead_of_components() -> None:
+    prompt = InvestigationPromptBuilder().build(_build_state())
+
+    assert "explicitly ask for the final metric as a SQL result cell" in prompt
+    assert "Intermediate components alone do not establish a final metric" in prompt
+    assert "otherwise leave that limitation explicit" in prompt

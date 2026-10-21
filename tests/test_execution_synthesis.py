@@ -9,7 +9,10 @@ from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder
 from verisight.config import Settings
 from verisight.exceptions import ConfigurationError
-from verisight.execution.claim_verification import VerificationStatus
+from verisight.execution.claim_verification import (
+    NumericalClaimVerifier,
+    VerificationStatus,
+)
 from verisight.execution.decisions import InvestigationAction, InvestigationDecision
 from verisight.execution.exceptions import InvestigationError
 from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
@@ -676,3 +679,57 @@ def test_compact_generation_schema_does_not_relax_local_validation(
         synthesizer.synthesize(_build_state())
 
     assert len(client.prompts) == 2
+
+
+@pytest.mark.parametrize(
+    ("include_final", "column", "expected_actual", "status"),
+    [
+        (False, "sum_product", "1000", VerificationStatus.CONTRADICTED),
+        (False, "sum_mass", "400", VerificationStatus.CONTRADICTED),
+        (True, "sum_product", "1000", VerificationStatus.CONTRADICTED),
+        (True, "sum_mass", "400", VerificationStatus.CONTRADICTED),
+        (True, "weighted_mean", "2.5", VerificationStatus.SUPPORTED),
+    ],
+)
+def test_weighted_mean_claim_must_reference_executed_final_metric(
+    tmp_path: Path,
+    include_final: bool,
+    column: str,
+    expected_actual: str,
+    status: VerificationStatus,
+) -> None:
+    # Reproduce the live mismatch with real SQL and a scripted model response.
+    # This checks evidence linkage, not whether a live model obeys the prompt.
+    path = tmp_path / "assays.csv"
+    path.write_text("mass,assay\n100,1\n300,3\n", encoding="utf-8")
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+    sql = "SELECT SUM(mass * assay) AS sum_product, SUM(mass) AS sum_mass"
+    if include_final:
+        sql += ", SUM(mass * assay) / NULLIF(SUM(mass), 0) AS weighted_mean"
+    sql += " FROM assays"
+    observation = QueryObservation(
+        question="What is the mass-weighted mean assay?",
+        sql=sql,
+        result=app.execute([path], sql),
+    )
+    base = _build_state()
+    state = InvestigationState(
+        question=observation.question,
+        analysis=base.analysis,
+        observations=(observation,),
+    )
+    claim = _claim("2.5")
+    claim["left"]["column"] = column
+    client = _Client(_response([claim]))
+    synthesis = StructuredInvestigationSynthesizer(client).synthesize(state)
+    verification = NumericalClaimVerifier().verify(
+        synthesis.claims[0], state.observations
+    )
+
+    assert verification.status is status
+    assert str(verification.actual) == expected_actual
+    assert verification.absolute_tolerance == 0
+    prompt = client.prompts[0]
+    assert "expected must equal the referenced SQL cell itself" in prompt
+    assert "not a calculation using that cell" in prompt
+    assert "explain that the final metric is missing and omit that claim" in prompt

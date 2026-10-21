@@ -554,3 +554,15 @@ def test_planning_prompt_budget_includes_question() -> None:
 
     with pytest.raises(PromptBudgetExceededError):
         QueryPromptBuilder(max_prompt_chars=100).build(request)
+
+
+def test_planner_requires_executed_final_metric_without_forcing_derivation() -> None:
+    prompt = QueryPromptBuilder().build(_make_request())
+
+    assert "return that final metric as a clearly named SQL result column" in prompt
+    assert (
+        "perform the required division and any requested unit conversion in SQL"
+        in prompt
+    )
+    assert "return NULL for an undefined metric" in prompt
+    assert "only components or raw records" in prompt
