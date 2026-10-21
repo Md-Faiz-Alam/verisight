@@ -1,0 +1,116 @@
+{
+  "schema_version": 2,
+  "timestamp_utc": "2026-10-21T15:55:02.805462+00:00",
+  "elapsed_seconds": 27.528,
+  "revision": {
+    "commit": "914fb8e8569e2a8faed9f71e01abffa33f2a569a",
+    "tracked_changes": false,
+    "status_scope": "tracked_files_only"
+  },
+  "python_version": "3.11.9",
+  "model": "gemini-3.1-flash-lite",
+  "max_steps_per_case": 1,
+  "provider_retries": 1,
+  "run_settings": {
+    "allow_llm_data_disclosure": true,
+    "request_timeout_seconds": 60.0,
+    "retry_base_delay_seconds": 1.0,
+    "max_upload_size_mb": 100,
+    "max_query_execution_seconds": 5.0,
+    "max_query_result_rows": 20,
+    "max_query_memory_mb": 512,
+    "max_query_temp_storage_mb": 1024
+  },
+  "generation_telemetry_scope": "client_calls_observed_during_case",
+  "scoring_scope": "single_claim_numeric_answer_only",
+  "limitations": "No narrative or general semantic certification. No-claims responses are not automatically proven abstentions. These are known development fixtures, not a held-out generalization benchmark.",
+  "case_count": 1,
+  "outcome_counts": {
+    "incomplete": 1
+  },
+  "number_audit_summary": {
+    "audited_case_count": 1,
+    "unaudited_case_count": 0,
+    "detected_token_count": 0,
+    "unlinked_token_count": 0,
+    "cases_with_unlinked_tokens": 0
+  },
+  "results": {
+    "research_weighted": {
+      "expected": "2.5",
+      "observation_count": 1,
+      "claim_count": 0,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 0,
+      "unlinked_number_count": 0,
+      "narrative_digit_coverage": {
+        "total_digit_count": 0,
+        "parsed_digit_count": 0,
+        "unparsed_digit_count": 0,
+        "status": "no_digits"
+      },
+      "outcome": "incomplete",
+      "investigation_failure": {
+        "stage": "investigator",
+        "kind": "provider_unavailable",
+        "diagnostics": {
+          "http_status": 503,
+          "retryable": true,
+          "attempts": 2,
+          "stage": "investigator",
+          "call_number": 2
+        }
+      },
+      "synthetic_evidence": {
+        "observations": [
+          {
+            "sql": "SELECT SUM(\"mass g\" * \"assay pct\") / SUM(\"mass g\") AS \"weighted_average_assay\" FROM \"assays\" WHERE \"review state\" = 'accepted' AND \"mass g\" > 0 AND \"assay pct\" IS NOT NULL",
+            "result": {
+              "columns": [
+                "weighted_average_assay"
+              ],
+              "rows": [
+                [
+                  2.5
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": []
+      },
+      "control_baseline": {
+        "kind": "supplied_sql_control",
+        "expected": "2.5",
+        "actual": "2.5",
+        "outcome": "correct_numeric",
+        "elapsed_seconds": 0.053
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 6.88,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 2,
+          "elapsed_seconds": 10.022,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 2,
+          "elapsed_seconds": 10.499,
+          "returned_text": false
+        }
+      ],
+      "elapsed_seconds": 27.528
+    }
+  }
+}
