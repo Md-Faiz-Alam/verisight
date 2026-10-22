@@ -1,0 +1,68 @@
+{
+  "schema_version": 2,
+  "timestamp_utc": "2026-10-22T15:14:47.681585+00:00",
+  "elapsed_seconds": 9.063,
+  "revision": {
+    "commit": "7ebecb1114a8ac551d9bc2c171295bbdaa55dd1d",
+    "tracked_changes": false,
+    "status_scope": "tracked_files_only"
+  },
+  "python_version": "3.11.9",
+  "model": "gemini-3.1-flash-lite",
+  "max_steps_per_case": 1,
+  "provider_retries": 1,
+  "run_settings": {
+    "allow_llm_data_disclosure": true,
+    "request_timeout_seconds": 60.0,
+    "max_investigation_seconds": 120.0,
+    "retry_base_delay_seconds": 1.0,
+    "max_upload_size_mb": 100,
+    "max_query_execution_seconds": 5.0,
+    "max_query_result_rows": 20,
+    "max_query_memory_mb": 512,
+    "max_query_temp_storage_mb": 1024
+  },
+  "generation_telemetry_scope": "client_calls_observed_during_case",
+  "scoring_scope": "single_claim_numeric_answer_only",
+  "limitations": "No narrative or general semantic certification. No-claims responses are not automatically proven abstentions. These are known development fixtures, not a held-out generalization benchmark.",
+  "case_count": 1,
+  "outcome_counts": {
+    "provider_error": 1
+  },
+  "number_audit_summary": {
+    "audited_case_count": 0,
+    "unaudited_case_count": 1,
+    "detected_token_count": 0,
+    "unlinked_token_count": 0,
+    "cases_with_unlinked_tokens": 0
+  },
+  "results": {
+    "research_weighted": {
+      "outcome": "provider_error",
+      "diagnostics": {
+        "http_status": 503,
+        "retryable": true,
+        "attempts": 2,
+        "stage": "investigator",
+        "call_number": 1
+      },
+      "control_baseline": {
+        "kind": "supplied_sql_control",
+        "expected": "2.5",
+        "actual": "2.5",
+        "outcome": "correct_numeric",
+        "elapsed_seconds": 0.055
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 2,
+          "elapsed_seconds": 8.966,
+          "returned_text": false
+        }
+      ],
+      "elapsed_seconds": 9.063
+    }
+  }
+}
