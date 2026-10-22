@@ -53,15 +53,34 @@ class ExcelLoader:
                             "Excel workbook contains a non-string sheet name."
                         )
 
-                    headers = workbook.parse(sheet_name=sheet_name, nrows=0)
+                    # header=None exposes source cells before pandas renames them.
+                    headers = workbook.parse(
+                        sheet_name=sheet_name,
+                        header=None,
+                        nrows=1,
+                        dtype=object,
+                        keep_default_na=False,
+                        na_filter=False,
+                    )
+                    source_columns = [] if headers.empty else headers.iloc[0].tolist()
+                    if any(not str(column).strip() for column in source_columns):
+                        raise DataLoadError("Excel column headers must not be blank.")
+                    if not pd.Index(source_columns).is_unique:
+                        raise DataLoadError(
+                            "Excel contains duplicate source column headers."
+                        )
                     data = workbook.parse(
                         sheet_name=sheet_name,
                         converters={
-                            index: _ExcelCell for index in range(len(headers.columns))
+                            index: _ExcelCell for index in range(len(source_columns))
                         },
                         keep_default_na=False,
                         na_filter=False,
                     )
+                    if len(data.columns) != len(source_columns):
+                        raise DataLoadError(
+                            "Excel data contains fields without source headers."
+                        )
                     for column in data.columns:
                         data[column] = _infer_column(_restore_cells(data[column]))
 

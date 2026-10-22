@@ -65,6 +65,23 @@ class CsvLoader(BaseTableLoader):
                 encoding=encoding,
             )
 
+            # Read the source header as values before pandas can rename it.
+            header = pd.read_csv(
+                metadata.path,
+                sep=delimiter,
+                encoding=encoding,
+                header=None,
+                nrows=1,
+                dtype=str,
+                keep_default_na=False,
+                na_filter=False,
+            )
+            source_columns = header.iloc[0].tolist()
+            if any(not str(column).strip() for column in source_columns):
+                raise DataLoadError("CSV column headers must not be blank.")
+            if not pd.Index(source_columns).is_unique:
+                raise DataLoadError("CSV contains duplicate source column headers.")
+
             data = pd.read_csv(
                 metadata.path,
                 sep=delimiter,
