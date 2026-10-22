@@ -54,6 +54,13 @@ class Settings(BaseSettings):
         gt=0,
     )
 
+    # Orchestration budget; loading and profiling precede this deadline.
+    max_investigation_seconds: float = Field(
+        default=300.0,
+        gt=0,
+        allow_inf_nan=False,
+    )
+
     gemini_api_key: str | None = Field(default=None, repr=False, exclude=True)
 
     allow_llm_data_disclosure: bool = False

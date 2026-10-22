@@ -11,6 +11,7 @@ import duckdb
 import pandas as pd
 from pandas.api.types import is_object_dtype
 
+from verisight.execution.deadline import check_deadline, remaining_seconds
 from verisight.execution.exceptions import (
     QueryResultLimitError,
     QueryRuntimeError,
@@ -63,6 +64,7 @@ class DuckDBExecutor:
     ) -> QueryResult:
         """Execute a query against dataset relations."""
 
+        check_deadline()
         # Loaded datasets remain mutable; recheck identities before registration.
         dataset.validate_relation_names()
         self._query_validator.validate(query)
@@ -81,7 +83,7 @@ class DuckDBExecutor:
                     connection.interrupt()
 
                 timer = Timer(
-                    self._execution_timeout_seconds,
+                    remaining_seconds(self._execution_timeout_seconds),
                     interrupt_query,
                 )
                 timer.daemon = True
@@ -96,6 +98,7 @@ class DuckDBExecutor:
 
                     fetched_rows = cursor.fetchmany(self._max_result_rows + 1)
                 except duckdb.Error as exc:
+                    check_deadline()
                     if timed_out.is_set():
                         raise QueryTimeoutError(
                             "Analytical query exceeded the execution timeout "
@@ -112,6 +115,7 @@ class DuckDBExecutor:
         except (QueryRuntimeError, QueryTimeoutError):
             raise
 
+        check_deadline()
         if len(fetched_rows) > self._max_result_rows:
             raise QueryResultLimitError(
                 "Analytical query result exceeded the maximum "

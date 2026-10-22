@@ -415,3 +415,313 @@ def test_transient_synthesis_failure_returns_incomplete_public_value() -> None:
     assert len(investigator.states) == 2
     assert investigator.states[1].observation_count == 1
     assert investigator.states[1].failed_attempt_count == 0
+
+
+@pytest.mark.parametrize("seconds", [0.0, -1.0, float("nan"), float("inf")])
+def test_rejects_invalid_investigation_time_budgets(seconds: float) -> None:
+    from pydantic import ValidationError
+
+    from verisight.config import Settings
+    from verisight.execution.deadline import investigation_deadline
+
+    with pytest.raises(ValidationError):
+        Settings(max_investigation_seconds=seconds)
+    with (
+        pytest.raises(ValueError, match="finite and positive"),
+        investigation_deadline(seconds),
+    ):
+        pytest.fail("Invalid deadline was accepted")
+    with pytest.raises(ValueError, match="finite and positive"):
+        InvestigationOrchestrator(
+            execution_service=AnalyticalExecutionService(_dataset()),
+            investigator=SingleQuestionInvestigator("Count"),
+            synthesizer=RecordingSynthesizer(),
+            timeout_seconds=seconds,
+        )
+
+
+def test_nested_deadlines_restore_the_enclosing_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from verisight.execution.deadline import (
+        InvestigationDeadlineExceeded,
+        investigation_deadline,
+        remaining_seconds,
+    )
+
+    clock = [100.0]
+    monkeypatch.setattr("verisight.execution.deadline.monotonic", lambda: clock[0])
+    with investigation_deadline(10):
+        assert remaining_seconds(30) == 10
+        with investigation_deadline(100):
+            assert remaining_seconds(30) == 10
+        with investigation_deadline(2):
+            clock[0] += 3
+            with pytest.raises(InvestigationDeadlineExceeded):
+                remaining_seconds(30)
+        assert remaining_seconds(30) == 7
+    assert remaining_seconds(30) == 30
+
+
+@pytest.mark.parametrize(
+    "stage", ["decision", "query", "finish", "synthesis", "repair"]
+)
+def test_shared_deadline_preserves_state_and_stops_later_stages(
+    monkeypatch: pytest.MonkeyPatch, stage: str
+) -> None:
+    from unittest.mock import Mock
+
+    from verisight.execution.deadline import check_deadline
+
+    clock = [0.0]
+    monkeypatch.setattr("verisight.execution.deadline.monotonic", lambda: clock[0])
+    dataset = _dataset()
+    investigator = SingleQuestionInvestigator("Count records")
+    decide = investigator.decide
+    decisions = Mock()
+
+    def decide_with_expiry(state: InvestigationState) -> InvestigationDecision:
+        decision = decide(state)
+        if stage == "decision" or (stage == "finish" and state.observation_count):
+            clock[0] = 11
+        return decision
+
+    decisions.decide.side_effect = decide_with_expiry
+    planner = StaticGenerationClient(
+        "SELECT absent FROM observations"
+        if stage == "repair"
+        else "SELECT COUNT(*) AS total FROM observations"
+    )
+    repair = Mock()
+
+    def expire_repair(request: object) -> None:
+        clock[0] = 11
+        check_deadline()
+
+    repair.repair.side_effect = expire_repair
+    service = AnalyticalExecutionService(
+        dataset, planner=GenerativeQueryPlanner(planner), repairer=repair
+    )
+    run = service.run
+
+    def run_with_expiry(question: str) -> object:
+        execution = run(question)
+        if stage == "query":
+            clock[0] = 11
+        return execution
+
+    execution_service = Mock()
+    execution_service.run.side_effect = run_with_expiry
+    synthesizer = RecordingSynthesizer()
+    synthesize = synthesizer.synthesize
+    synthesis = Mock()
+
+    def synthesize_with_expiry(state: InvestigationState) -> str:
+        text = synthesize(state)
+        if stage == "synthesis":
+            clock[0] = 11
+        return text
+
+    synthesis.synthesize.side_effect = synthesize_with_expiry
+    result = InvestigationOrchestrator(
+        execution_service=execution_service,
+        investigator=decisions,
+        synthesizer=synthesis,
+        max_steps=1,
+        timeout_seconds=10,
+    ).investigate(question="Count records", analysis=_analysis(dataset))
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert "investigation time budget was exhausted" in result.conclusion
+    assert result.observation_count == (0 if stage in {"decision", "repair"} else 1)
+    assert result.generated_claims == ()
+    assert len(synthesizer.states) == (1 if stage == "synthesis" else 0)
+    assert decisions.decide.call_count == (2 if stage in {"finish", "synthesis"} else 1)
+    if stage == "repair":
+        assert len(result.failed_attempts) == 1
+        assert len(result.failed_attempts[0].repair_history) == 1
+        assert result.failed_attempts[0].repair_history[0].outcome == "failed"
+
+
+@pytest.mark.parametrize("expire_during", ["retry", "response"])
+def test_generation_deadline_caps_retries_and_rejects_late_responses(
+    monkeypatch: pytest.MonkeyPatch, expire_during: str
+) -> None:
+    from unittest.mock import Mock
+
+    from verisight.execution.deadline import (
+        InvestigationDeadlineExceeded,
+        investigation_deadline,
+    )
+    from verisight.execution.gemini import GeminiTextGenerationClient
+    from verisight.execution.generation_telemetry import capture_generation_calls
+
+    clock = [0.0]
+    monkeypatch.setattr("verisight.execution.deadline.monotonic", lambda: clock[0])
+    sdk = Mock()
+
+    def request(**kwargs: object) -> object:
+        if expire_during == "response":
+            clock[0] = 11
+            return Mock(text="late answer")
+        clock[0] = 9.5
+        raise ConnectionError("synthetic provider detail")
+
+    sdk.models.generate_content.side_effect = request
+    delays: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        delays.append(seconds)
+        clock[0] += seconds
+
+    client = GeminiTextGenerationClient(
+        api_key="synthetic-key", model="test-model", client=sdk, sleep=sleep
+    )
+    with (
+        capture_generation_calls() as calls,
+        investigation_deadline(10),
+        pytest.raises(InvestigationDeadlineExceeded) as caught,
+    ):
+        client.generate("Synthetic request")
+    assert sdk.models.generate_content.call_count == 1
+    assert delays == ([0.5] if expire_during == "retry" else [])
+    assert calls[0].attempts == 1
+    assert calls[0].returned_text is False
+    assert caught.value.__context__ is None
+    # Context restoration must allow another independent call.
+    sdk.models.generate_content.side_effect = None
+    sdk.models.generate_content.return_value.text = "fresh answer"
+    assert client.generate("Independent request") == "fresh answer"
+
+
+def test_investigation_deadline_cancels_sdk_worker_and_closes_clients() -> None:
+    import asyncio
+    from unittest.mock import AsyncMock, Mock, patch
+
+    from verisight.execution.deadline import (
+        InvestigationDeadlineExceeded,
+        investigation_deadline,
+    )
+    from verisight.execution.gemini import GeminiTextGenerationClient
+
+    cancelled = False
+
+    async def slow_response(**kwargs: object) -> object:
+        nonlocal cancelled
+        try:
+            await asyncio.sleep(5)
+        finally:
+            cancelled = True
+        return Mock(text="late answer")
+
+    with patch("verisight.execution.gemini.genai.Client") as factory:
+        sdk = factory.return_value.__enter__.return_value
+        async_sdk = sdk.aio.__aenter__.return_value
+        async_sdk.models.generate_content = AsyncMock(side_effect=slow_response)
+        client = GeminiTextGenerationClient(
+            api_key="synthetic-key",
+            model="test-model",
+            request_timeout_seconds=30,
+            max_retries=5,
+        )
+        with (
+            investigation_deadline(0.1),
+            pytest.raises(InvestigationDeadlineExceeded),
+        ):
+            client.generate("Synthetic request")
+        assert cancelled
+        assert factory.call_count == 1
+        sdk.aio.__aexit__.assert_awaited_once()
+        factory.return_value.__exit__.assert_called_once()
+
+
+def test_sql_uses_shared_budget_and_does_not_start_after_registration_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from verisight.execution.deadline import (
+        InvestigationDeadlineExceeded,
+        investigation_deadline,
+    )
+    from verisight.execution.engine import DuckDBExecutor
+
+    clock = [0.0]
+    monkeypatch.setattr("verisight.execution.deadline.monotonic", lambda: clock[0])
+    executor = DuckDBExecutor(execution_timeout_seconds=30)
+    with investigation_deadline(5):
+        with patch("verisight.execution.engine.Timer") as timer:
+            assert executor.execute(_dataset(), "SELECT 1").rows == ((1,),)
+        assert timer.call_args.args[0] == 5
+
+    register = DuckDBExecutor._register_table
+
+    def register_then_expire(connection: object, table: LoadedTable) -> None:
+        register(connection, table)  # type: ignore[arg-type]
+        clock[0] = 10
+
+    with (
+        patch.object(
+            DuckDBExecutor, "_register_table", side_effect=register_then_expire
+        ),
+        investigation_deadline(5),
+        pytest.raises(InvestigationDeadlineExceeded),
+    ):
+        executor.execute(_dataset(), "SELECT 1")
+
+
+def test_facade_applies_configured_orchestration_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import Mock
+
+    from verisight import VeriSight
+    from verisight.config import Settings
+
+    path = tmp_path / "observations.csv"
+    path.write_text("value\n1\n", encoding="utf-8")
+    clock = [0.0]
+    monkeypatch.setattr("verisight.execution.deadline.monotonic", lambda: clock[0])
+    investigator = Mock()
+
+    def late_decision(state: InvestigationState) -> InvestigationDecision:
+        clock[0] = 3
+        return InvestigationDecision(
+            action=InvestigationAction.FINISH, reasoning="Too late"
+        )
+
+    investigator.decide.side_effect = late_decision
+    result = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False, max_investigation_seconds=2),
+        planner=GenerativeQueryPlanner(StaticGenerationClient("SELECT 1")),
+        investigator=investigator,
+        synthesizer=RecordingSynthesizer(),
+    ).investigate(path, "Count records")
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert "investigation time budget was exhausted" in result.conclusion
+    assert result.observation_count == 0
+
+
+def test_shared_deadline_interrupts_real_sql_without_repair() -> None:
+    from unittest.mock import Mock
+
+    from verisight.execution.deadline import (
+        InvestigationDeadlineExceeded,
+        investigation_deadline,
+    )
+
+    repair = Mock()
+    service = AnalyticalExecutionService(
+        _dataset(),
+        planner=GenerativeQueryPlanner(
+            StaticGenerationClient("SELECT SUM(SIN(i)) FROM range(10000000000) AS t(i)")
+        ),
+        repairer=repair,
+        execution_timeout_seconds=30,
+    )
+    with (
+        investigation_deadline(0.1),
+        pytest.raises(InvestigationDeadlineExceeded),
+    ):
+        service.run("Synthetic bounded SQL test")
+    repair.repair.assert_not_called()

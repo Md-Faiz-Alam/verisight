@@ -302,6 +302,7 @@ class VeriSight:
             investigator=investigator,
             synthesizer=synthesizer,
             max_steps=max_steps,
+            timeout_seconds=self._settings.max_investigation_seconds,
         )
 
         return orchestrator.investigate(

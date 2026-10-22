@@ -3,6 +3,11 @@
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.error_reporting import to_public_error
 from verisight.execution.analytical import AnalyticalQueryRunner
+from verisight.execution.deadline import (
+    InvestigationDeadlineExceeded,
+    check_deadline,
+    investigation_deadline,
+)
 from verisight.execution.decisions import InvestigationAction
 from verisight.execution.exceptions import (
     InvestigationError,
@@ -36,12 +41,17 @@ class InvestigationOrchestrator:
         investigator: Investigator,
         synthesizer: InvestigationSynthesizer,
         max_steps: int = 5,
+        timeout_seconds: float = 300.0,
     ) -> None:
         """Initialize the investigation orchestrator."""
 
         if max_steps <= 0:
             raise ValueError("Maximum investigation steps must be positive.")
 
+        if not 0 < timeout_seconds < float("inf"):
+            raise ValueError("Investigation timeout must be finite and positive.")
+
+        self._timeout_seconds = timeout_seconds
         self._execution_service = execution_service
         self._investigator = investigator
         self._synthesizer = synthesizer
@@ -53,150 +63,193 @@ class InvestigationOrchestrator:
         question: str,
         analysis: DatasetAnalysisResult,
     ) -> InvestigationResult:
-        """Run a bounded autonomous investigation."""
+        """Bound orchestration after dataset loading and profiling.
+
+        The shared budget limits cancellable SDK/SQL work. Synchronous
+        setup, custom callbacks, and cleanup may overrun until they return.
+        """
 
         if not question.strip():
             raise InvestigationError("Investigation question must not be empty.")
+
+        with investigation_deadline(self._timeout_seconds):
+            return self._investigate(question=question, analysis=analysis)
+
+    def _investigate(
+        self,
+        *,
+        question: str,
+        analysis: DatasetAnalysisResult,
+    ) -> InvestigationResult:
+        """Keep the latest state available if any stage exhausts the budget."""
 
         state = InvestigationState(question=question, analysis=analysis)
         attempted_questions: set[str] = set()
         attempt_count = 0
 
-        while True:
-            try:
-                decision = self._investigator.decide(state)
-            except (PromptBudgetExceededError, IncompleteEvidenceError):
-                return self._incomplete(state)
-
-            except (InvestigationError, GeminiGenerationError) as exc:
-                if state.observation_count == 0:
-                    raise
-                return self._incomplete(
-                    state,
-                    reason="the next investigation decision could not be completed",
-                    investigation_failure=InvestigationFailure.from_exception(
-                        "investigator", exc
-                    ),
-                )
-
-            if decision.action is InvestigationAction.FINISH:
-                if state.observation_count == 0:
-                    reason = (
-                        "all attempted analytical queries failed"
-                        if state.failed_attempt_count > 0
-                        else "no analytical observations were collected"
-                    )
-                    return self._incomplete(state, reason=reason)
-
+        try:
+            while True:
+                check_deadline()
                 try:
-                    synthesis = self._synthesizer.synthesize(state)
+                    decision = self._investigator.decide(state)
+                    check_deadline()
                 except (PromptBudgetExceededError, IncompleteEvidenceError):
                     return self._incomplete(state)
+
+                except InvestigationDeadlineExceeded:
+                    raise
                 except (InvestigationError, GeminiGenerationError) as exc:
-                    return self._incomplete(
-                        state,
-                        reason="final synthesis could not be completed",
-                        synthesis_failure=SynthesisFailure.from_exception(exc),
-                    )
-
-                return InvestigationResult(
-                    question=state.question,
-                    conclusion=(
-                        synthesis.conclusion
-                        if isinstance(synthesis, StructuredSynthesis)
-                        else synthesis
-                    ),
-                    generated_claims=(
-                        synthesis.claims
-                        if isinstance(synthesis, StructuredSynthesis)
-                        else ()
-                    ),
-                    analysis=state.analysis,
-                    observations=state.observations,
-                    failed_attempts=state.failed_attempts,
-                )
-
-            if attempt_count >= self._max_steps:
-                return self._incomplete(
-                    state,
-                    reason="the maximum number of analytical steps was reached",
-                )
-
-            investigation_question = decision.question
-            if investigation_question is None:
-                raise InvestigationError(
-                    "Investigator did not provide an analytical question."
-                )
-
-            normalized_question = self._normalize_question(investigation_question)
-            if normalized_question in attempted_questions:
-                return self._incomplete(
-                    state,
-                    reason="the investigator repeated an analytical question",
-                )
-
-            attempted_questions.add(normalized_question)
-            attempt_count += 1
-
-            with capture_query_repairs() as repairs:
-                try:
-                    execution = self._execution_service.run(investigation_question)
-                except (GeminiGenerationError, PromptBudgetExceededError) as exc:
-                    state = state.add_failed_attempt(
-                        FailedQueryAttempt(
-                            question=investigation_question,
-                            error_type=type(exc).__name__,
-                            message=to_public_error(exc).message,
-                            repair_history=tuple(repairs),
-                        )
-                    )
                     if state.observation_count == 0:
                         raise
                     return self._incomplete(
                         state,
-                        reason="a subsequent analytical attempt could not be completed",
+                        reason="the next investigation decision could not be completed",
                         investigation_failure=InvestigationFailure.from_exception(
-                            "query_execution", exc
+                            "investigator", exc
                         ),
                     )
-                except (
-                    QueryValidationError,
-                    QueryExecutionError,
-                    QueryPlanningError,
-                ) as exc:
-                    state = state.add_failed_attempt(
-                        FailedQueryAttempt(
-                            question=investigation_question,
-                            error_type=type(exc).__name__,
-                            message=to_public_error(exc).message,
-                            repair_history=tuple(repairs),
+
+                if decision.action is InvestigationAction.FINISH:
+                    if state.observation_count == 0:
+                        reason = (
+                            "all attempted analytical queries failed"
+                            if state.failed_attempt_count > 0
+                            else "no analytical observations were collected"
                         )
+                        return self._incomplete(state, reason=reason)
+
+                    try:
+                        synthesis = self._synthesizer.synthesize(state)
+                        check_deadline()
+                    except (PromptBudgetExceededError, IncompleteEvidenceError):
+                        return self._incomplete(state)
+                    except InvestigationDeadlineExceeded:
+                        raise
+                    except (InvestigationError, GeminiGenerationError) as exc:
+                        return self._incomplete(
+                            state,
+                            reason="final synthesis could not be completed",
+                            synthesis_failure=SynthesisFailure.from_exception(exc),
+                        )
+
+                    return InvestigationResult(
+                        question=state.question,
+                        conclusion=(
+                            synthesis.conclusion
+                            if isinstance(synthesis, StructuredSynthesis)
+                            else synthesis
+                        ),
+                        generated_claims=(
+                            synthesis.claims
+                            if isinstance(synthesis, StructuredSynthesis)
+                            else ()
+                        ),
+                        analysis=state.analysis,
+                        observations=state.observations,
+                        failed_attempts=state.failed_attempts,
                     )
-                    if isinstance(exc, QueryPlanningError):
-                        failure = InvestigationFailure.from_exception(
-                            "query_execution", exc
-                        )
-                        if failure.kind in {"provider_error", "provider_unavailable"}:
-                            if state.observation_count == 0:
-                                raise
-                            return self._incomplete(
-                                state,
-                                reason=(
-                                    "a subsequent analytical attempt "
-                                    "could not be completed"
-                                ),
-                                investigation_failure=failure,
+
+                if attempt_count >= self._max_steps:
+                    return self._incomplete(
+                        state,
+                        reason="the maximum number of analytical steps was reached",
+                    )
+
+                investigation_question = decision.question
+                if investigation_question is None:
+                    raise InvestigationError(
+                        "Investigator did not provide an analytical question."
+                    )
+
+                normalized_question = self._normalize_question(investigation_question)
+                if normalized_question in attempted_questions:
+                    return self._incomplete(
+                        state,
+                        reason="the investigator repeated an analytical question",
+                    )
+
+                attempted_questions.add(normalized_question)
+                attempt_count += 1
+
+                with capture_query_repairs() as repairs:
+                    try:
+                        execution = self._execution_service.run(investigation_question)
+                    except InvestigationDeadlineExceeded:
+                        state = state.add_failed_attempt(
+                            FailedQueryAttempt(
+                                question=investigation_question,
+                                error_type="InvestigationDeadlineExceeded",
+                                message="Investigation time budget was exhausted.",
+                                repair_history=tuple(repairs),
                             )
+                        )
+                        raise
+                    except (GeminiGenerationError, PromptBudgetExceededError) as exc:
+                        state = state.add_failed_attempt(
+                            FailedQueryAttempt(
+                                question=investigation_question,
+                                error_type=type(exc).__name__,
+                                message=to_public_error(exc).message,
+                                repair_history=tuple(repairs),
+                            )
+                        )
+                        if state.observation_count == 0:
+                            raise
+                        return self._incomplete(
+                            state,
+                            reason=(
+                                "a subsequent analytical attempt could not be completed"
+                            ),
+                            investigation_failure=InvestigationFailure.from_exception(
+                                "query_execution", exc
+                            ),
+                        )
+                    except (
+                        QueryValidationError,
+                        QueryExecutionError,
+                        QueryPlanningError,
+                    ) as exc:
+                        state = state.add_failed_attempt(
+                            FailedQueryAttempt(
+                                question=investigation_question,
+                                error_type=type(exc).__name__,
+                                message=to_public_error(exc).message,
+                                repair_history=tuple(repairs),
+                            )
+                        )
+                        if isinstance(exc, QueryPlanningError):
+                            failure = InvestigationFailure.from_exception(
+                                "query_execution", exc
+                            )
+                            if failure.kind in {
+                                "provider_error",
+                                "provider_unavailable",
+                            }:
+                                if state.observation_count == 0:
+                                    raise
+                                return self._incomplete(
+                                    state,
+                                    reason=(
+                                        "a subsequent analytical attempt "
+                                        "could not be completed"
+                                    ),
+                                    investigation_failure=failure,
+                                )
 
-                    continue
+                        continue
 
-            state = state.add_observation(
-                QueryObservation(
-                    question=execution.plan.question,
-                    sql=execution.plan.sql,
-                    result=execution.result,
-                    repair_history=tuple(execution.repair_history),
+                state = state.add_observation(
+                    QueryObservation(
+                        question=execution.plan.question,
+                        sql=execution.plan.sql,
+                        result=execution.result,
+                        repair_history=tuple(execution.repair_history),
+                    )
                 )
+        except InvestigationDeadlineExceeded:
+            return self._incomplete(
+                state,
+                reason="the investigation time budget was exhausted",
             )
 
     @staticmethod

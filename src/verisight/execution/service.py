@@ -2,6 +2,7 @@
 
 from verisight.error_reporting import to_public_error
 from verisight.execution.context import QueryContext, QueryContextBuilder
+from verisight.execution.deadline import InvestigationDeadlineExceeded
 from verisight.execution.engine import DuckDBExecutor
 from verisight.execution.exceptions import (
     QueryExecutionError,
@@ -154,6 +155,7 @@ class AnalyticalExecutionService:
             )
             result = self.execute(repaired_plan.sql)
         except (
+            InvestigationDeadlineExceeded,
             QueryExecutionError,
             QueryPlanningError,
             GeminiGenerationError,

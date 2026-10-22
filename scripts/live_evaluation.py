@@ -454,6 +454,7 @@ def main() -> int:
         "run_settings": {
             "allow_llm_data_disclosure": settings.allow_llm_data_disclosure,
             "request_timeout_seconds": settings.gemini_request_timeout_seconds,
+            "max_investigation_seconds": settings.max_investigation_seconds,
             "retry_base_delay_seconds": settings.gemini_retry_base_delay_seconds,
             "max_upload_size_mb": settings.max_upload_size_mb,
             "max_query_execution_seconds": settings.max_query_execution_seconds,

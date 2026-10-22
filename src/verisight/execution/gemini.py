@@ -4,6 +4,7 @@ import asyncio
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -12,6 +13,11 @@ from google import genai
 from google.genai import errors, types
 
 from verisight.exceptions import VeriSightError
+from verisight.execution.deadline import (
+    InvestigationDeadlineExceeded,
+    check_deadline,
+    remaining_seconds,
+)
 from verisight.execution.generation_telemetry import (
     GenerationStage,
     track_generation_call,
@@ -162,7 +168,9 @@ class GeminiTextGenerationClient:
             api_key=self._api_key, http_options=self._http_options
         ) as client:
             async with client.aio as async_client:
-                async with asyncio.timeout(self._request_timeout_seconds):
+                async with asyncio.timeout(
+                    remaining_seconds(self._request_timeout_seconds)
+                ):
                     return await async_client.models.generate_content(
                         model=self._model,
                         contents=prompt,
@@ -182,7 +190,9 @@ class GeminiTextGenerationClient:
         # Cancellation happens inside that loop; result() waits for cleanup.
         # A timeout on Future.result() alone would leave the request running.
         with ThreadPoolExecutor(max_workers=1) as executor:
-            return executor.submit(self._run_request, prompt).result()
+            return executor.submit(
+                copy_context().run, self._run_request, prompt
+            ).result()
 
     def _run_request(self, prompt: str) -> _GeminiResponse:
         return asyncio.run(self._request_async(prompt))
@@ -196,23 +206,16 @@ class GeminiTextGenerationClient:
         self._call_number += 1
         with track_generation_call(self._stage, self._call_number) as call:
             for attempt in range(self._max_retries + 1):
+                check_deadline()
                 call.attempts = attempt + 1
                 try:
                     response = self._request(prompt)
+                    check_deadline()
+                except InvestigationDeadlineExceeded:
+                    raise
                 except Exception as exc:
                     http_status = exc.code if isinstance(exc, errors.APIError) else None
                     retryable = _is_retryable(exc)
-                    should_retry = retryable and attempt < self._max_retries
-
-                    # Leave the exception handler before raising an application
-                    # error so the raw SDK exception is not its __context__.
-                    if should_retry:
-                        delay = min(
-                            self._retry_base_delay_seconds * (2**attempt),
-                            8.0,
-                        )
-                        self._sleep(delay)
-                        continue
                 else:
                     try:
                         text = response.text
@@ -233,6 +236,14 @@ class GeminiTextGenerationClient:
                         "Gemini returned an unusable text response.",
                         attempts=attempt + 1,
                     )
+
+                # Raise deadline errors outside the SDK exception handler so
+                # provider details cannot leak through exception context.
+                check_deadline()
+                if retryable and attempt < self._max_retries:
+                    delay = min(self._retry_base_delay_seconds * (2**attempt), 8.0)
+                    self._sleep(remaining_seconds(delay))
+                    continue
 
                 if retryable:
                     raise self._failure(
