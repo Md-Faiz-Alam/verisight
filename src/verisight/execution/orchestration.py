@@ -121,7 +121,15 @@ class InvestigationOrchestrator:
                     try:
                         synthesis = self._synthesizer.synthesize(state)
                         check_deadline()
-                    except (PromptBudgetExceededError, IncompleteEvidenceError):
+                    except PromptBudgetExceededError as exc:
+                        return self._incomplete(
+                            state,
+                            reason=(
+                                "final synthesis exceeded the configured prompt budget"
+                            ),
+                            synthesis_failure=SynthesisFailure.from_exception(exc),
+                        )
+                    except IncompleteEvidenceError:
                         return self._incomplete(state)
                     except InvestigationDeadlineExceeded:
                         raise

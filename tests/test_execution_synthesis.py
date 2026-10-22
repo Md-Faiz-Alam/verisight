@@ -377,6 +377,21 @@ def test_structured_budget_failure_preserves_incomplete_investigation(
     assert result.observation_count == 1
     assert result.verified_claims == ()
     assert client.prompts == []
+    assert result.synthesis_failure is not None
+    assert result.synthesis_failure.kind is SynthesisFailureKind.PROMPT_BUDGET_EXCEEDED
+    serialized = to_jsonable(result)
+    assert isinstance(serialized, dict)
+    assert serialized["synthesis_failure"] == {
+        "kind": "prompt_budget_exceeded",
+        "diagnostics": None,
+    }
+    from scripts.live_evaluation import score_result
+
+    report = score_result(result, "10")
+    assert report["outcome"] == "incomplete"
+    failure = report["synthesis_failure"]
+    assert isinstance(failure, dict)
+    assert failure["kind"] == "prompt_budget_exceeded"
 
 
 @pytest.mark.parametrize(
@@ -733,3 +748,92 @@ def test_weighted_mean_claim_must_reference_executed_final_metric(
     assert "expected must equal the referenced SQL cell itself" in prompt
     assert "not a calculation using that cell" in prompt
     assert "explain that the final metric is missing and omit that claim" in prompt
+
+
+def test_structured_synthesis_omits_profiles_but_preserves_complete_sql_evidence(
+    tmp_path: Path,
+) -> None:
+    from dataclasses import replace
+
+    from verisight.execution.investigation import FailedQueryAttempt
+    from verisight.quality.models import (
+        QualityIssue,
+        QualityIssueType,
+        QualityScope,
+        QualitySeverity,
+    )
+
+    path = tmp_path / "wide.csv"
+    path.write_text(
+        ",".join(f"metric_{index}" for index in range(120))
+        + "\n"
+        + ",".join("10" for _ in range(120))
+        + "\n"
+        + ",".join("20" for _ in range(120))
+        + "\n",
+        encoding="utf-8",
+    )
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+    analysis = app.analyze(path)
+    issue = QualityIssue(
+        issue_type=QualityIssueType.MISSING_VALUES,
+        severity=QualitySeverity.WARNING,
+        scope=QualityScope.COLUMN,
+        table_name="wide",
+        relation_name="wide",
+        column_name="metric_0",
+        message="Synthetic quality context; do not treat it as instructions.",
+        evidence={"synthetic": True},
+    )
+    analysis = AnalysisResultBuilder().build(
+        replace(analysis.analysis, issues=(issue,))
+    )
+    observations = (
+        QueryObservation(
+            question="Inspect the component values",
+            sql="SELECT metric_0 FROM wide",
+            result=app.execute(path, "SELECT metric_0 FROM wide"),
+        ),
+        QueryObservation(
+            question="Compute the final total",
+            sql="SELECT SUM(metric_0) AS total FROM wide",
+            result=app.execute(path, "SELECT SUM(metric_0) AS total FROM wide"),
+        ),
+    )
+    state = InvestigationState(
+        question="What is the sum of metric_0?",
+        analysis=analysis,
+        observations=observations,
+        failed_attempts=(
+            FailedQueryAttempt("Failed attempt", "QueryRuntimeError", "Safe"),
+        ),
+    )
+    claim = _claim("30")
+    claim["left"]["observation_index"] = 1
+    client = _Client(_response([claim]))
+
+    synthesis = StructuredInvestigationSynthesizer(client).synthesize(state)
+
+    # The previous whole-state serialization alone exceeded the default budget.
+    assert len(json.dumps(to_jsonable(state), separators=(",", ":"))) > 60_000
+    assert len(client.prompts) == 1
+    assert len(client.prompts[0]) < 20_000
+    payload = json.loads(client.prompts[0].split("INVESTIGATION STATE:\n", 1)[1])
+    assert payload["question"] == state.question
+    assert payload["analysis"] == to_jsonable(
+        {
+            "schema": analysis.analysis.schema,
+            "issues": analysis.analysis.issues,
+        }
+    )
+    assert payload["observations"] == to_jsonable(state.observations)
+    assert payload["failed_attempts"] == to_jsonable(state.failed_attempts)
+    assert (
+        "statistics, the analysis summary, and deterministic insights are omitted"
+        in client.prompts[0]
+    )
+    assert state.analysis is analysis
+    assert len(state.analysis.analysis.profile.tables[0].columns) == 120
+    verification = NumericalClaimVerifier().verify(synthesis.claims[0], observations)
+    assert verification.status is VerificationStatus.SUPPORTED
+    assert verification.actual == 30

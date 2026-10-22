@@ -26,6 +26,7 @@ from verisight.execution.narrative_audit import (
     find_narrative_numbers,
 )
 from verisight.execution.observations import QueryObservation
+from verisight.execution.prompt_budget import PromptBudgetExceededError
 
 
 class InvestigationStatus(StrEnum):
@@ -41,6 +42,7 @@ class SynthesisFailureKind(StrEnum):
     PROVIDER_UNAVAILABLE = "provider_unavailable"
     PROVIDER_ERROR = "provider_error"
     SYNTHESIS_ERROR = "synthesis_error"
+    PROMPT_BUDGET_EXCEEDED = "prompt_budget_exceeded"
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +59,8 @@ class SynthesisFailure:
         seen: set[int] = set()
         while current is not None and id(current) not in seen:
             seen.add(id(current))
+            if isinstance(current, PromptBudgetExceededError):
+                return cls(kind=SynthesisFailureKind.PROMPT_BUDGET_EXCEEDED)
             if isinstance(current, GeminiGenerationError):
                 return cls(
                     kind=(
