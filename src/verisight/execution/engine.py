@@ -63,6 +63,8 @@ class DuckDBExecutor:
     ) -> QueryResult:
         """Execute a query against dataset relations."""
 
+        # Loaded datasets remain mutable; recheck identities before registration.
+        dataset.validate_relation_names()
         self._query_validator.validate(query)
         allowed_relations = frozenset(
             table.relation_name.lower() for table in dataset.tables

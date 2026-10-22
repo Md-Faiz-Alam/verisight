@@ -97,23 +97,27 @@ class LoadedWorkbook:
 
 @dataclass(slots=True)
 class LoadedDataset:
-    """A collection of tables loaded from one or more source files."""
+    """A collection of tables loaded from one or more source files.
+
+    Callers must synchronize mutations with execution; validation does not
+    lock the table list, relation names, or DataFrames.
+    """
 
     tables: list[LoadedTable]
 
     def __post_init__(self) -> None:
         """Validate dataset-level table invariants."""
 
-        self._validate_unique_relation_names()
+        self.validate_relation_names()
 
-    def _validate_unique_relation_names(self) -> None:
-        """Reject tables containing duplicate relation identities."""
+    def validate_relation_names(self) -> None:
+        """Reject ASCII case-insensitive collisions without renaming tables."""
 
         seen: set[str] = set()
         duplicates: list[str] = []
 
         for table in self.tables:
-            relation_name = table.relation_name
+            relation_name = table.relation_name.translate(_ASCII_LOWERCASE)
 
             if relation_name in seen and relation_name not in duplicates:
                 duplicates.append(relation_name)

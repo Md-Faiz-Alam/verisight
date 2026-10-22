@@ -4,7 +4,7 @@ import csv
 import json
 from pathlib import Path
 from typing import Literal
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pandas as pd
 import pytest
@@ -12,8 +12,9 @@ import pytest
 from verisight import VeriSight
 from verisight.config import Settings
 from verisight.error_reporting import ErrorCode
+from verisight.execution.engine import DuckDBExecutor
 from verisight.ingestion.exceptions import DataLoadError, TableValidationError
-from verisight.ingestion.models import LoadedTable, SourceMetadata
+from verisight.ingestion.models import LoadedDataset, LoadedTable, SourceMetadata
 from verisight.public_api import run_public_operation
 
 
@@ -227,3 +228,71 @@ def test_excel_rejects_later_values_without_source_headers(tmp_path: Path) -> No
     )
     with pytest.raises(DataLoadError, match="fields without source headers"):
         VeriSight(settings=_settings()).analyze(path)
+
+
+def _relation_tables(names: tuple[str, ...]) -> list[LoadedTable]:
+    source = SourceMetadata(Path("source.csv"), "source.csv", ".csv", 1)
+    return [
+        LoadedTable(name=name, data=pd.DataFrame({"value": [index + 1]}), source=source)
+        for index, name in enumerate(names)
+    ]
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        ("Sales", "sales"),
+        ("Order Data", "ORDER DATA"),
+        ("ÄData", "ÄDATA"),
+        ("Sales", "sales", "SALES"),
+    ],
+)
+def test_dataset_rejects_case_colliding_relations(names: tuple[str, ...]) -> None:
+    tables = _relation_tables(names)
+    with pytest.raises(TableValidationError, match="duplicate relation names"):
+        LoadedDataset(tables=tables)
+    assert tuple(table.relation_name for table in tables) == names
+
+
+@pytest.mark.parametrize("mutation", ["rename", "append"])
+def test_executor_rechecks_mutated_relation_names_before_registration(
+    mutation: str,
+) -> None:
+    tables = _relation_tables(("Sales", "Other"))
+    dataset = LoadedDataset(tables=tables)
+    if mutation == "rename":
+        tables[1].relation_name = "sales"
+    else:
+        dataset.tables.append(_relation_tables(("sales",))[0])
+    executor = DuckDBExecutor()
+    with patch("verisight.execution.engine.duckdb.connect") as connect:
+        with pytest.raises(TableValidationError, match="duplicate relation names"):
+            executor.execute(dataset, 'SELECT "value" FROM "Sales"')
+        public = run_public_operation(
+            lambda: executor.execute(dataset, 'SELECT "value" FROM "Sales"')
+        )
+        connect.assert_not_called()
+    assert not public.succeeded
+    assert public.value is None
+    assert public.error is not None
+    assert public.error.code is ErrorCode.TABLE_VALIDATION_ERROR
+    assert "sales" not in public.error.message.lower()
+
+
+@pytest.mark.parametrize(
+    "names",
+    [("Sales", "sales_2"), ("Ä", "ä"), ("Straße", "STRASSE"), ("İ", "i")],
+)
+def test_distinct_relation_names_keep_their_identity_through_sql(
+    names: tuple[str, str],
+) -> None:
+    tables = _relation_tables(names)
+    dataset = LoadedDataset(tables=tables)
+    quoted = ['"' + name.replace('"', '""') + '"' for name in names]
+    result = DuckDBExecutor().execute(
+        dataset,
+        f'SELECT a."value" AS first_value, b."value" AS second_value '
+        f"FROM {quoted[0]} AS a CROSS JOIN {quoted[1]} AS b",
+    )
+    assert result.rows == ((1, 2),)
+    assert tuple(table.relation_name for table in dataset.tables) == names
