@@ -244,7 +244,8 @@ class StructuredInvestigationSynthesizer:
                 object_pairs_hook=_unique_fields,
                 parse_constant=_reject_constant,
             )
-        except (ValueError, TypeError) as exc:
+        # Keep nesting failures inside the existing bounded format-repair path.
+        except (ValueError, TypeError, RecursionError) as exc:
             raise _SynthesisFormatError("invalid_json") from exc
         try:
             parsed = _Response.model_validate(payload)

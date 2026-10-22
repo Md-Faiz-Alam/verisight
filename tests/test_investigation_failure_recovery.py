@@ -30,6 +30,7 @@ from verisight.execution.investigation_result import (
     InvestigationStatus,
 )
 from verisight.execution.prompt_budget import PromptBudgetExceededError
+from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 from verisight.public_api import run_public_operation
 from verisight.serialization import to_jsonable
 
@@ -41,6 +42,7 @@ SECOND = json.dumps(
     {"action": "investigate", "reasoning": "Need comparison", "question": "Compare"}
 )
 SQL = "SELECT SUM(value) AS total FROM measurements"
+DEEP_JSON = "[" * 10000 + json.dumps(SECRET) + "]" * 10000
 
 
 @pytest.mark.parametrize("stage", ["investigator", "planning", "repair"])
@@ -124,13 +126,14 @@ def test_later_provider_failure_preserves_real_sql_evidence(
 
 
 @pytest.mark.parametrize("has_evidence", [False, True])
+@pytest.mark.parametrize("response", [SECRET, DEEP_JSON], ids=["invalid", "nested"])
 def test_malformed_investigator_response_retains_existing_evidence(
-    tmp_path: Path, has_evidence: bool
+    tmp_path: Path, has_evidence: bool, response: str
 ) -> None:
     path = tmp_path / "measurements.csv"
     path.write_text("value\n10\n20\n", encoding="utf-8")
     decisions = Mock()
-    decisions.generate.side_effect = [FIRST, SECRET] if has_evidence else [SECRET]
+    decisions.generate.side_effect = [FIRST, response] if has_evidence else [response]
     planning = Mock()
     planning.generate.return_value = SQL
     synthesis = Mock()
@@ -334,3 +337,109 @@ def test_duplicate_alias_failure_preserves_evidence_and_allows_recovery(
         synthesis.synthesize.assert_called_once()
     else:
         synthesis.synthesize.assert_not_called()
+
+
+@pytest.mark.parametrize("recover", [False, True])
+def test_nested_synthesis_json_uses_bounded_repair_and_preserves_evidence(
+    tmp_path: Path, recover: bool
+) -> None:
+    path = tmp_path / "measurements.csv"
+    path.write_text("value\n10\n20\n", encoding="utf-8")
+    decisions = Mock()
+    decisions.generate.side_effect = [
+        FIRST,
+        json.dumps(
+            {"action": "finish", "reasoning": "Enough evidence", "question": None}
+        ),
+    ]
+    planning = Mock()
+    planning.generate.return_value = SQL
+    valid = json.dumps(
+        {
+            "conclusion": "The total is 30.",
+            "claims": [
+                {
+                    "operation": "value",
+                    "expected": "30",
+                    "left": {"observation_index": 0, "row_index": 0, "column": "total"},
+                    "right": None,
+                }
+            ],
+        }
+    )
+    synthesis = Mock()
+    synthesis.generate.side_effect = [DEEP_JSON, valid if recover else DEEP_JSON]
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        planner=GenerativeQueryPlanner(planning),
+        investigator=GenerativeInvestigator(decisions),
+        synthesizer=StructuredInvestigationSynthesizer(synthesis),
+    )
+    public = run_public_operation(
+        lambda: app.investigate(path, "Get total", max_steps=1)
+    )
+    assert public.error is None
+    result = public.value
+    assert result is not None
+    assert result.status is (
+        InvestigationStatus.COMPLETE if recover else InvestigationStatus.INCOMPLETE
+    )
+    assert result.observation_count == 1
+    assert result.observations[0].sql == SQL
+    assert result.observations[0].result.rows == ((30,),)
+    assert result.investigation_failure is None
+    assert result.narrative_verified is False
+    if recover:
+        assert result.synthesis_failure is None
+        assert result.verified_claims[0].verification.status.value == "supported"
+    else:
+        assert result.synthesis_failure is not None
+        assert result.synthesis_failure.kind.value == "synthesis_error"
+        assert result.synthesis_failure.diagnostics is None
+        assert result.generated_claims == ()
+        assert result.verified_claims == ()
+    planning.generate.assert_called_once()
+    assert decisions.generate.call_count == 2
+    assert synthesis.generate.call_count == 2
+    repair_prompt = synthesis.generate.call_args.args[0]
+    assert '"validation_error": "invalid_json"' in repair_prompt
+    assert SECRET not in repair_prompt
+    assert DEEP_JSON not in repair_prompt
+    payload = json.loads(json.dumps(to_jsonable(result)))
+    assert payload["observations"][0]["result"]["rows"] == [[30]]
+    assert SECRET not in json.dumps(payload)
+    assert score_result(result, "30")["outcome"] == (
+        "correct_numeric" if recover else "incomplete"
+    )
+
+
+@pytest.mark.parametrize("stage", ["investigator", "synthesis"])
+def test_recursion_error_outside_json_parser_still_propagates(
+    tmp_path: Path, stage: str
+) -> None:
+    path = tmp_path / "measurements.csv"
+    path.write_text("value\n10\n20\n", encoding="utf-8")
+    error = RecursionError("Synthetic client programming defect")
+    finish = json.dumps(
+        {"action": "finish", "reasoning": "Enough evidence", "question": None}
+    )
+    decisions = Mock()
+    decisions.generate.side_effect = [
+        FIRST,
+        error if stage == "investigator" else finish,
+    ]
+    planning = Mock()
+    planning.generate.return_value = SQL
+    synthesis = Mock()
+    synthesis.generate.side_effect = error
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        planner=GenerativeQueryPlanner(planning),
+        investigator=GenerativeInvestigator(decisions),
+        synthesizer=StructuredInvestigationSynthesizer(synthesis),
+    )
+    with pytest.raises(RecursionError) as caught:
+        app.investigate(path, "Get total", max_steps=1)
+    assert caught.value is error
+    planning.generate.assert_called_once()
+    assert synthesis.generate.call_count == int(stage == "synthesis")

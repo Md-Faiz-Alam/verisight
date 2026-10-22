@@ -34,6 +34,7 @@ def _reject_duplicate_fields(
     for key, value in pairs:
         if key in payload:
             raise ValueError("Duplicate JSON field.")
+
         payload[key] = value
 
     return payload
@@ -70,7 +71,8 @@ class InvestigationResponseParser:
                 object_pairs_hook=_reject_duplicate_fields,
                 parse_constant=_reject_nonstandard_constant,
             )
-        except (json.JSONDecodeError, ValueError) as exc:
+        # Excessive nesting is malformed model input, not an orchestration bug.
+        except (json.JSONDecodeError, ValueError, RecursionError) as exc:
             raise InvestigationError("Investigator returned invalid JSON.") from exc
 
         if not isinstance(payload, dict):
