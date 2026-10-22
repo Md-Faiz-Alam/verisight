@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,14 @@ import pytest
 
 from verisight import VeriSight
 from verisight.config import Settings
+from verisight.execution.claim_verification import (
+    ClaimOperation,
+    EvidenceReference,
+    NumericalClaim,
+    NumericalClaimVerifier,
+    VerificationStatus,
+)
+from verisight.execution.observations import QueryObservation
 from verisight.ingestion.exceptions import (
     DataLoadError,
     FileValidationError,
@@ -14,6 +23,7 @@ from verisight.ingestion.exceptions import (
 from verisight.ingestion.loaders.base import BaseTableLoader
 from verisight.ingestion.loaders.json import JsonLoader
 from verisight.ingestion.schema import LogicalType, SchemaInferer
+from verisight.serialization import to_jsonable
 
 
 def test_json_loader_implements_base_loader() -> None:
@@ -405,3 +415,129 @@ def test_json_nullable_booleans_survive_sql_execution(tmp_path: Path) -> None:
     filtered = app.execute([path], "SELECT row_id FROM flags WHERE active IS TRUE")
 
     assert filtered.rows == ((1,),)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"value":1,"value":9}',
+        '[{"value":1,"value":9}]',
+        '[{"nested":{"value":1,"value":9}}]',
+        '[{"nested":[{"value":1,"value":9}]}]',
+        '{"value":1,"\\u0076alue":9}',
+    ],
+)
+def test_json_loader_rejects_duplicate_keys(tmp_path: Path, payload: str) -> None:
+    path = tmp_path / "records.json"
+    path.write_text(payload, encoding="utf-8")
+    with pytest.raises(DataLoadError, match="Could not load JSON file"):
+        JsonLoader(Settings()).load(path)
+
+
+def test_json_loader_allows_same_key_in_different_objects(tmp_path: Path) -> None:
+    data = _load_records(tmp_path, [{"value": 1}, {"value": 9}])
+    assert data["value"].tolist() == [1, 9]
+
+
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity"])
+def test_json_loader_rejects_nonstandard_numbers(tmp_path: Path, token: str) -> None:
+    path = tmp_path / "records.json"
+    path.write_text('[{"value":' + token + "}]", encoding="utf-8")
+    with pytest.raises(DataLoadError, match="Could not load JSON file"):
+        JsonLoader(Settings()).load(path)
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "9007199254740993.0",
+        "12345678901234567.89",
+        "0.1234567890123456789012345",
+        "1.234567890123456789e-9",
+        "1e-400",
+        "1e400",
+    ],
+)
+def test_json_loader_preserves_decimal_tokens(tmp_path: Path, token: str) -> None:
+    path = tmp_path / "records.json"
+    path.write_text(
+        '[{"value":' + token + '},{"value":0.5},{"value":null}]', encoding="utf-8"
+    )
+    table = JsonLoader(Settings()).load(path)
+    assert table.data["value"].dtype == object
+    assert type(table.data["value"].iloc[0]) is Decimal
+    assert table.data["value"].iloc[0] == Decimal(token)
+    assert table.data["value"].iloc[1] == 0.5
+    assert table.data["value"].iloc[2] is None
+    # Existing schema inference deliberately does not label Decimal objects
+    # as native floating-point data or compute approximate float statistics.
+    assert (
+        SchemaInferer().infer_table(table).columns[0].logical_type
+        is LogicalType.UNKNOWN
+    )
+
+
+def test_json_loader_preserves_nested_decimals(tmp_path: Path) -> None:
+    path = tmp_path / "records.json"
+    path.write_text(
+        '[{"nested":{"value":9007199254740993.0,"items":[1e-400,0.5]}}]',
+        encoding="utf-8",
+    )
+    table = JsonLoader(Settings()).load(path)
+    nested = table.data["nested"].iloc[0]
+    assert nested["value"] == Decimal("9007199254740993.0")
+    assert nested["items"] == [Decimal("1e-400"), 0.5]
+    assert to_jsonable(nested) == {
+        "value": "9007199254740993.0",
+        "items": ["1E-400", 0.5],
+    }
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "9007199254740993.0",
+        "12345678901234567.89",
+        "0.1234567890123456789012345",
+        "1.234567890123456789e-9",
+    ],
+)
+def test_json_decimal_survives_analysis_sql_and_verification(
+    tmp_path: Path, token: str
+) -> None:
+    path = tmp_path / "records.json"
+    path.write_text('[{"value":' + token + "}]", encoding="utf-8")
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+    assert app.analyze(path).analysis.schema.tables[0].row_count == 1
+    sql = 'SELECT "value" FROM records'
+    result = app.execute(path, sql)
+    expected = Decimal(token)
+    assert result.rows == ((expected,),)
+    assert type(result.rows[0][0]) is Decimal
+    claim = NumericalClaim(
+        operation=ClaimOperation.VALUE,
+        expected=expected,
+        left=EvidenceReference(0, 0, "value"),
+    )
+    verdict = NumericalClaimVerifier().verify(
+        claim, (QueryObservation("Get value", sql, result),)
+    )
+    assert verdict.status is VerificationStatus.SUPPORTED
+    assert verdict.actual == expected
+    payload = to_jsonable(result)
+    assert isinstance(payload, dict)
+    assert payload["rows"] == [[str(result.rows[0][0])]]
+
+
+def test_json_loader_wraps_excessive_nesting(tmp_path: Path) -> None:
+    path = tmp_path / "records.json"
+    path.write_text("[" * 10000 + "0" + "]" * 10000, encoding="utf-8")
+    with pytest.raises(DataLoadError, match="Could not load JSON file"):
+        JsonLoader(Settings()).load(path)
+
+
+def test_json_loader_wraps_unrepresentable_decimal_exponent(tmp_path: Path) -> None:
+    path = tmp_path / "records.json"
+    path.write_text('[{"value":1e' + "9" * 100 + "}]", encoding="utf-8")
+    with pytest.raises(DataLoadError, match="Could not load JSON file"):
+        JsonLoader(Settings()).load(path)

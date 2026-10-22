@@ -1,6 +1,8 @@
 """JSON loader for the VeriSight ingestion subsystem."""
 
 import json
+import math
+from decimal import Decimal, DecimalException
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,35 @@ _MIN_INT64 = -(2**63)
 _MAX_INT64 = 2**63 - 1
 _MAX_UINT64 = 2**64 - 1
 _MAX_SAFE_FLOAT_INTEGER = 2**53 - 1
+
+
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate keys before a JSON object can discard source fields."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON object key.")
+        result[key] = value
+    return result
+
+
+def _parse_decimal(token: str) -> float | Decimal:
+    """Keep decimals exact when normal float conversion changes their value.
+
+    Ordinary floats retain existing inference only when their decimal string
+    round trip equals the source number, matching the CSV precision policy.
+    This does not make floating-point SQL arithmetic exact.
+    """
+    exact = Decimal(token)
+    approximate = float(exact)
+    if math.isfinite(approximate) and Decimal(str(approximate)) == exact:
+        return approximate
+    return exact
+
+
+def _reject_constant(token: str) -> None:
+    """Reject nonstandard JSON NaN and infinity literals."""
+    raise ValueError("Nonstandard JSON numeric constant.")
 
 
 class JsonLoader(BaseTableLoader):
@@ -42,8 +73,19 @@ class JsonLoader(BaseTableLoader):
                 "r",
                 encoding="utf-8-sig",
             ) as file:
-                payload: Any = json.load(file)
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                payload: Any = json.load(
+                    file,
+                    parse_float=_parse_decimal,
+                    parse_constant=_reject_constant,
+                    object_pairs_hook=_unique_object,
+                )
+        except (
+            OSError,
+            UnicodeError,
+            ValueError,
+            DecimalException,
+            RecursionError,
+        ) as exc:
             raise DataLoadError(f"Could not load JSON file: {metadata.path}") from exc
 
         try:
@@ -104,7 +146,7 @@ class JsonLoader(BaseTableLoader):
 
     @staticmethod
     def _to_series(values: list[Any]) -> pd.Series:
-        """Preserve booleans and exact integers, including nullable columns."""
+        """Preserve booleans and exact numbers, including nullable columns."""
 
         non_null = [value for value in values if value is not None]
 
@@ -128,7 +170,8 @@ class JsonLoader(BaseTableLoader):
             return pd.Series(values, dtype=object)
 
         if any(
-            type(value) is int and abs(value) > _MAX_SAFE_FLOAT_INTEGER
+            type(value) is Decimal
+            or (type(value) is int and abs(value) > _MAX_SAFE_FLOAT_INTEGER)
             for value in non_null
         ):
             return pd.Series(values, dtype=object)
