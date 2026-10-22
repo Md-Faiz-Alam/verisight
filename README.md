@@ -159,7 +159,9 @@ tolerance. The model cannot choose a tolerance. A rounded presentation can
 therefore be contradicted in the default investigation result.
 
 Application code can explicitly reverify selected claims using a
-`DecimalRoundingPolicy` with 0–12 decimal places and fixed half-even rounding:
+`DecimalRoundingPolicy` with 0–12 decimal places and rounding to nearest,
+with exact ties away from zero (`ROUND_HALF_UP`), matching DuckDB `ROUND`
+for exact decimal inputs:
 
 ```python
 from verisight.execution.claim_verification import DecimalRoundingPolicy
@@ -306,7 +308,8 @@ statement and branch coverage measures exercised paths, not universal accuracy.
 - Evaluate unfamiliar schemas and multi-step questions against independent
   answers, with a defined baseline and all attempted cases reported.
 - Define and integrate per-metric rounding conventions where justified; the
-  current opt-in policy uses half-even, which can differ from SQL tie rounding.
+  current opt-in policy rounds exact ties away from zero, matching decimal SQL
+  `ROUND`, while default verification remains strict.
 - Build dataset onboarding, evidence inspection, partial-result presentation,
   report export, and deployment acceptance evidence.
 

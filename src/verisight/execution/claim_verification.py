@@ -3,7 +3,7 @@
 import math
 from dataclasses import dataclass, field, replace
 from decimal import (
-    ROUND_HALF_EVEN,
+    ROUND_HALF_UP,
     Decimal,
     DecimalException,
     Inexact,
@@ -101,10 +101,12 @@ class DecimalRoundingPolicy:
 
     This policy rounds in the evidence cell's existing units. It does not
     convert percentages or currencies, infer units, or validate SQL semantics.
+    Values round to nearest; exact ties round away from zero, matching
+    DuckDB ROUND for exact decimal inputs.
     """
 
     decimal_places: int
-    rounding_mode: str = field(default=ROUND_HALF_EVEN, init=False)
+    rounding_mode: str = field(default=ROUND_HALF_UP, init=False)
 
     def __post_init__(self) -> None:
         if type(self.decimal_places) is not int:
@@ -334,4 +336,4 @@ def _round_for_policy(value: Decimal, policy: DecimalRoundingPolicy) -> Decimal:
         context.traps[Rounded] = False
         context.traps[InvalidOperation] = True
         context.traps[Overflow] = True
-        return value.quantize(quantum, rounding=ROUND_HALF_EVEN)
+        return value.quantize(quantum, rounding=policy.rounding_mode)

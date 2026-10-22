@@ -126,7 +126,9 @@ claim API accepts an absolute tolerance. Structured model-generated claims
 use zero tolerance and cannot supply their own comparison policy.
 
 `DecimalRoundingPolicy` is an opt-in application policy with 0–12 decimal places
-and fixed `ROUND_HALF_EVEN`. It can be passed to `NumericalClaimVerifier` or to
+and fixed `ROUND_HALF_UP`: round to nearest, with exact ties away from zero.
+This matches DuckDB `ROUND` for exact decimal inputs; binary floating-point
+representations can still differ. It can be passed to `NumericalClaimVerifier` or to
 `InvestigationResult.verify_claims()`. Precision is not inferred from the claim.
 Nonzero absolute tolerance and rounding cannot be combined.
 

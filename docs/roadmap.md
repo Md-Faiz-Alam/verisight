@@ -56,8 +56,9 @@ baseline. Missing claims do not automatically count as justified abstention.
 ## 2. Integrate per-metric rounding deliberately
 
 An opt-in `DecimalRoundingPolicy` now supports 0–12 decimal places with fixed
-half-even rounding. Explicit reverification retains original evidence and the
-policy, distinguishing `supported_rounded` from ordinary support. Model-selected
+rounding to nearest with exact ties away from zero (`ROUND_HALF_UP`), matching
+DuckDB `ROUND` for exact decimal inputs. Explicit reverification retains original
+evidence and the policy, distinguishing `supported_rounded` from ordinary support. Model-selected
 precision and combinations with nonzero absolute tolerance are rejected.
 
 Default structured investigations and live evaluation still use strict
