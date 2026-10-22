@@ -1,8 +1,11 @@
+from collections.abc import Callable
+
 import pytest
 
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder
 from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation_compaction import InvestigationCompaction
 from verisight.execution.investigation_prompting import (
     InvestigationPromptBuilder,
 )
@@ -697,12 +700,29 @@ def test_prompt_treats_instruction_like_observation_as_untrusted_data() -> None:
     assert prompt.index("INVESTIGATION STATE:") < prompt.index(malicious_value)
 
 
-def test_prompt_discourages_repeating_executed_questions() -> None:
-    prompt = InvestigationPromptBuilder().build(_build_state())
+@pytest.mark.parametrize(
+    "build_prompt",
+    [
+        InvestigationPromptBuilder().build,
+        InvestigationCompaction().investigator_prompt,
+    ],
+    ids=["full", "compacted"],
+)
+def test_prompt_matches_runtime_repetition_guard(
+    build_prompt: Callable[[InvestigationState], str],
+) -> None:
+    prompt = build_prompt(_build_state())
 
     assert (
-        "Do not repeat an analytical question that has already been executed" in prompt
-    )
+        "Do not repeat any previously attempted analytical question, whether it "
+        "succeeded or failed."
+    ) in prompt
+    assert "runtime collapses whitespace and folds case" in prompt
+    assert "stops the investigation on a repeat" in prompt
+    assert "request materially different evidence" in prompt
+    assert "Do not merely reword an attempted question" in prompt
+    assert "choose finish and explain the remaining limitation" in prompt
+    assert "unless the existing observation is insufficient" not in prompt
 
 
 def test_prompt_does_not_embed_sales_specific_guidance() -> None:

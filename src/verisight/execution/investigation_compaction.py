@@ -6,6 +6,7 @@ from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
+from verisight.execution.investigation_prompting import INVESTIGATION_REPETITION_RULES
 from verisight.execution.prompt_budget import (
     PromptBudget,
     PromptBudgetExceededError,
@@ -49,7 +50,8 @@ class InvestigationCompaction:
             "the original question, or no useful query is possible.\n"
             "If evidence is compacted and completeness is uncertain, "
             "prefer a focused investigation question.\n"
-            "Do not generate SQL. Request exactly one analytical question.\n"
+            + INVESTIGATION_REPETITION_RULES
+            + "Do not generate SQL. Request exactly one analytical question.\n"
             "Return exactly one JSON object without Markdown fences:\n"
             '{"action":"investigate"|"finish",'
             '"reasoning":"string","question":"string"|null}\n\n'

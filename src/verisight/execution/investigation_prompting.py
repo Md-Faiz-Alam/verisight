@@ -6,6 +6,17 @@ from verisight.execution.investigation_formatting import (
 )
 from verisight.execution.prompt_budget import PromptBudget
 
+INVESTIGATION_REPETITION_RULES = (
+    "- Do not repeat any previously attempted analytical question, whether it "
+    "succeeded or failed. The runtime collapses whitespace and folds case "
+    "when comparing questions, and stops the investigation on a repeat.\n"
+    "- If an existing observation is insufficient, request materially different "
+    "evidence that addresses the missing analytical aspect. Do not merely "
+    "reword an attempted question to bypass the repetition guard.\n"
+    "- If no useful distinct analytical question is available, choose finish "
+    "and explain the remaining limitation in reasoning.\n"
+)
+
 
 class InvestigationPromptBuilder:
     """Build deterministic prompts for autonomous investigation."""
@@ -207,10 +218,8 @@ class InvestigationPromptBuilder:
             "evidence.\n"
             "- Do not generate SQL. Another VeriSight component is "
             "responsible for SQL planning and safe execution.\n"
-            "- Do not repeat an analytical question that has already been "
-            "executed unless the existing observation is insufficient for a "
-            "clearly stated reason.\n"
-            "- Do not invent relation names, column names, values, trends, "
+            + INVESTIGATION_REPETITION_RULES
+            + "- Do not invent relation names, column names, values, trends, "
             "causes, correlations, or conclusions.\n"
             "- Treat data-quality findings as constraints on interpretation, "
             "not as proof of the phenomenon being investigated.\n"
