@@ -224,6 +224,7 @@ class VeriSight:
         execution_service = AnalyticalExecutionService(
             dataset,
             max_result_rows=self._settings.max_query_result_rows,
+            max_result_bytes=self._settings.max_query_result_bytes,
             memory_limit_mb=self._settings.max_query_memory_mb,
             execution_timeout_seconds=self._settings.max_query_execution_seconds,
             temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,
@@ -245,6 +246,7 @@ class VeriSight:
             planner=self._planner,
             repairer=self._repairer,
             max_result_rows=self._settings.max_query_result_rows,
+            max_result_bytes=self._settings.max_query_result_bytes,
             memory_limit_mb=self._settings.max_query_memory_mb,
             execution_timeout_seconds=self._settings.max_query_execution_seconds,
             temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,
@@ -292,6 +294,7 @@ class VeriSight:
             planner=planner,
             repairer=self._repairer,
             max_result_rows=self._settings.max_query_result_rows,
+            max_result_bytes=self._settings.max_query_result_bytes,
             memory_limit_mb=self._settings.max_query_memory_mb,
             execution_timeout_seconds=self._settings.max_query_execution_seconds,
             temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,

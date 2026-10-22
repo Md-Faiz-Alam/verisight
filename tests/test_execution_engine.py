@@ -822,6 +822,7 @@ def test_executor_connection_applies_memory_limit() -> None:
     memory_limit = str(result[0])
 
     assert memory_limit
+
     assert memory_limit != "unlimited"
 
 
@@ -980,3 +981,203 @@ def test_executor_closes_connection_after_query_timeout(
 
     with pytest.raises(duckdb.ConnectionException):
         captured_connections[0].execute("SELECT 1")
+
+
+@pytest.mark.parametrize("limit", [0, -1, True])
+def test_executor_rejects_invalid_result_byte_limit(limit: int) -> None:
+    with pytest.raises(ValueError, match="result bytes must be a positive integer"):
+        DuckDBExecutor(max_result_bytes=limit)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT value FROM synthetic ORDER BY value",
+        "SELECT 'é😀' AS \"列\", chr(10) || chr(34) || chr(92) AS escaped",
+        "SELECT CAST(1.20 AS DECIMAL(4,2)) AS d, DATE '2026-01-01' AS day, NULL AS n",
+        "SELECT TRUE AS b, CAST('NaN' AS DOUBLE) AS n",
+        'SELECT value AS "列" FROM synthetic WHERE FALSE',
+    ],
+)
+def test_result_byte_limit_matches_exact_compact_public_json(query: str) -> None:
+    import json
+
+    from verisight.serialization import to_jsonable
+
+    dataset = _make_dataset(
+        name="synthetic",
+        relation_name="synthetic",
+        data=pd.DataFrame({"value": ["é", 'quote"\n', "😀"]}),
+    )
+    result = DuckDBExecutor().execute(dataset, query)
+    expected_bytes = len(
+        json.dumps(
+            to_jsonable(result),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    )
+
+    assert to_jsonable(
+        DuckDBExecutor(max_result_bytes=expected_bytes).execute(dataset, query)
+    ) == to_jsonable(result)
+    with pytest.raises(QueryResultLimitError, match="bytes of compact UTF-8 JSON"):
+        DuckDBExecutor(max_result_bytes=expected_bytes - 1).execute(dataset, query)
+
+
+def test_default_byte_budget_rejects_one_large_cell_and_executor_recovers() -> None:
+    dataset = _make_dataset(
+        name="synthetic",
+        relation_name="synthetic",
+        data=pd.DataFrame({"value": [1]}),
+    )
+    executor = DuckDBExecutor(max_result_rows=1, memory_limit_mb=16)
+    with pytest.raises(QueryResultLimitError, match="1048576 bytes") as caught:
+        executor.execute(dataset, "SELECT repeat('private-marker', 100000) AS value")
+    assert "private-marker" not in str(caught.value)
+    assert executor.execute(dataset, "SELECT value FROM synthetic").rows == ((1,),)
+
+
+def test_result_bytes_stop_fetching_and_close_resources() -> None:
+    from unittest.mock import MagicMock, patch
+
+    dataset = _make_dataset(
+        name="synthetic",
+        relation_name="synthetic",
+        data=pd.DataFrame({"value": [1]}),
+    )
+    connection = MagicMock()
+    cursor = connection.execute.return_value
+    cursor.description = [("v",)]
+    cursor.fetchone.side_effect = [("abcdefghij",)] * 100 + [None]
+    executor = DuckDBExecutor(max_result_bytes=70)
+    with (
+        patch.object(executor, "_connection") as connection_context,
+        patch("verisight.execution.engine.Timer") as timer,
+    ):
+        connection_context.return_value.__enter__.return_value = connection
+        with pytest.raises(QueryResultLimitError, match="70 bytes"):
+            executor.execute(dataset, "SELECT value FROM synthetic")
+        assert cursor.fetchone.call_count == 3
+        connection_context.return_value.__exit__.assert_called_once()
+        timer.return_value.cancel.assert_called_once()
+        timer.return_value.join.assert_called_once()
+
+
+@pytest.mark.parametrize("limit,column", [(1, "value"), (32, "x" * 1000)])
+def test_result_byte_budget_checks_structure_and_headers_before_fetching(
+    limit: int,
+    column: str,
+) -> None:
+    from unittest.mock import MagicMock, patch
+
+    dataset = _make_dataset(
+        name="synthetic",
+        relation_name="synthetic",
+        data=pd.DataFrame({"value": [1]}),
+    )
+    connection = MagicMock()
+    cursor = connection.execute.return_value
+    cursor.description = [(column,)]
+    executor = DuckDBExecutor(max_result_bytes=limit)
+    with patch.object(executor, "_connection") as connection_context:
+        connection_context.return_value.__enter__.return_value = connection
+        with pytest.raises(QueryResultLimitError, match="bytes of compact UTF-8 JSON"):
+            executor.execute(dataset, "SELECT value FROM synthetic")
+        cursor.fetchone.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", ["execute", "ask", "investigate"])
+def test_facade_enforces_result_bytes_without_automatic_repair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    from unittest.mock import Mock
+
+    from verisight import VeriSight
+    from verisight.config import Settings
+    from verisight.execution.decisions import InvestigationAction, InvestigationDecision
+    from verisight.execution.investigation_result import InvestigationStatus
+    from verisight.execution.planning import QueryPlan
+
+    path = tmp_path / "observations.csv"
+    path.write_text("value\n1\n", encoding="utf-8")
+    monkeypatch.setenv("VERISIGHT_MAX_QUERY_RESULT_BYTES", "64")
+    settings = Settings(allow_llm_data_disclosure=False)
+    assert settings.max_query_result_bytes == 64
+    sql = "SELECT repeat('x', 100) AS value FROM observations"
+    planner = Mock()
+    planner.plan.return_value = QueryPlan("Read values", sql)
+    repairer = Mock()
+    investigator = Mock()
+    investigator.decide.side_effect = [
+        InvestigationDecision(InvestigationAction.INVESTIGATE, "Read", "Read values"),
+        InvestigationDecision(InvestigationAction.FINISH, "Attempt completed"),
+    ]
+    synthesizer = Mock()
+    app = VeriSight(
+        settings=settings,
+        planner=planner,
+        repairer=repairer,
+        investigator=investigator,
+        synthesizer=synthesizer,
+    )
+    if operation == "investigate":
+        result = app.investigate(path, "Read values", max_steps=1)
+        assert result.status is InvestigationStatus.INCOMPLETE
+        assert result.observation_count == 0
+        assert result.failed_attempt_count == 1
+        assert result.failed_attempts[0].error_type == "QueryResultLimitError"
+        synthesizer.synthesize.assert_not_called()
+    else:
+        with pytest.raises(QueryResultLimitError):
+            if operation == "execute":
+                app.execute(path, sql)
+            else:
+                app.ask(path, "Read values")
+    repairer.repair.assert_not_called()
+
+
+def test_result_byte_failure_preserves_previous_observations(tmp_path: Path) -> None:
+    from unittest.mock import Mock
+
+    from verisight import VeriSight
+    from verisight.config import Settings
+    from verisight.execution.decisions import InvestigationAction, InvestigationDecision
+    from verisight.execution.investigation_result import InvestigationStatus
+    from verisight.execution.planning import QueryPlan
+
+    path = tmp_path / "observations.csv"
+    path.write_text("value\n1\n", encoding="utf-8")
+    planner = Mock()
+    planner.plan.side_effect = [
+        QueryPlan("Read value", "SELECT value FROM observations"),
+        QueryPlan("Read text", "SELECT repeat('x', 100) AS value FROM observations"),
+    ]
+    investigator = Mock()
+    investigator.decide.side_effect = [
+        InvestigationDecision(InvestigationAction.INVESTIGATE, "Read", "Read value"),
+        InvestigationDecision(InvestigationAction.INVESTIGATE, "Read", "Read text"),
+        InvestigationDecision(InvestigationAction.INVESTIGATE, "Read", "Read more"),
+    ]
+    repairer = Mock()
+    synthesizer = Mock()
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False, max_query_result_bytes=64),
+        planner=planner,
+        repairer=repairer,
+        investigator=investigator,
+        synthesizer=synthesizer,
+    )
+
+    result = app.investigate(path, "Inspect values", max_steps=2)
+
+    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.observation_count == 1
+    assert result.observations[0].result.rows == ((1,),)
+    assert result.failed_attempt_count == 1
+    assert result.failed_attempts[0].error_type == "QueryResultLimitError"
+    synthesizer.synthesize.assert_not_called()
+    repairer.repair.assert_not_called()

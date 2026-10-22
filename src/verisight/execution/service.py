@@ -38,6 +38,7 @@ class AnalyticalExecutionService:
         repairer: QueryRepairer | None = None,
         *,
         max_result_rows: int = 10_000,
+        max_result_bytes: int = 1_048_576,
         memory_limit_mb: int = 512,
         execution_timeout_seconds: float = 30.0,
         temp_storage_limit_mb: int = 1_024,
@@ -47,6 +48,7 @@ class AnalyticalExecutionService:
         self._dataset = dataset
         self._executor = DuckDBExecutor(
             max_result_rows=max_result_rows,
+            max_result_bytes=max_result_bytes,
             memory_limit_mb=memory_limit_mb,
             execution_timeout_seconds=execution_timeout_seconds,
             temp_storage_limit_mb=temp_storage_limit_mb,

@@ -39,6 +39,11 @@ class Settings(BaseSettings):
         gt=0,
     )
 
+    max_query_result_bytes: int = Field(
+        default=1_048_576,
+        gt=0,
+    )
+
     max_query_memory_mb: int = Field(
         default=512,
         gt=0,

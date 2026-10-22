@@ -1,5 +1,6 @@
 """DuckDB-backed analytical execution for VeriSight."""
 
+import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
@@ -18,12 +19,13 @@ from verisight.execution.exceptions import (
     QueryTimeoutError,
     QueryValidationError,
 )
-from verisight.execution.models import QueryResult, QueryScalar
+from verisight.execution.models import QueryResult, QueryRow, QueryScalar
 from verisight.execution.validation import (
     AnalyticalQueryValidator,
     validate_dataset_relations,
 )
 from verisight.ingestion.models import LoadedDataset, LoadedTable
+from verisight.serialization import to_jsonable
 
 
 class DuckDBExecutor:
@@ -33,6 +35,7 @@ class DuckDBExecutor:
         self,
         *,
         max_result_rows: int = 10_000,
+        max_result_bytes: int = 1_048_576,
         memory_limit_mb: int = 512,
         execution_timeout_seconds: float = 30.0,
         temp_storage_limit_mb: int = 1_024,
@@ -41,6 +44,9 @@ class DuckDBExecutor:
 
         if max_result_rows <= 0:
             raise ValueError("Maximum query result rows must be positive.")
+
+        if type(max_result_bytes) is not int or max_result_bytes <= 0:
+            raise ValueError("Maximum query result bytes must be a positive integer.")
 
         if memory_limit_mb <= 0:
             raise ValueError("Query memory limit must be positive.")
@@ -53,6 +59,7 @@ class DuckDBExecutor:
 
         self._query_validator = AnalyticalQueryValidator()
         self._max_result_rows = max_result_rows
+        self._max_result_bytes = max_result_bytes
         self._memory_limit_mb = memory_limit_mb
         self._execution_timeout_seconds = execution_timeout_seconds
         self._temp_storage_limit_mb = temp_storage_limit_mb
@@ -62,7 +69,13 @@ class DuckDBExecutor:
         dataset: LoadedDataset,
         query: str,
     ) -> QueryResult:
-        """Execute a query against dataset relations."""
+        """Execute within row and compact UTF-8 JSON result limits.
+
+        Bytes include column names, scalar values, and JSON structure, using
+        ensure_ascii=False and no optional whitespace. Reject oversized output
+        without truncating it. The budget applies after DuckDB produces cells;
+        it is not a bound on native allocations or total process memory.
+        """
 
         check_deadline()
         # Loaded datasets remain mutable; recheck identities before registration.
@@ -96,7 +109,29 @@ class DuckDBExecutor:
                         description[0] for description in cursor.description
                     )
 
-                    fetched_rows = cursor.fetchmany(self._max_result_rows + 1)
+                    # Account for both empty arrays and the enclosing object.
+                    size = len(b'{"columns":[],"rows":[]}')
+                    self._check_result_bytes(size)
+                    for index, column in enumerate(columns):
+                        size = self._add_result_bytes(size + int(index > 0), column)
+
+                    rows: list[QueryRow] = []
+                    while True:
+                        check_deadline()
+                        fetched = cursor.fetchone()
+                        if fetched is None:
+                            break
+                        if len(rows) >= self._max_result_rows:
+                            raise QueryResultLimitError(
+                                "Analytical query result exceeded the maximum "
+                                f"of {self._max_result_rows} rows."
+                            )
+                        row = tuple(self._query_scalar(value) for value in fetched)
+                        size += 2 + int(bool(rows))
+                        for index, value in enumerate(row):
+                            size = self._add_result_bytes(size + int(index > 0), value)
+                        self._check_result_bytes(size)
+                        rows.append(row)
                 except duckdb.Error as exc:
                     check_deadline()
                     if timed_out.is_set():
@@ -116,20 +151,32 @@ class DuckDBExecutor:
             raise
 
         check_deadline()
-        if len(fetched_rows) > self._max_result_rows:
-            raise QueryResultLimitError(
-                "Analytical query result exceeded the maximum "
-                f"of {self._max_result_rows} rows."
-            )
-
-        rows = tuple(
-            tuple(self._query_scalar(value) for value in row) for row in fetched_rows
-        )
-
         return QueryResult(
             columns=columns,
-            rows=rows,
+            rows=tuple(rows),
         )
+
+    def _add_result_bytes(self, used: int, value: QueryScalar) -> int:
+        """Count the public scalar representation without encoding huge strings."""
+        if isinstance(value, str):
+            # UTF-8 JSON is never shorter than the source character count.
+            self._check_result_bytes(used + len(value))
+        encoded = json.dumps(
+            to_jsonable(value),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        total = used + len(encoded)
+        self._check_result_bytes(total)
+        return total
+
+    def _check_result_bytes(self, size: int) -> None:
+        if size > self._max_result_bytes:
+            raise QueryResultLimitError(
+                "Analytical query result exceeded the maximum "
+                f"of {self._max_result_bytes} bytes of compact UTF-8 JSON."
+            )
 
     @staticmethod
     def _query_scalar(value: object) -> QueryScalar:

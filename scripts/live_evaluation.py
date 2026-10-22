@@ -459,6 +459,7 @@ def main() -> int:
             "max_upload_size_mb": settings.max_upload_size_mb,
             "max_query_execution_seconds": settings.max_query_execution_seconds,
             "max_query_result_rows": settings.max_query_result_rows,
+            "max_query_result_bytes": settings.max_query_result_bytes,
             "max_query_memory_mb": settings.max_query_memory_mb,
             "max_query_temp_storage_mb": settings.max_query_temp_storage_mb,
         },
