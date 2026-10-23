@@ -1,7 +1,11 @@
 """High-level analytical execution services for VeriSight."""
 
 from verisight.error_reporting import to_public_error
-from verisight.execution.context import QueryContext, QueryContextBuilder
+from verisight.execution.context import (
+    PopulationFilter,
+    QueryContext,
+    QueryContextBuilder,
+)
 from verisight.execution.deadline import InvestigationDeadlineExceeded
 from verisight.execution.engine import DuckDBExecutor
 from verisight.execution.exceptions import (
@@ -42,6 +46,7 @@ class AnalyticalExecutionService:
         memory_limit_mb: int = 512,
         execution_timeout_seconds: float = 30.0,
         temp_storage_limit_mb: int = 1_024,
+        population: tuple[PopulationFilter, ...] = (),
     ) -> None:
         """Initialize the service for a loaded dataset."""
 
@@ -52,12 +57,13 @@ class AnalyticalExecutionService:
             memory_limit_mb=memory_limit_mb,
             execution_timeout_seconds=execution_timeout_seconds,
             temp_storage_limit_mb=temp_storage_limit_mb,
+            population=population,
         )
         self._planner = planner
         self._repairer = repairer
 
         schema = SchemaInferer().infer_dataset(dataset)
-        self._context = QueryContextBuilder().build(schema)
+        self._context = QueryContextBuilder().build(schema, population=population)
         self._formatted_context = QueryContextFormatter().format(self._context)
 
     @property

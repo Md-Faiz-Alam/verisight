@@ -13,6 +13,7 @@ from verisight.execution.claim_verification import (
     NumericalClaim,
     NumericalClaimVerifier,
 )
+from verisight.execution.context import PopulationFilter
 from verisight.execution.gemini import (
     GeminiGenerationError,
     GeminiTransientError,
@@ -116,6 +117,7 @@ class InvestigationFailure:
 class InvestigationResult:
     """Result produced by an autonomous analytical investigation."""
 
+    population: tuple[PopulationFilter, ...] = field(default=(), kw_only=True)
     question: str
     conclusion: str
     analysis: DatasetAnalysisResult

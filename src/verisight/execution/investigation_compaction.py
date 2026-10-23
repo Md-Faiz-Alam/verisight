@@ -66,6 +66,7 @@ class InvestigationCompaction:
         )
 
         base_state = InvestigationState(
+            population=state.population,
             question=state.question,
             analysis=state.analysis,
             observations=(),

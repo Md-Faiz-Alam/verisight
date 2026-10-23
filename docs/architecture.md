@@ -105,6 +105,55 @@ recorded so the investigator can choose another bounded attempt.
 type, fixed public message, and available repair history. Exhausting the budget
 returns incomplete results with prior observations and recorded failures.
 
+## Optional caller-selected populations
+
+The public `execute`, `ask`, and `investigate` methods accept a keyword-only
+`population` tuple. Each `PopulationFilter`, imported from
+`verisight.execution.context`, names an exact relation and column and a nonempty
+tuple of values. One value expresses equality; multiple values express
+membership. Filters combine with AND; values within one filter combine with OR.
+
+The initial contract accepts homogeneous text, boolean, or signed 64-bit integer
+values, matched to the corresponding inferred column type. Unknown relations,
+unknown columns, mixed values, mutable collections, null values, and unsupported
+column/value types are rejected. Dates, decimals, floating-point comparisons,
+expressions, ranges, and caller-supplied SQL predicates are not supported by this
+contract. Missing cells do not satisfy membership. No match is an empty
+population, not an invalid policy.
+
+The built-in executor applies these filters while registering queryable relations,
+after its existing precision-preserving numeric projection. The original source
+frames are unchanged. Every reference to that relation, including CTEs, joins,
+subqueries, UNION branches, and repaired queries, uses the restricted relation.
+Generated SQL cannot broaden that relation by omitting its WHERE clause or adding
+OR TRUE. Relation authorization and resource limits still apply. Mutable dataset
+schemas are revalidated before each scoped execution.
+
+A policy restricts only its named relations. Other supplied relations remain
+available under their own policies. A comparison needing excluded records must
+use a separately supplied, deliberately scoped comparison relation or a separate
+request. This is a query-population contract, not tenant isolation or a guarantee
+that the requested comparison is meaningful.
+
+Planning, repair, investigator prompts, compacted investigator prompts, and
+structured synthesis receive the supplied policy. Row counts, profiles, insights,
+and quality findings still describe the original loaded data; prompts distinguish
+these from restricted query evidence. They can contain information about excluded
+rows, so this mechanism is not a data-disclosure control.
+
+Complete and incomplete `InvestigationResult` values serialize `population`.
+As with existing results, manually constructed objects and injected execution
+components are trusted application code; metadata alone is not proof of
+enforcement. Direct `execute` and `ask` retain their existing `QueryResult` return
+contract, so their callers must retain the submitted population specification.
+
+The model cannot supply or replace the policy through its generated response.
+The application enforces supplied constraints but does not establish that they
+capture a natural-language question's business meaning, grain, denominator, or
+metric. Unscoped calls retain their existing behavior. Existing live evaluations
+remain unscoped: a caller-scoped run must be reported separately and must not be
+presented as evidence that autonomous population interpretation was corrected.
+
 ## Structured synthesis
 
 The default configured synthesizer is `StructuredInvestigationSynthesizer`.

@@ -1,4 +1,14 @@
-from verisight.execution.context import QueryContextBuilder
+from typing import Any
+
+import pytest
+
+from verisight.execution.context import (
+    PopulationFilter,
+    QueryContext,
+    QueryContextBuilder,
+    validate_population,
+)
+from verisight.execution.exceptions import QueryValidationError
 from verisight.ingestion.schema import (
     ColumnSchema,
     DatasetSchema,
@@ -105,3 +115,33 @@ def test_builds_empty_query_context() -> None:
 
     assert context.relations == ()
     assert context.relation_count == 0
+
+
+@pytest.mark.parametrize(
+    "relation,column,values",
+    [
+        ("", "state", ("active",)),
+        (None, "state", ("active",)),
+        ("data", " ", ("active",)),
+        ("data", None, ("active",)),
+        ("data", "state", ()),
+        ("data", "state", ["active"]),
+        ("data", "state", (None,)),
+        ("data", "state", ("active", 1)),
+        ("data", "state", (True, 1)),
+        ("data", "state", (1.0,)),
+        ("data", "state", (2**63,)),
+        ("data", "state", (-(2**63) - 1,)),
+    ],
+)
+def test_rejects_invalid_population_contracts(
+    relation: Any, column: Any, values: Any
+) -> None:
+    with pytest.raises(QueryValidationError):
+        PopulationFilter(relation, column, values)
+
+
+@pytest.mark.parametrize("population", [[], ("filter",)])
+def test_population_collection_must_be_immutable_and_typed(population: Any) -> None:
+    with pytest.raises(QueryValidationError):
+        validate_population(population, QueryContext(relations=()))

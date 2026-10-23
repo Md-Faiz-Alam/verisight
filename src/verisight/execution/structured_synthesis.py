@@ -222,6 +222,17 @@ class StructuredInvestigationSynthesizer:
             "observations": state.observations,
             "failed_attempts": state.failed_attempts,
         }
+        if state.population:
+            synthesis_state["caller_enforced_population"] = state.population
+            instructions += (
+                "Caller-enforced filters restrict each named relation before SQL. "
+                "All filters use AND, with OR among a filter's values. "
+                "Schema row counts "
+                "and quality findings describe the original data, not filtered counts. "
+                "Other relations keep their own scope. A comparison needing excluded "
+                "rows cannot be answered from the restricted relation. These filters "
+                "do not establish that the user's intended meaning was captured.\n"
+            )
         prompt = self._budget.enforce(
             instructions
             + "RESPONSE SCHEMA:\n"

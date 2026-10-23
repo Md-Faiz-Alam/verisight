@@ -12,6 +12,7 @@ import duckdb
 import pandas as pd
 from pandas.api.types import is_object_dtype
 
+from verisight.execution.context import PopulationFilter, QueryContextBuilder
 from verisight.execution.deadline import (
     InvestigationDeadlineExceeded,
     check_deadline,
@@ -29,6 +30,7 @@ from verisight.execution.validation import (
     validate_dataset_relations,
 )
 from verisight.ingestion.models import LoadedDataset, LoadedTable
+from verisight.ingestion.schema import SchemaInferer
 from verisight.serialization import to_jsonable
 
 
@@ -43,6 +45,7 @@ class DuckDBExecutor:
         memory_limit_mb: int = 512,
         execution_timeout_seconds: float = 30.0,
         temp_storage_limit_mb: int = 1_024,
+        population: tuple[PopulationFilter, ...] = (),
     ) -> None:
         """Initialize the executor with analytical execution guardrails."""
 
@@ -61,6 +64,7 @@ class DuckDBExecutor:
         if temp_storage_limit_mb <= 0:
             raise ValueError("Query temporary storage limit must be positive.")
 
+        self._population = population
         self._query_validator = AnalyticalQueryValidator()
         self._max_result_rows = max_result_rows
         self._max_result_bytes = max_result_bytes
@@ -84,6 +88,10 @@ class DuckDBExecutor:
         check_deadline()
         # Loaded datasets remain mutable; recheck identities before registration.
         dataset.validate_relation_names()
+        if self._population != ():
+            QueryContextBuilder().build(
+                SchemaInferer().infer_dataset(dataset), population=self._population
+            )
         self._query_validator.validate(query)
         allowed_relations = frozenset(
             table.relation_name.lower() for table in dataset.tables
@@ -220,7 +228,15 @@ class DuckDBExecutor:
 
         try:
             for table in dataset.tables:
-                self._register_table(connection, table)
+                filters = tuple(
+                    item
+                    for item in self._population
+                    if item.relation == table.relation_name
+                )
+                if filters:
+                    self._register_table(connection, table, filters)
+                else:
+                    self._register_table(connection, table)
 
             yield connection
         finally:
@@ -228,7 +244,9 @@ class DuckDBExecutor:
 
     @staticmethod
     def _register_table(
-        connection: duckdb.DuckDBPyConnection, table: LoadedTable
+        connection: duckdb.DuckDBPyConnection,
+        table: LoadedTable,
+        population: tuple[PopulationFilter, ...] = (),
     ) -> None:
         """Bind object-backed numbers through explicit lossless decimal types.
 
@@ -279,9 +297,20 @@ class DuckDBExecutor:
                 f"CAST({quoted} AS DECIMAL({precision},{scale})) AS {quoted}"
             )
 
-        if prepared is None:
+        if prepared is None and not population:
             connection.register(table.relation_name, table.data)
-        else:
-            connection.from_df(prepared).project(", ".join(projections)).create_view(
-                table.relation_name, replace=True
+            return
+        relation = connection.from_df(prepared if prepared is not None else table.data)
+        if prepared is not None:
+            relation = relation.project(", ".join(projections))
+        for item in population:
+            column_expression = duckdb.SQLExpression(
+                '"' + item.column.replace('"', '""') + '"'
             )
+            predicate = column_expression == duckdb.ConstantExpression(item.values[0])
+            for value in item.values[1:]:
+                predicate = predicate | (
+                    column_expression == duckdb.ConstantExpression(value)
+                )
+            relation = relation.filter(predicate)
+        relation.create_view(table.relation_name, replace=True)

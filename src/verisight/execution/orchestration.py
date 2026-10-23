@@ -3,6 +3,7 @@
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.error_reporting import to_public_error
 from verisight.execution.analytical import AnalyticalQueryRunner
+from verisight.execution.context import PopulationFilter
 from verisight.execution.deadline import (
     InvestigationDeadlineExceeded,
     check_deadline,
@@ -42,6 +43,7 @@ class InvestigationOrchestrator:
         synthesizer: InvestigationSynthesizer,
         max_steps: int = 5,
         timeout_seconds: float = 300.0,
+        population: tuple[PopulationFilter, ...] = (),
     ) -> None:
         """Initialize the investigation orchestrator."""
 
@@ -51,6 +53,7 @@ class InvestigationOrchestrator:
         if not 0 < timeout_seconds < float("inf"):
             raise ValueError("Investigation timeout must be finite and positive.")
 
+        self._population = population
         self._timeout_seconds = timeout_seconds
         self._execution_service = execution_service
         self._investigator = investigator
@@ -83,7 +86,9 @@ class InvestigationOrchestrator:
     ) -> InvestigationResult:
         """Keep the latest state available if any stage exhausts the budget."""
 
-        state = InvestigationState(question=question, analysis=analysis)
+        state = InvestigationState(
+            question=question, analysis=analysis, population=self._population
+        )
         attempted_questions: set[str] = set()
         attempt_count = 0
 
@@ -141,6 +146,7 @@ class InvestigationOrchestrator:
                         )
 
                     return InvestigationResult(
+                        population=state.population,
                         question=state.question,
                         conclusion=(
                             synthesis.conclusion
@@ -279,6 +285,7 @@ class InvestigationOrchestrator:
             )
 
         return InvestigationResult(
+            population=state.population,
             question=state.question,
             conclusion=(
                 f"Investigation incomplete: {reason}. "

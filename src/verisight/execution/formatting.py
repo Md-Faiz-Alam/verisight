@@ -1,6 +1,9 @@
 """Formatting for analytical query context."""
 
+import json
+
 from verisight.execution.context import QueryContext, QueryRelation
+from verisight.serialization import to_jsonable
 
 
 class QueryContextFormatter:
@@ -13,7 +16,20 @@ class QueryContextFormatter:
             self._format_relation(relation) for relation in context.relations
         )
 
-        return "\n\n".join(sections)
+        formatted = "\n\n".join(sections)
+        if context.population:
+            formatted += (
+                "\n\nCALLER-ENFORCED RELATION POPULATION\n"
+                "All filters are AND; values within each filter are OR. "
+                "Applied before every query, including repair and comparison queries. "
+                "Listed row counts describe the original loaded data, "
+                "not this population. "
+                "No excluded rows are available through these relations. "
+                "Other relations retain their own scope. "
+                "This does not verify the question's meaning.\n"
+                + json.dumps(to_jsonable(context.population), ensure_ascii=False)
+            )
+        return formatted
 
     @staticmethod
     def _format_relation(relation: QueryRelation) -> str:

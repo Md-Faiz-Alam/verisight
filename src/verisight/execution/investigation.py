@@ -3,7 +3,11 @@
 from dataclasses import dataclass, field
 
 from verisight.analysis.result import DatasetAnalysisResult
-from verisight.execution.context import QueryContext, QueryContextBuilder
+from verisight.execution.context import (
+    PopulationFilter,
+    QueryContext,
+    QueryContextBuilder,
+)
 from verisight.execution.execution import QueryRepairAttempt
 from verisight.execution.observations import QueryObservation
 
@@ -24,6 +28,7 @@ class InvestigationState:
 
     question: str
     analysis: DatasetAnalysisResult
+    population: tuple[PopulationFilter, ...] = field(default=(), kw_only=True)
     observations: tuple[QueryObservation, ...] = ()
     failed_attempts: tuple[FailedQueryAttempt, ...] = ()
 
@@ -43,7 +48,9 @@ class InvestigationState:
     def context(self) -> QueryContext:
         """Return deterministic query context for the investigated dataset."""
 
-        return QueryContextBuilder().build(self.analysis.analysis.schema)
+        return QueryContextBuilder().build(
+            self.analysis.analysis.schema, population=self.population
+        )
 
     def add_observation(
         self,
@@ -54,6 +61,7 @@ class InvestigationState:
         return InvestigationState(
             question=self.question,
             analysis=self.analysis,
+            population=self.population,
             observations=(*self.observations, observation),
             failed_attempts=self.failed_attempts,
         )
@@ -67,6 +75,7 @@ class InvestigationState:
         return InvestigationState(
             question=self.question,
             analysis=self.analysis,
+            population=self.population,
             observations=self.observations,
             failed_attempts=(*self.failed_attempts, attempt),
         )

@@ -9,6 +9,7 @@ from verisight.analysis.result import (
 )
 from verisight.analysis.service import DatasetAnalyzer
 from verisight.config import Settings
+from verisight.execution.context import PopulationFilter
 from verisight.execution.exceptions import (
     InvestigationError,
     QueryPlanningError,
@@ -216,6 +217,8 @@ class VeriSight:
         self,
         paths: str | Path | Iterable[str | Path],
         query: str,
+        *,
+        population: tuple[PopulationFilter, ...] = (),
     ) -> QueryResult:
         """Execute a read-only analytical query against dataset files."""
 
@@ -228,6 +231,7 @@ class VeriSight:
             memory_limit_mb=self._settings.max_query_memory_mb,
             execution_timeout_seconds=self._settings.max_query_execution_seconds,
             temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,
+            population=population,
         )
 
         return execution_service.execute(query)
@@ -236,6 +240,8 @@ class VeriSight:
         self,
         paths: str | Path | Iterable[str | Path],
         question: str,
+        *,
+        population: tuple[PopulationFilter, ...] = (),
     ) -> QueryResult:
         """Answer a natural-language analytical question against dataset files."""
 
@@ -250,6 +256,7 @@ class VeriSight:
             memory_limit_mb=self._settings.max_query_memory_mb,
             execution_timeout_seconds=self._settings.max_query_execution_seconds,
             temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,
+            population=population,
         )
 
         return execution_service.ask(question)
@@ -260,6 +267,7 @@ class VeriSight:
         question: str,
         *,
         max_steps: int = 5,
+        population: tuple[PopulationFilter, ...] = (),
     ) -> InvestigationResult:
         """Run a bounded autonomous investigation against dataset files."""
 
@@ -298,6 +306,7 @@ class VeriSight:
             memory_limit_mb=self._settings.max_query_memory_mb,
             execution_timeout_seconds=self._settings.max_query_execution_seconds,
             temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,
+            population=population,
         )
 
         orchestrator = InvestigationOrchestrator(
@@ -306,6 +315,7 @@ class VeriSight:
             synthesizer=synthesizer,
             max_steps=max_steps,
             timeout_seconds=self._settings.max_investigation_seconds,
+            population=population,
         )
 
         return orchestrator.investigate(

@@ -8,6 +8,7 @@ from verisight.evidence import (
     freeze_evidence,
 )
 from verisight.execution.context import QueryRelation
+from verisight.execution.formatting import QueryContextFormatter
 from verisight.execution.investigation import (
     FailedQueryAttempt,
     InvestigationState,
@@ -110,6 +111,11 @@ class InvestigationStateFormatter:
 
         if not context.relations:
             return "QUERYABLE DATASET STRUCTURE\nNone"
+
+        if context.population:
+            return "QUERYABLE DATASET STRUCTURE\n" + QueryContextFormatter().format(
+                context
+            )
 
         sections = ["QUERYABLE DATASET STRUCTURE"]
 

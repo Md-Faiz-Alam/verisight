@@ -782,3 +782,239 @@ def test_sql_interrupt_retains_the_timer_budget_source(
         assert caught.value.__suppress_context__
     else:
         assert "30 seconds" in str(caught.value)
+
+
+@pytest.mark.parametrize("repair", [False, True])
+def test_scoped_investigation_enforces_population_and_preserves_provenance(
+    tmp_path: Path, repair: bool
+) -> None:
+    import json
+    from unittest.mock import patch
+
+    from scripts.live_evaluation import CHALLENGE_CASES
+
+    from verisight import VeriSight
+    from verisight.config import Settings
+    from verisight.execution.context import PopulationFilter
+    from verisight.execution.investigation import FailedQueryAttempt
+    from verisight.execution.investigation_compaction import InvestigationCompaction
+    from verisight.serialization import to_jsonable
+
+    case = CHALLENGE_CASES["education_entities"]
+    paths = []
+    for filename, content in case.files:
+        path = tmp_path / filename
+        path.write_text(content, encoding="utf-8")
+        paths.append(path)
+    population = (
+        PopulationFilter("enrolments", "enrolment state", ("active",)),
+        PopulationFilter("enrolments", "cohort", (2026,)),
+        PopulationFilter("enrolments", "outcome", ("complete", "incomplete")),
+    )
+    # Omit every requested filter. The relation boundary must still enforce them.
+    sql = (
+        "SELECT 100.0 * COUNT(DISTINCT CASE WHEN outcome = 'complete' "
+        'THEN "learner id" END) / COUNT(DISTINCT "learner id") '
+        "AS metric FROM enrolments"
+    )
+    responses = [
+        json.dumps(
+            {
+                "action": "investigate",
+                "reasoning": "Measure",
+                "question": "Count everyone",
+            }
+        ),
+        "SELECT missing_metric FROM enrolments" if repair else sql,
+    ]
+    if repair:
+        responses.append(sql)
+    responses.extend(
+        [
+            json.dumps({"action": "finish", "reasoning": "Done", "question": None}),
+            json.dumps(
+                {
+                    "conclusion": "The completion percentage is 37.5.",
+                    "claims": [
+                        {
+                            "operation": "value",
+                            "expected": "37.5",
+                            "left": {
+                                "observation_index": 0,
+                                "row_index": 0,
+                                "column": "metric",
+                            },
+                            "right": None,
+                        }
+                    ],
+                }
+            ),
+        ]
+    )
+    app = VeriSight(
+        settings=Settings(gemini_api_key="offline-key", allow_llm_data_disclosure=True)
+    )
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=responses,
+    ) as generate:
+        result = app.investigate(
+            paths, case.question, max_steps=1, population=population
+        )
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.population == population
+    assert result.observations[0].result.rows == ((37.5,),)
+    assert result.observations[0].sql == sql
+    assert result.verified_claims[0].verification.status.value == "supported"
+    assert len(result.observations[0].repair_history) == int(repair)
+    serialized = to_jsonable(result)
+    assert isinstance(serialized, dict)
+    assert serialized["population"] == to_jsonable(population)
+    for call in generate.call_args_list:
+        assert "enrolment state" in call.args[0]
+        assert "active" in call.args[0]
+    state = InvestigationState(
+        question=case.question, analysis=result.analysis, population=population
+    )
+    assert (
+        "CALLER-ENFORCED RELATION POPULATION"
+        in InvestigationCompaction().investigator_prompt(state)
+    )
+    failure = state.add_failed_attempt(
+        FailedQueryAttempt("Fail", "QueryRuntimeError", "Failed")
+    )
+    assert failure.population == population
+    incomplete = InvestigationOrchestrator._incomplete(failure)
+    assert incomplete.population == population
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT COUNT(*) FROM observations",
+        "SELECT COUNT(*) FROM observations WHERE category = 'A' OR TRUE",
+        "WITH people AS (SELECT * FROM observations) SELECT COUNT(*) FROM people",
+        "SELECT COUNT(*) FROM observations a JOIN observations b ON a.value = b.value",
+        "SELECT COUNT(*) FROM observations UNION ALL SELECT COUNT(*) FROM observations",
+    ],
+)
+def test_relation_scope_survives_sql_shapes_without_source_mutation(sql: str) -> None:
+    from verisight.execution.context import PopulationFilter
+    from verisight.execution.engine import DuckDBExecutor
+
+    dataset = _dataset()
+    original = dataset.tables[0].data.copy(deep=True)
+    executor = DuckDBExecutor(
+        population=(PopulationFilter("observations", "category", ("A",)),)
+    )
+    result = executor.execute(dataset, sql)
+    assert all(row == (2,) for row in result.rows)
+    pd.testing.assert_frame_equal(dataset.tables[0].data, original)
+
+
+@pytest.mark.parametrize(
+    "relation,column,values",
+    [
+        ("missing", "category", ("A",)),
+        ("observations", "missing", ("A",)),
+        ("Observations", "category", ("A",)),
+        ("observations", "value", ("10",)),
+        ("observations", "value", (10,)),
+        ("observations", "category", (True,)),
+    ],
+)
+def test_invalid_population_is_rejected_before_planning(
+    relation: str, column: str, values: tuple[str | int | bool, ...]
+) -> None:
+    from verisight.execution.context import PopulationFilter
+    from verisight.execution.exceptions import QueryValidationError
+
+    client = StaticGenerationClient("SELECT 1")
+    with pytest.raises(QueryValidationError):
+        AnalyticalExecutionService(
+            _dataset(),
+            planner=GenerativeQueryPlanner(client),
+            population=(PopulationFilter(relation, column, values),),
+        )
+    assert client.prompts == []
+
+
+def test_scope_handles_literal_identifiers_nulls_booleans_and_decimal_binding() -> None:
+    from decimal import Decimal
+
+    from verisight.execution.context import PopulationFilter
+    from verisight.execution.engine import DuckDBExecutor
+    from verisight.execution.exceptions import QueryValidationError
+
+    dataset = _dataset()
+    table = dataset.tables[0]
+    table.data = pd.DataFrame(
+        {
+            'state."x': ["a' OR TRUE --", "other", None],
+            "enabled": pd.Series([True, False, pd.NA], dtype="boolean"),
+            "number": [1, 2, 3],
+            "amount": [Decimal("0.123456789012345678"), Decimal("0.2"), Decimal("0.3")],
+        }
+    )
+    population = (
+        PopulationFilter("observations", 'state."x', ("a' OR TRUE --",)),
+        PopulationFilter("observations", "enabled", (True,)),
+        PopulationFilter("observations", "number", (1, 2)),
+    )
+    executor = DuckDBExecutor(population=population)
+    assert executor.execute(dataset, "SELECT amount FROM observations").rows == (
+        (Decimal("0.123456789012345678"),),
+    )
+    assert executor.execute(
+        dataset, "SELECT COUNT(*) FROM observations WHERE enabled = false"
+    ).rows == ((0,),)
+    with pytest.raises(QueryValidationError):
+        executor.execute(dataset, "SELECT * FROM duckdb_views()")
+    # Revalidate mutable dataset identities and types on every execution.
+    table.data = table.data.drop(columns=['state."x'])
+    with pytest.raises(QueryValidationError):
+        executor.execute(dataset, "SELECT COUNT(*) FROM observations")
+
+
+def test_public_execute_and_ask_use_the_same_optional_scope(tmp_path: Path) -> None:
+    from verisight import VeriSight
+    from verisight.config import Settings
+    from verisight.execution.context import PopulationFilter
+
+    path = tmp_path / "observations.csv"
+    path.write_text("category,value\nA,10\nB,20\nA,30\n", encoding="utf-8")
+    client = StaticGenerationClient("SELECT COUNT(*) AS total FROM observations")
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        planner=GenerativeQueryPlanner(client),
+    )
+    population = (PopulationFilter("observations", "category", ("A",)),)
+    assert app.execute(
+        path, "SELECT COUNT(*) FROM observations", population=population
+    ).rows == ((2,),)
+    assert app.ask(path, "Count rows", population=population).rows == ((2,),)
+    assert "CALLER-ENFORCED RELATION POPULATION" in client.prompts[0]
+    assert app.execute(path, "SELECT COUNT(*) FROM observations").rows == ((3,),)
+
+
+def test_population_is_relation_specific_and_can_return_an_empty_population() -> None:
+    from verisight.execution.context import PopulationFilter
+    from verisight.execution.engine import DuckDBExecutor
+
+    dataset = _dataset()
+    table = dataset.tables[0]
+    comparison = LoadedTable(
+        name="comparison", data=table.data.copy(deep=True), source=table.source
+    )
+    dataset.tables.append(comparison)
+    scoped = DuckDBExecutor(
+        population=(PopulationFilter("observations", "category", ("A",)),)
+    )
+    assert scoped.execute(
+        dataset,
+        "SELECT (SELECT COUNT(*) FROM observations), (SELECT COUNT(*) FROM comparison)",
+    ).rows == ((2, 3),)
+    empty = DuckDBExecutor(
+        population=(PopulationFilter("observations", "category", ("absent",)),)
+    )
+    assert empty.execute(dataset, "SELECT COUNT(*) FROM observations").rows == ((0,),)
