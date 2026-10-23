@@ -4,6 +4,25 @@ from verisight.execution.formatting import QueryContextFormatter
 from verisight.execution.planning import QueryRequest
 from verisight.execution.prompt_budget import PromptBudget
 
+METRIC_SCALE_RULES = (
+    "Requested metric scale:\n"
+    "- Preserve the original question's requested units and scale in analytical "
+    "subquestions and final SQL result cells.\n"
+    "- For a requested percentage of a population, SQL must return "
+    "100.0 * numerator / NULLIF(denominator, 0), not the unscaled fraction. "
+    "Do not multiply values already expressed as percentages by 100 again.\n"
+    "- Keep an explicitly requested fraction or proportion unscaled. "
+    "The word rate alone does not establish a percentage scale.\n"
+    "- A percentage-point change is a difference between percentage values; "
+    "a relative percentage change divides the change by the reference value "
+    "and multiplies by 100. Do not substitute one for the other.\n"
+    "- A column alias or a value's magnitude does not establish its units. "
+    "Check the SQL expression and supplied semantics; a percentage can be "
+    "less than one, so do not infer scale from magnitude alone.\n"
+    "- A matching numerical claim does not make evidence in the wrong scale "
+    "an answer to the original question.\n"
+)
+
 
 class QueryPromptBuilder:
     """Build deterministic prompts for analytical SQL planning."""
@@ -81,7 +100,8 @@ class QueryPromptBuilder:
             "- Intermediate columns may accompany the final metric when useful. "
             "If the question requests only components or raw records, return "
             "those without inventing an additional metric.\n\n"
-            "Identifier quoting:\n"
+            + METRIC_SCALE_RULES
+            + "\nIdentifier quoting:\n"
             "- Use double quotes for relation names, column names, and aliases, "
             "including names containing spaces, punctuation, or SQL keywords.\n"
             "- Use the RELATION identifier from AVAILABLE DATA, not DISPLAY NAME.\n"

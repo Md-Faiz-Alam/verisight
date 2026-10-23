@@ -11,6 +11,7 @@ from verisight.execution.prompt_budget import (
     PromptBudget,
     PromptBudgetExceededError,
 )
+from verisight.execution.prompting import METRIC_SCALE_RULES
 from verisight.serialization import to_jsonable
 
 
@@ -50,6 +51,12 @@ class InvestigationCompaction:
             "the original question, or no useful query is possible.\n"
             "If evidence is compacted and completeness is uncertain, "
             "prefer a focused investigation question.\n"
+            + METRIC_SCALE_RULES
+            + "Before choosing finish, check that visible SQL evidence contains "
+            "the final metric in the original question's requested scale. "
+            "If only a differently scaled value is available, request the "
+            "missing metric when another analytical attempt is available; "
+            "otherwise explain the scale limitation.\n"
             + INVESTIGATION_REPETITION_RULES
             + "Do not generate SQL. Request exactly one analytical question.\n"
             "Return exactly one JSON object without Markdown fences:\n"

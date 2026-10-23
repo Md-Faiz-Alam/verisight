@@ -31,6 +31,8 @@ from verisight.execution.claim_verification import (
 )
 from verisight.execution.exceptions import InvestigationError
 from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation_compaction import InvestigationCompaction
 from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
@@ -786,3 +788,125 @@ def test_run_case_retains_exact_synthetic_evidence_for_failed_answers(
     assert verification["reason"]
     assert "synthetic-question-not-for-report" not in serialized
     assert "synthetic-conclusion-not-for-report" not in serialized
+
+
+@pytest.mark.parametrize(
+    "scale,claim_value,fraction_requested,outcome,verification",
+    [
+        ("100.0", "37.5", False, "correct_numeric", "supported"),
+        ("1.0", "0.375", False, "incorrect_numeric", "supported"),
+        ("1.0", "37.5", False, "unverified_answer", "contradicted"),
+        ("1.0", "0.375", True, "correct_numeric", "supported"),
+    ],
+    ids=["percentage-cell", "fraction-cell", "invented-conversion", "fraction-request"],
+)
+def test_percentage_scale_uses_real_sql_and_keeps_strict_scoring(
+    scale: str,
+    claim_value: str,
+    fraction_requested: bool,
+    outcome: str,
+    verification: str,
+) -> None:
+    case = CHALLENGE_CASES["education_entities"]
+    assert case.control_sql is not None
+    if fraction_requested:
+        case = replace(
+            case,
+            question=case.question.replace(
+                "what percentage completed?", "what fraction completed?"
+            ),
+            answer="0.375",
+            control_sql=case.control_sql.replace("100.0", "1.0"),
+        )
+    assert case.control_sql is not None
+    sql = case.control_sql.replace("100.0", scale)
+    responses = [
+        json.dumps(
+            {
+                "action": "investigate",
+                "reasoning": "Obtain the metric.",
+                "question": case.question,
+            }
+        ),
+        sql,
+        json.dumps(
+            {
+                "action": "finish",
+                "reasoning": "Inspect the available result.",
+                "question": None,
+            }
+        ),
+        json.dumps(
+            {
+                "conclusion": "The supplied metric is " + claim_value + ".",
+                "claims": [
+                    {
+                        "operation": "value",
+                        "expected": claim_value,
+                        "left": {
+                            "observation_index": 0,
+                            "row_index": 0,
+                            "column": "metric",
+                        },
+                        "right": None,
+                    }
+                ],
+            }
+        ),
+    ]
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=responses,
+    ) as generate:
+        report = run_case(
+            case,
+            Settings(gemini_api_key="offline-stub-key", allow_llm_data_disclosure=True),
+        )
+    assert generate.call_count == 4
+    for call in generate.call_args_list:
+        prompt = call.args[0]
+        assert "Requested metric scale:" in prompt
+        assert "100.0 * numerator / NULLIF(denominator, 0)" in prompt
+        assert "not the unscaled fraction" in prompt
+        assert "fraction or proportion unscaled" in prompt
+        assert "do not infer scale from magnitude alone" in prompt
+    first_prompt = generate.call_args_list[0].args[0]
+    assert "Before choosing finish, check that visible SQL evidence" in first_prompt
+    final_prompt = generate.call_args_list[-1].args[0]
+    assert "explain the limitation and omit that final-metric claim" in final_prompt
+    assert "Do not multiply or divide evidence in the conclusion" in final_prompt
+    assert report["outcome"] == outcome
+    assert report["verification_status"] == verification
+    baseline = report["control_baseline"]
+    assert isinstance(baseline, dict)
+    assert baseline["outcome"] == "correct_numeric"
+    evidence = report["synthetic_evidence"]
+    assert isinstance(evidence, dict)
+    observations = evidence["observations"]
+    assert isinstance(observations, list)
+    assert observations[0]["sql"] == sql
+    assert observations[0]["result"]["rows"] == [[37.5 if scale == "100.0" else 0.375]]
+    claims = evidence["verified_claims"]
+    assert isinstance(claims, list)
+    assert claims[0]["claim"]["expected"] == claim_value
+    assert claims[0]["verification"]["rounding_policy"] is None
+
+
+def test_compact_investigator_keeps_requested_metric_scale(
+    result: InvestigationResult,
+) -> None:
+    state = InvestigationState(
+        question="What percentage completed?",
+        analysis=result.analysis,
+        observations=result.observations,
+    )
+    prompt = InvestigationCompaction().investigator_prompt(state)
+    assert "Requested metric scale:" in prompt
+    assert "100.0 * numerator / NULLIF(denominator, 0)" in prompt
+    assert "not the unscaled fraction" in prompt
+    assert "fraction or proportion unscaled" in prompt
+    assert "percentage-point change" in prompt
+    assert "relative percentage change" in prompt
+    assert "do not infer scale from magnitude alone" in prompt
+    assert "Before choosing finish" in prompt
+    assert "otherwise explain the scale limitation" in prompt

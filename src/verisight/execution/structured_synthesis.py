@@ -23,6 +23,7 @@ from verisight.execution.gemini import (
 from verisight.execution.generation import TextGenerationClient
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.prompt_budget import PromptBudget
+from verisight.execution.prompting import METRIC_SCALE_RULES
 from verisight.execution.synthesis import StructuredSynthesis
 from verisight.serialization import to_jsonable
 
@@ -196,6 +197,13 @@ class StructuredInvestigationSynthesizer:
             "are ZERO-BASED positions in observations and result.rows. Column is an "
             "exact result.columns name. Reference numeric SQL cells only; do not "
             "reinterpret nulls, booleans, or numeric-looking strings as numbers.\n"
+            + METRIC_SCALE_RULES
+            + "If SQL contains only a fraction when the question requests a "
+            "percentage, or otherwise lacks the requested scale, explain the "
+            "limitation and omit that final-metric claim. Do not multiply or "
+            "divide evidence in the conclusion, append a percent sign to "
+            "relabel a fraction, or cite a differently scaled cell as the "
+            "requested answer.\n"
             "Preserve units, filters, time periods and analytical grain. A numerical "
             "match does not establish these semantics or verify the narrative.\n"
             "Do not execute queries. Do not use code fences or surrounding prose.\n"
