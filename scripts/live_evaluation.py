@@ -158,7 +158,8 @@ CHALLENGE_CASES = {
                 "E,2026,active,incomplete\nF,2026,active,incomplete\n"
                 "G,2026,active,incomplete\nH,2026,active,incomplete\n"
                 "I,2026,cancelled,complete\nJ,2026,active,\n"
-                "K,2025,active,complete\n",
+                "K,2025,active,complete\n"
+                "L,2026,waitlisted,complete\nM,2026,waitlisted,incomplete\n",
             ),
         ),
         question=(

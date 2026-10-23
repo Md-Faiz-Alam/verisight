@@ -138,7 +138,14 @@ The energy fixture has repeated approved reviews and distinct readings with
 equal output. Summing a raw join or deduplicating output values gives a wrong
 answer. The research fixture includes unknown mass/assay values, zero mass, and
 a rejected sample. The education fixture repeats one learner and includes a
-cancelled enrolment, an unknown outcome, and another cohort.
+cancelled enrolment, an unknown outcome, another cohort, and two waitlisted
+learners with known outcomes (one complete and one incomplete). Only the eight
+active learners with known outcomes are eligible, of whom three completed.
+Replacing the required active-only filter with merely not-cancelled includes
+the waitlisted learners and returns `100 * 4 / 10 = 40`, rather than `37.5`.
+This counterexample distinguishes explicit inclusion from exclusion. Earlier
+committed reports used the fixture without these two waitlisted rows; compare
+fixture definitions at each recorded revision before comparing results.
 
 Answers are specified before execution. Supplied control SQL must produce one
 finite numerical cell and match the independent answer before the model runs.

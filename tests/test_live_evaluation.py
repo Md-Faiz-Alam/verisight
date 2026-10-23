@@ -910,3 +910,56 @@ def test_compact_investigator_keeps_requested_metric_scale(
     assert "do not infer scale from magnitude alone" in prompt
     assert "Before choosing finish" in prompt
     assert "otherwise explain the scale limitation" in prompt
+
+
+@pytest.mark.parametrize(
+    "active_only,actual,outcome",
+    [(True, "37.5", "correct_numeric"), (False, "40", "incorrect_numeric")],
+    ids=["requested-active-population", "broader-not-cancelled-population"],
+)
+def test_education_fixture_distinguishes_inclusion_from_exclusion(
+    tmp_path: Path,
+    result: InvestigationResult,
+    active_only: bool,
+    actual: str,
+    outcome: str,
+) -> None:
+    case = CHALLENGE_CASES["education_entities"]
+    assert case.answer == "37.5"
+    assert case.control_sql is not None
+    sql = case.control_sql
+    if not active_only:
+        sql = sql.replace(
+            "\"enrolment state\" = 'active'",
+            "\"enrolment state\" != 'cancelled'",
+        )
+        assert sql != case.control_sql
+    paths = []
+    for filename, content in case.files:
+        path = tmp_path / filename
+        path.write_text(content, encoding="utf-8")
+        paths.append(path)
+    app = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
+    )
+    query_result = app.execute(paths, sql)
+    expected = Decimal(100) * 3 / 8 if active_only else Decimal(100) * 4 / 10
+    assert Decimal(actual) == expected
+    assert query_result.row_count == 1
+    assert Decimal(str(query_result.rows[0][0])) == expected
+    observation = QueryObservation(question=case.question, sql=sql, result=query_result)
+    investigation = replace(
+        result,
+        question=case.question,
+        conclusion="The completion percentage is " + actual + ".",
+        observations=(observation,),
+        generated_claims=(
+            NumericalClaim(
+                ClaimOperation.VALUE, Decimal(actual), EvidenceReference(0, 0, "metric")
+            ),
+        ),
+    )
+    scored = score_result(investigation, case.answer)
+    assert scored["verification_status"] == "supported"
+    assert scored["outcome"] == outcome
+    assert Decimal(str(scored["actual"])) == expected
