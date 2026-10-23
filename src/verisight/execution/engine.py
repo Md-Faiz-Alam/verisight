@@ -12,7 +12,11 @@ import duckdb
 import pandas as pd
 from pandas.api.types import is_object_dtype
 
-from verisight.execution.deadline import check_deadline, remaining_seconds
+from verisight.execution.deadline import (
+    InvestigationDeadlineExceeded,
+    check_deadline,
+    remaining_seconds,
+)
 from verisight.execution.exceptions import (
     QueryResultLimitError,
     QueryRuntimeError,
@@ -95,10 +99,11 @@ class DuckDBExecutor:
                     timed_out.set()
                     connection.interrupt()
 
-                timer = Timer(
-                    remaining_seconds(self._execution_timeout_seconds),
-                    interrupt_query,
+                timeout_seconds = remaining_seconds(self._execution_timeout_seconds)
+                shared_deadline_limited = (
+                    timeout_seconds < self._execution_timeout_seconds
                 )
+                timer = Timer(timeout_seconds, interrupt_query)
                 timer.daemon = True
                 timer.start()
 
@@ -135,6 +140,10 @@ class DuckDBExecutor:
                 except duckdb.Error as exc:
                     check_deadline()
                     if timed_out.is_set():
+                        if shared_deadline_limited:
+                            raise InvestigationDeadlineExceeded(
+                                "Investigation time budget was exhausted."
+                            ) from None
                         raise QueryTimeoutError(
                             "Analytical query exceeded the execution timeout "
                             f"of {self._execution_timeout_seconds:g} seconds."

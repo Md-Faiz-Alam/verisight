@@ -12,6 +12,7 @@ class QueryRequest:
 
     question: str
     context: QueryContext
+    original_question: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

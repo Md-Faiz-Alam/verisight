@@ -80,7 +80,7 @@ class AnalyticalExecutionService:
             query,
         )
 
-    def plan(self, question: str) -> QueryPlan:
+    def plan(self, question: str, *, original_question: str | None = None) -> QueryPlan:
         """Plan an analytical query from a natural-language question."""
 
         if not question.strip():
@@ -92,6 +92,7 @@ class AnalyticalExecutionService:
         request = QueryRequest(
             question=question,
             context=self._context,
+            original_question=original_question,
         )
 
         plan = self._planner.plan(request)
@@ -104,10 +105,12 @@ class AnalyticalExecutionService:
 
         return plan
 
-    def run(self, question: str) -> QueryExecution:
+    def run(
+        self, question: str, *, original_question: str | None = None
+    ) -> QueryExecution:
         """Plan and execute an analytical question with provenance."""
 
-        plan = self.plan(question)
+        plan = self.plan(question, original_question=original_question)
 
         try:
             result = self.execute(plan.sql)
@@ -116,6 +119,7 @@ class AnalyticalExecutionService:
                 question=question,
                 failed_plan=plan,
                 error=exc,
+                original_question=original_question,
             )
 
         return QueryExecution(
@@ -134,6 +138,7 @@ class AnalyticalExecutionService:
         question: str,
         failed_plan: QueryPlan,
         error: QueryRuntimeError,
+        original_question: str | None,
     ) -> QueryExecution:
         """Repair one failed runtime query and execute the replacement."""
 
@@ -145,6 +150,7 @@ class AnalyticalExecutionService:
             failed_sql=failed_plan.sql,
             error=str(error),
             context=self._context,
+            original_question=original_question,
         )
 
         repaired_plan: QueryPlan | None = None

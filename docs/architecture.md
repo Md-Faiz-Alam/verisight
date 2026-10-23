@@ -64,6 +64,19 @@ external access and automatic extension loading/installation. Configured limits
 cover result rows, query execution time, memory, and temporary storage.
 These controls are not a complete deployment security assessment.
 
+The orchestrator passes its original question with each analytical subquestion.
+`QueryRequest.original_question` and `QueryRepairRequest.original_question` are
+optional context fields; `question` remains the current evidence request and
+plan identity. Planning and runtime repair receive the same original context.
+Prompts distinguish explicit inclusions from exclusions and require checking the
+population actually queried before completion or synthesis. This preserves
+context; it does not deterministically validate SQL semantics.
+
+`AnalyticalQueryRunner.run` and service `plan`/`run` accept an optional keyword
+`original_question`. Custom runners must accept that keyword. Existing calls
+without it remain valid, and direct `ask()` uses its question as prompt context.
+No mutable per-investigation context is stored on the execution service.
+
 Planner and repair prompts specify double-quoted identifiers, exact supplied
 names, and the distinction between relation identifiers and display names.
 Quoting does not authorize an unavailable relation.

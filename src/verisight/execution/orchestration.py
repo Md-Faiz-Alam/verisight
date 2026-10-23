@@ -181,7 +181,9 @@ class InvestigationOrchestrator:
 
                 with capture_query_repairs() as repairs:
                     try:
-                        execution = self._execution_service.run(investigation_question)
+                        execution = self._execution_service.run(
+                            investigation_question, original_question=state.question
+                        )
                     except InvestigationDeadlineExceeded:
                         state = state.add_failed_attempt(
                             FailedQueryAttempt(

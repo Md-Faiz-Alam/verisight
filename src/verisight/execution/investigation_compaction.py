@@ -11,7 +11,7 @@ from verisight.execution.prompt_budget import (
     PromptBudget,
     PromptBudgetExceededError,
 )
-from verisight.execution.prompting import METRIC_SCALE_RULES
+from verisight.execution.prompting import ANALYTICAL_SCOPE_RULES, METRIC_SCALE_RULES
 from verisight.serialization import to_jsonable
 
 
@@ -51,6 +51,7 @@ class InvestigationCompaction:
             "the original question, or no useful query is possible.\n"
             "If evidence is compacted and completeness is uncertain, "
             "prefer a focused investigation question.\n"
+            + ANALYTICAL_SCOPE_RULES
             + METRIC_SCALE_RULES
             + "Before choosing finish, check that visible SQL evidence contains "
             "the final metric in the original question's requested scale. "

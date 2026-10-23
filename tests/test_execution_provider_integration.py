@@ -504,8 +504,10 @@ def test_shared_deadline_preserves_state_and_stops_later_stages(
     )
     run = service.run
 
-    def run_with_expiry(question: str) -> object:
-        execution = run(question)
+    def run_with_expiry(
+        question: str, *, original_question: str | None = None
+    ) -> object:
+        execution = run(question, original_question=original_question)
         if stage == "query":
             clock[0] = 11
         return execution
@@ -725,3 +727,58 @@ def test_shared_deadline_interrupts_real_sql_without_repair() -> None:
     ):
         service.run("Synthetic bounded SQL test")
     repair.repair.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "investigation_seconds", [0.1, 40.0], ids=["shared-deadline", "query-timeout"]
+)
+def test_sql_interrupt_retains_the_timer_budget_source(
+    monkeypatch: pytest.MonkeyPatch, investigation_seconds: float
+) -> None:
+    """Classify fired timers even before a clock recheck observes expiry."""
+    from unittest.mock import MagicMock, patch
+
+    import duckdb
+
+    from verisight.execution.deadline import (
+        InvestigationDeadlineExceeded,
+        investigation_deadline,
+    )
+    from verisight.execution.engine import DuckDBExecutor
+    from verisight.execution.exceptions import QueryTimeoutError
+
+    monkeypatch.setattr("verisight.execution.deadline.monotonic", lambda: 0.0)
+    executor = DuckDBExecutor(execution_timeout_seconds=30)
+    connection = MagicMock()
+    connection.execute.side_effect = duckdb.InterruptException("Synthetic interrupt")
+    context = MagicMock()
+    context.__enter__.return_value = connection
+    expected_error = (
+        InvestigationDeadlineExceeded
+        if investigation_seconds < 30
+        else QueryTimeoutError
+    )
+
+    with (
+        patch.object(executor, "_connection", return_value=context),
+        patch("verisight.execution.engine.Timer") as timer,
+        investigation_deadline(investigation_seconds),
+    ):
+
+        def fire_timer() -> None:
+            timer.call_args.args[1]()
+
+        timer.return_value.start.side_effect = fire_timer
+        with pytest.raises(expected_error) as caught:
+            executor.execute(_dataset(), "SELECT 1")
+
+    assert timer.call_args.args[0] == min(investigation_seconds, 30)
+    connection.interrupt.assert_called_once_with()
+    timer.return_value.cancel.assert_called_once_with()
+    timer.return_value.join.assert_called_once_with()
+    context.__exit__.assert_called_once()
+    if investigation_seconds < 30:
+        assert caught.value.__cause__ is None
+        assert caught.value.__suppress_context__
+    else:
+        assert "30 seconds" in str(caught.value)

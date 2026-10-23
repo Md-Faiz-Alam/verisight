@@ -10,7 +10,7 @@ from verisight.execution.planning import QueryPlan
 class AnalyticalQueryService(Protocol):
     """Contract for complete analytical query services."""
 
-    def plan(self, question: str) -> QueryPlan:
+    def plan(self, question: str, *, original_question: str | None = None) -> QueryPlan:
         """Plan an analytical query from a natural-language question."""
         ...
 
@@ -18,7 +18,9 @@ class AnalyticalQueryService(Protocol):
         """Execute an analytical query."""
         ...
 
-    def run(self, question: str) -> QueryExecution:
+    def run(
+        self, question: str, *, original_question: str | None = None
+    ) -> QueryExecution:
         """Plan and execute an analytical question with provenance."""
         ...
 
@@ -26,6 +28,8 @@ class AnalyticalQueryService(Protocol):
 class AnalyticalQueryRunner(Protocol):
     """Contract for provenance-aware analytical query execution."""
 
-    def run(self, question: str) -> QueryExecution:
+    def run(
+        self, question: str, *, original_question: str | None = None
+    ) -> QueryExecution:
         """Plan and execute an analytical question with provenance."""
         ...

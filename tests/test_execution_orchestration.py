@@ -60,7 +60,9 @@ class StubExecutionService:
     def __init__(self) -> None:
         self.run_questions: list[str] = []
 
-    def run(self, question: str) -> QueryExecution:
+    def run(
+        self, question: str, *, original_question: str | None = None
+    ) -> QueryExecution:
         self.run_questions.append(question)
 
         return QueryExecution(
@@ -85,12 +87,14 @@ class FailingExecutionService(StubExecutionService):
         super().__init__()
         self._failures = failures
 
-    def run(self, question: str) -> QueryExecution:
+    def run(
+        self, question: str, *, original_question: str | None = None
+    ) -> QueryExecution:
         if question in self._failures:
             self.run_questions.append(question)
             raise self._failures[question]
 
-        return super().run(question)
+        return super().run(question, original_question=original_question)
 
 
 class StubInvestigationSynthesizer:
@@ -524,7 +528,9 @@ def test_investigation_preserves_executed_plan_provenance() -> None:
         def __init__(self) -> None:
             self.run_questions: list[str] = []
 
-        def run(self, question: str) -> QueryExecution:
+        def run(
+            self, question: str, *, original_question: str | None = None
+        ) -> QueryExecution:
             self.run_questions.append(question)
 
             return QueryExecution(

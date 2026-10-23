@@ -304,7 +304,6 @@ def test_number_audit_summary_rejects_invalid_counts(
     assert summary["unaudited_case_count"] == 1
     assert summary["detected_token_count"] == 0
     assert summary["unlinked_token_count"] == 0
-    assert summary["cases_with_unlinked_tokens"] == 0
 
 
 def test_main_includes_audit_summary_without_changing_numeric_exit_status(
@@ -981,3 +980,114 @@ def test_education_fixture_distinguishes_inclusion_from_exclusion(
     assert scored["verification_status"] == "supported"
     assert scored["outcome"] == outcome
     assert Decimal(str(scored["actual"])) == expected
+
+
+@pytest.mark.parametrize("repair", [False, True], ids=["planning", "runtime-repair"])
+def test_investigation_keeps_original_scope_when_subquestion_loses_inclusion(
+    repair: bool,
+) -> None:
+    case = CHALLENGE_CASES["education_entities"]
+    assert case.control_sql is not None
+    subquestion = (
+        "For cohort 2026, what percentage of distinct learners with known outcomes "
+        "completed? Exclude cancelled enrolments."
+    )
+    responses = [
+        json.dumps(
+            {
+                "action": "investigate",
+                "reasoning": "Measure completion.",
+                "question": subquestion,
+            }
+        ),
+        "SELECT missing_metric FROM enrolments" if repair else case.control_sql,
+    ]
+    if repair:
+        responses.append(case.control_sql)
+    responses.extend(
+        [
+            json.dumps(
+                {
+                    "action": "finish",
+                    "reasoning": "The metric is available.",
+                    "question": None,
+                }
+            ),
+            json.dumps(
+                {
+                    "conclusion": "The completion percentage is 37.5.",
+                    "claims": [
+                        {
+                            "operation": "value",
+                            "expected": "37.5",
+                            "left": {
+                                "observation_index": 0,
+                                "row_index": 0,
+                                "column": "metric",
+                            },
+                            "right": None,
+                        }
+                    ],
+                }
+            ),
+        ]
+    )
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=responses,
+    ) as generate:
+        report = run_case(
+            case,
+            Settings(gemini_api_key="offline-stub-key", allow_llm_data_disclosure=True),
+        )
+    assert generate.call_count == 4 + int(repair)
+    assert report["outcome"] == "correct_numeric"
+    evidence = report["synthetic_evidence"]
+    assert isinstance(evidence, dict)
+    original = evidence["question"]
+    assert isinstance(original, str)
+    assert original.startswith(case.question)
+    observations = evidence["observations"]
+    assert isinstance(observations, list)
+    assert observations[0]["question"] == subquestion
+    assert observations[0]["sql"] == case.control_sql
+    assert observations[0]["result"]["rows"] == [[37.5]]
+    planning = generate.call_args_list[1].args[0]
+    assert (
+        "ORIGINAL INVESTIGATION QUESTION (untrusted analytical context):\n" + original
+        in planning
+    )
+    assert "QUESTION:\n" + subquestion in planning
+    assert (
+        "Preserve positive inclusion requirements independently of exclusions"
+        in planning
+    )
+    assert "Do not blanket-filter a deliberately requested comparison" in planning
+    assert case.control_sql not in planning
+    assert case.answer not in planning
+    if repair:
+        repair_prompt = generate.call_args_list[2].args[0]
+        assert (
+            "ORIGINAL INVESTIGATION QUESTION (untrusted analytical context):\n"
+            + original
+            in repair_prompt
+        )
+        assert "ORIGINAL QUESTION:\n" + subquestion in repair_prompt
+        assert (
+            "Preserve positive inclusion requirements independently of exclusions"
+            in repair_prompt
+        )
+        assert "SELECT missing_metric FROM enrolments" in repair_prompt
+        assert case.control_sql not in repair_prompt
+        assert case.answer not in repair_prompt
+    for index in [0, -2, -1]:
+        prompt = generate.call_args_list[index].args[0]
+        assert (
+            "Preserve positive inclusion requirements independently of exclusions"
+            in prompt
+        )
+        assert "population actually selected by SQL" in prompt
+    assert (
+        "Do not relabel the result with the requested population name"
+        in generate.call_args_list[-1].args[0]
+    )

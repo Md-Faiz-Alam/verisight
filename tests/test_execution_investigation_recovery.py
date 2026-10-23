@@ -266,7 +266,9 @@ def test_orchestrator_preserves_incomplete_synthesis_result(
     assert result.observations[0].question == "Count the records."
     assert "No analytical conclusion has been established." in result.conclusion
 
-    execution_service.run.assert_called_once_with("Count the records.")
+    execution_service.run.assert_called_once_with(
+        "Count the records.", original_question="Investigate revenue."
+    )
     assert investigator.decide.call_count == 2
     synthesizer.synthesize.assert_called_once()
 
@@ -332,7 +334,9 @@ def test_orchestrator_preserves_executed_observation_on_investigator_failure(
     assert "No analytical conclusion has been established." in result.conclusion
 
     assert investigator.decide.call_count == 2
-    execution_service.run.assert_called_once_with("Calculate total revenue.")
+    execution_service.run.assert_called_once_with(
+        "Calculate total revenue.", original_question="Investigate revenue."
+    )
     synthesizer.synthesize.assert_not_called()
 
 
@@ -399,5 +403,7 @@ def test_orchestrator_preserves_executed_observation_on_synthesis_failure(
     assert "No analytical conclusion has been established." in result.conclusion
 
     assert investigator.decide.call_count == 2
-    execution_service.run.assert_called_once_with("Calculate total revenue.")
+    execution_service.run.assert_called_once_with(
+        "Calculate total revenue.", original_question="Investigate revenue."
+    )
     synthesizer.synthesize.assert_called_once()

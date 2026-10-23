@@ -15,6 +15,7 @@ class QueryRepairRequest:
     failed_sql: str
     error: str
     context: QueryContext
+    original_question: str | None = None
 
 
 class QueryRepairer(Protocol):

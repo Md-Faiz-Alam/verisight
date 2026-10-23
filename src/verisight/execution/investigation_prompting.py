@@ -5,7 +5,7 @@ from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
 from verisight.execution.prompt_budget import PromptBudget
-from verisight.execution.prompting import METRIC_SCALE_RULES
+from verisight.execution.prompting import ANALYTICAL_SCOPE_RULES, METRIC_SCALE_RULES
 
 INVESTIGATION_REPETITION_RULES = (
     "- Do not repeat any previously attempted analytical question, whether it "
@@ -118,6 +118,7 @@ class InvestigationPromptBuilder:
             "dataset structure, and executed evidence. Do not use a "
             "domain-specific checklist or assume that particular analyses "
             "are required for every dataset.\n\n"
+            + ANALYTICAL_SCOPE_RULES
             + METRIC_SCALE_RULES
             + "- Before choosing finish, check that visible SQL evidence contains "
             "the final metric in the original question's requested scale. "
