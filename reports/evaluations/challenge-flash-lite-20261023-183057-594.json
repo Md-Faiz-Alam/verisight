@@ -1,0 +1,334 @@
+{
+  "schema_version": 2,
+  "timestamp_utc": "2026-10-23T13:01:05.331223+00:00",
+  "elapsed_seconds": 52.818,
+  "revision": {
+    "commit": "fc77f4b5b86f7ce2f79efd35e3e971e46a7cb52a",
+    "tracked_changes": false,
+    "status_scope": "tracked_files_only"
+  },
+  "python_version": "3.11.9",
+  "model": "gemini-3.1-flash-lite",
+  "max_steps_per_case": 1,
+  "provider_retries": 1,
+  "run_settings": {
+    "allow_llm_data_disclosure": true,
+    "request_timeout_seconds": 60.0,
+    "max_investigation_seconds": 120.0,
+    "retry_base_delay_seconds": 1.0,
+    "max_upload_size_mb": 100,
+    "max_query_execution_seconds": 5.0,
+    "max_query_result_rows": 20,
+    "max_query_result_bytes": 1048576,
+    "max_query_memory_mb": 512,
+    "max_query_temp_storage_mb": 1024
+  },
+  "generation_telemetry_scope": "client_calls_observed_during_case",
+  "scoring_scope": "single_claim_numeric_answer_only",
+  "limitations": "No narrative or general semantic certification. No-claims responses are not automatically proven abstentions. These are known development fixtures, not a held-out generalization benchmark.",
+  "case_count": 3,
+  "outcome_counts": {
+    "correct_numeric": 2,
+    "incorrect_numeric": 1
+  },
+  "number_audit_summary": {
+    "audited_case_count": 3,
+    "unaudited_case_count": 0,
+    "detected_token_count": 4,
+    "unlinked_token_count": 2,
+    "cases_with_unlinked_tokens": 1
+  },
+  "results": {
+    "energy_grain": {
+      "expected": "30",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 1,
+      "unlinked_number_count": 0,
+      "narrative_digit_coverage": {
+        "total_digit_count": 3,
+        "parsed_digit_count": 3,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "supported",
+      "actual": "30.0",
+      "outcome": "correct_numeric",
+      "synthetic_evidence": {
+        "observations": [
+          {
+            "sql": "SELECT SUM(\"g\".\"output kWh\") FROM \"generation\" AS \"g\" WHERE \"g\".\"record type\" != 'test' AND \"g\".\"reading id\" IN (SELECT \"r\".\"reading id\" FROM \"reviews\" AS \"r\" WHERE \"r\".\"decision\" = 'approved')",
+            "result": {
+              "columns": [
+                "sum(g.\"output kWh\")"
+              ],
+              "rows": [
+                [
+                  30.0
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "30.0",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "sum(g.\"output kWh\")"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "30.0",
+              "expected": "30.0",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "control_baseline": {
+        "kind": "supplied_sql_control",
+        "expected": "30",
+        "actual": "30.0",
+        "outcome": "correct_numeric",
+        "elapsed_seconds": 0.359
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 3.28,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 5.322,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 6.557,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 3.616,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 19.22
+    },
+    "research_weighted": {
+      "expected": "2.5",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 1,
+      "unlinked_number_count": 0,
+      "narrative_digit_coverage": {
+        "total_digit_count": 2,
+        "parsed_digit_count": 2,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "supported",
+      "actual": "2.5",
+      "outcome": "correct_numeric",
+      "synthetic_evidence": {
+        "observations": [
+          {
+            "sql": "SELECT SUM(\"mass g\" * \"assay pct\") / SUM(\"mass g\") AS \"weighted_average_assay\" FROM \"assays\" WHERE \"review state\" = 'accepted' AND \"mass g\" > 0 AND \"assay pct\" IS NOT NULL",
+            "result": {
+              "columns": [
+                "weighted_average_assay"
+              ],
+              "rows": [
+                [
+                  2.5
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "2.5",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "weighted_average_assay"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "2.5",
+              "expected": "2.5",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "control_baseline": {
+        "kind": "supplied_sql_control",
+        "expected": "2.5",
+        "actual": "2.5",
+        "outcome": "correct_numeric",
+        "elapsed_seconds": 0.045
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 5.365,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.297,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 2.797,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 1.895,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 12.448
+    },
+    "education_entities": {
+      "expected": "37.5",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 2,
+      "unlinked_number_count": 2,
+      "narrative_digit_coverage": {
+        "total_digit_count": 7,
+        "parsed_digit_count": 7,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "supported",
+      "actual": "0.375",
+      "outcome": "incorrect_numeric",
+      "synthetic_evidence": {
+        "observations": [
+          {
+            "sql": "SELECT\n  CAST(COUNT(DISTINCT CASE WHEN \"outcome\" = 'complete' THEN \"learner id\" END) AS DOUBLE) / NULLIF(COUNT(DISTINCT CASE WHEN \"outcome\" IN ('complete', 'incomplete') THEN \"learner id\" END), 0) AS \"completion_rate\"\nFROM \"enrolments\"\nWHERE \"cohort\" = 2026 AND \"enrolment state\" != 'cancelled'",
+            "result": {
+              "columns": [
+                "completion_rate"
+              ],
+              "rows": [
+                [
+                  0.375
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "0.375",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "completion_rate"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "0.375",
+              "expected": "0.375",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "control_baseline": {
+        "kind": "supplied_sql_control",
+        "expected": "37.5",
+        "actual": "37.5",
+        "outcome": "correct_numeric",
+        "elapsed_seconds": 0.063
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 11.834,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.084,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 2.342,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 4.746,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 21.15
+    }
+  }
+}
