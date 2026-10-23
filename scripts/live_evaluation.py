@@ -318,8 +318,14 @@ def run_case(case: Case, settings: Settings) -> dict[str, object]:
                 report = score_result(result, case.answer)
                 report["synthetic_evidence"] = to_jsonable(
                     {
+                        "question": result.question,
+                        "conclusion": result.conclusion,
                         "observations": [
-                            {"sql": item.sql, "result": item.result}
+                            {
+                                "question": item.question,
+                                "sql": item.sql,
+                                "result": item.result,
+                            }
                             for item in result.observations
                         ],
                         "verified_claims": result.verified_claims,

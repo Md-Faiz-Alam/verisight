@@ -304,6 +304,7 @@ def test_number_audit_summary_rejects_invalid_counts(
     assert summary["unaudited_case_count"] == 1
     assert summary["detected_token_count"] == 0
     assert summary["unlinked_token_count"] == 0
+    assert summary["cases_with_unlinked_tokens"] == 0
 
 
 def test_main_includes_audit_summary_without_changing_numeric_exit_status(
@@ -735,7 +736,7 @@ def test_run_case_retains_exact_synthetic_evidence_for_failed_answers(
     actual = Decimal("2.500000000000000001")
     sql = "SELECT measured_value AS metric FROM assays"
     observation = QueryObservation(
-        question="synthetic-question-not-for-report",
+        question="synthetic-subquestion-for-report",
         sql=sql,
         result=QueryResult(columns=("metric",), rows=((actual,),)),
     )
@@ -746,7 +747,7 @@ def test_run_case_retains_exact_synthetic_evidence_for_failed_answers(
     )
     investigation = replace(
         result,
-        conclusion="synthetic-conclusion-not-for-report",
+        conclusion="synthetic-conclusion-for-report",
         observations=(observation,),
         generated_claims=(claim,),
         status=InvestigationStatus.INCOMPLETE
@@ -765,9 +766,20 @@ def test_run_case_retains_exact_synthetic_evidence_for_failed_answers(
     assert saved["outcome"] == ("incomplete" if incomplete else "unverified_answer")
     assert saved["control_baseline"]["outcome"] == "correct_numeric"
     evidence = saved["synthetic_evidence"]
-    assert set(evidence) == {"observations", "verified_claims"}
+    assert set(evidence) == {
+        "question",
+        "conclusion",
+        "observations",
+        "verified_claims",
+    }
+    assert evidence["question"] == investigation.question
+    assert evidence["conclusion"] == "synthetic-conclusion-for-report"
     assert evidence["observations"] == [
-        {"sql": sql, "result": {"columns": ["metric"], "rows": [[str(actual)]]}}
+        {
+            "question": "synthetic-subquestion-for-report",
+            "sql": sql,
+            "result": {"columns": ["metric"], "rows": [[str(actual)]]},
+        }
     ]
     item = evidence["verified_claims"][0]
     assert item["claim"]["operation"] == "value"
@@ -786,8 +798,11 @@ def test_run_case_retains_exact_synthetic_evidence_for_failed_answers(
         "contradicted" if column == "metric" else "unverifiable"
     )
     assert verification["reason"]
-    assert "synthetic-question-not-for-report" not in serialized
-    assert "synthetic-conclusion-not-for-report" not in serialized
+    summary = score_result(investigation, "2.5")
+    assert "question" not in summary
+    assert "conclusion" not in summary
+    assert "synthetic-subquestion-for-report" not in json.dumps(summary)
+    assert "synthetic-conclusion-for-report" not in json.dumps(summary)
 
 
 @pytest.mark.parametrize(
@@ -884,6 +899,9 @@ def test_percentage_scale_uses_real_sql_and_keeps_strict_scoring(
     assert isinstance(evidence, dict)
     observations = evidence["observations"]
     assert isinstance(observations, list)
+    assert str(evidence["question"]).startswith(case.question)
+    assert evidence["conclusion"] == "The supplied metric is " + claim_value + "."
+    assert observations[0]["question"] == case.question
     assert observations[0]["sql"] == sql
     assert observations[0]["result"]["rows"] == [[37.5 if scale == "100.0" else 0.375]]
     claims = evidence["verified_claims"]

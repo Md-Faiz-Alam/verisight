@@ -160,8 +160,14 @@ above is the independent oracle. The control SQL, its result, and the oracle are
 not inserted into the investigator's question or observations.
 
 When an investigation returns a result, `run_case()` also saves
-`synthetic_evidence`: ordered observations with SQL and result rows, plus the
-claims, their evidence references, and verification values/verdicts/reasons.
+`synthetic_evidence`: the investigation question and generated conclusion,
+ordered observations with their analytical questions, SQL, and result rows,
+plus claims, evidence references, and verification values/verdicts/reasons.
+Compare the investigation question, observation question, and SQL to locate
+where requested population, units, or other constraints were lost. The
+conclusion permits inspection of unlinked narrative tokens; its inclusion does
+not certify the prose. The observation question is the validated plan question;
+it is not a complete trace of investigator reasoning or failed decisions.
 Decimal values remain strings. The report's top-level `expected` is the fixture
 oracle; a verification's `expected` is the model's claimed value. Inspect both
 before deciding whether a failure concerns query semantics, references, or
@@ -169,10 +175,10 @@ synthesis. Incomplete results retain whatever evidence and claims are available.
 Escaping exceptions before a result exists cannot supply this evidence.
 
 This content-bearing evidence is confined to the synthetic runner; the reusable
-`score_result()` stays a summary without SQL or claim details. No raw conclusion,
-observation question, full analysis, prompt, or credential is copied into the
-evidence field. Generated SQL and result cells still require review before
-publication. Do not repurpose this reporting path for private datasets without
+`score_result()` stays a summary without questions, conclusion, SQL, or claim
+details. Full analysis, prompts, credentials, and raw provider errors are not
+added to the evidence field. Generated questions, conclusion, SQL, and result
+cells still require review before publication. Do not repurpose this reporting path for private datasets without
 an explicit disclosure policy. Older saved reports cannot recover omitted values.
 
 The live path uses default planning, investigation, and structured synthesis.
