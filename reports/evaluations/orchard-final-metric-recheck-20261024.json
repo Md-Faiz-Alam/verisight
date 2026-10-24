@@ -1,0 +1,674 @@
+{
+  "record_type": "reviewed_orchard_cli_recheck",
+  "run_record": {
+    "record_type": "orchard_cli_recheck",
+    "timestamp_utc": "2026-10-24T07:19:11.460338+00:00",
+    "tested_revision": "78adc5e7cbfa19abf53c53793c32f35c7f515cdf",
+    "original_batch_revision": "46da4c9c1b57a6ee6fa41c9f30b9b664596f1011",
+    "frozen_manifest_sha256": "863981dd9fec757bf90085236fa4d4a36bf9b965a50fb0401c9743d71b0c4675",
+    "matched_manifest_newlines": [
+      "CRLF"
+    ],
+    "question": "What is the mass-weighted mean reading among accepted orchard samples? Include only samples with strictly positive mass and a non-missing reading. Use the same eligible samples in both the numerator and denominator. Return only this metric.",
+    "fixture": {
+      "orchard_samples.csv": "sample_id,review,mass,reading\n1,accepted,1,2\n2,accepted,3,3\n3,rejected,100,99\n4,accepted,0,500\n5,accepted,-2,100\n6,accepted,5,\n"
+    },
+    "expected": "2.75",
+    "model": "gemini-3.1-flash-lite",
+    "max_steps": 1,
+    "max_investigation_seconds": 120,
+    "request_timeout_seconds": 60,
+    "status": "finished",
+    "limitations": "One known development-case recheck. Both the synthesis linkage guard and one-attempt task routing changed since the original batch. A single run cannot isolate their effects or model variation.",
+    "cli_exit_code": 0,
+    "elapsed_seconds": 11.821
+  },
+  "original_export_sha256": "9df25889547a8916d6b52410177dddb4982243acf605737db8058d51f0720370",
+  "independent_expected_answer": "2.75",
+  "review_notes": "For this fixture, SQL computes the weighted mean in the final result cell and applies accepted status, strictly positive mass, and non-missing reading to both sums. The VALUE claim references that cell and is supported at zero tolerance.",
+  "limitations": "One known synthetic development-case recheck. Both synthesis linkage validation and one-attempt task routing changed since the original batch; model variation is not controlled. This does not establish general analytical reliability.",
+  "export_notes": "Only request.paths in the embedded CLI report was replaced with portable synthetic paths. Original files and logs remain in the local temporary directory. Original batch is unchanged.",
+  "cli_report": {
+    "schema_version": 1,
+    "report_type": "local_cli",
+    "timestamp_utc": "2026-10-24T07:19:23.033536+00:00",
+    "limitations": "Workflow completion is not analytical correctness. Numerical support checks referenced values only. Population filters do not verify business meaning or provide privacy isolation. Narrative meaning is unverified. Inspect population, grain, denominator, time period, units, and SQL.",
+    "kind": "investigation",
+    "request": {
+      "paths": [
+        "synthetic/orchard_weighted/orchard_samples.csv"
+      ],
+      "question": "What is the mass-weighted mean reading among accepted orchard samples? Include only samples with strictly positive mass and a non-missing reading. Use the same eligible samples in both the numerator and denominator. Return only this metric.",
+      "population": [],
+      "population_mode": "unscoped",
+      "model": "gemini-3.1-flash-lite",
+      "max_steps": 1,
+      "max_investigation_seconds": 120.0,
+      "request_timeout_seconds": 60.0,
+      "provider_retries": 1,
+      "max_query_result_rows": 20,
+      "max_query_result_bytes": 1048576,
+      "max_query_execution_seconds": 30.0,
+      "max_query_memory_mb": 512,
+      "max_query_temp_storage_mb": 1024
+    },
+    "workflow_status": "complete",
+    "population": [],
+    "profile": {
+      "information_scope": "original_loaded_dataset",
+      "summary": {
+        "table_count": 1,
+        "total_row_count": 6,
+        "total_column_count": 4,
+        "issue_count": 1,
+        "info_issue_count": 0,
+        "warning_issue_count": 1,
+        "error_issue_count": 0,
+        "table_issue_count": 0,
+        "column_issue_count": 1,
+        "affected_relation_names": [
+          "orchard_samples"
+        ]
+      },
+      "schema": {
+        "tables": [
+          {
+            "name": "orchard_samples",
+            "relation_name": "orchard_samples",
+            "row_count": 6,
+            "column_count": 4,
+            "columns": [
+              {
+                "name": "sample_id",
+                "physical_dtype": "int64",
+                "logical_type": "integer",
+                "nullable": false,
+                "missing_count": 0
+              },
+              {
+                "name": "review",
+                "physical_dtype": "object",
+                "logical_type": "string",
+                "nullable": false,
+                "missing_count": 0
+              },
+              {
+                "name": "mass",
+                "physical_dtype": "int64",
+                "logical_type": "integer",
+                "nullable": false,
+                "missing_count": 0
+              },
+              {
+                "name": "reading",
+                "physical_dtype": "Int64",
+                "logical_type": "integer",
+                "nullable": true,
+                "missing_count": 1
+              }
+            ]
+          }
+        ]
+      },
+      "profiles": {
+        "tables": [
+          {
+            "name": "orchard_samples",
+            "relation_name": "orchard_samples",
+            "row_count": 6,
+            "column_count": 4,
+            "columns": [
+              {
+                "name": "sample_id",
+                "logical_type": "integer",
+                "row_count": 6,
+                "non_missing_count": 6,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 6,
+                "distinct_ratio": 1.0,
+                "minimum": 1,
+                "maximum": 6,
+                "numeric_statistics": {
+                  "minimum": 1,
+                  "maximum": 6,
+                  "mean": 3.5,
+                  "median": 3.5,
+                  "standard_deviation": 1.8708286933869707,
+                  "non_finite_count": 0,
+                  "non_finite_ratio": 0.0
+                },
+                "text_statistics": null,
+                "datetime_statistics": null
+              },
+              {
+                "name": "review",
+                "logical_type": "string",
+                "row_count": 6,
+                "non_missing_count": 6,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 2,
+                "distinct_ratio": 0.3333333333333333,
+                "minimum": null,
+                "maximum": null,
+                "numeric_statistics": null,
+                "text_statistics": {
+                  "minimum_length": 8,
+                  "maximum_length": 8,
+                  "mean_length": 8.0,
+                  "empty_count": 0,
+                  "empty_ratio": 0.0,
+                  "most_frequent_value": "accepted",
+                  "most_frequent_count": 5,
+                  "most_frequent_ratio": 0.8333333333333334
+                },
+                "datetime_statistics": null
+              },
+              {
+                "name": "mass",
+                "logical_type": "integer",
+                "row_count": 6,
+                "non_missing_count": 6,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 6,
+                "distinct_ratio": 1.0,
+                "minimum": -2,
+                "maximum": 100,
+                "numeric_statistics": {
+                  "minimum": -2,
+                  "maximum": 100,
+                  "mean": 17.833333333333332,
+                  "median": 2.0,
+                  "standard_deviation": 40.32575686415156,
+                  "non_finite_count": 0,
+                  "non_finite_ratio": 0.0
+                },
+                "text_statistics": null,
+                "datetime_statistics": null
+              },
+              {
+                "name": "reading",
+                "logical_type": "integer",
+                "row_count": 6,
+                "non_missing_count": 5,
+                "missing_count": 1,
+                "missing_ratio": 0.16666666666666666,
+                "distinct_count": 5,
+                "distinct_ratio": 1.0,
+                "minimum": 2,
+                "maximum": 500,
+                "numeric_statistics": {
+                  "minimum": 2,
+                  "maximum": 500,
+                  "mean": 140.8,
+                  "median": 99.0,
+                  "standard_deviation": 206.57371565617925,
+                  "non_finite_count": 0,
+                  "non_finite_ratio": 0.0
+                },
+                "text_statistics": null,
+                "datetime_statistics": null
+              }
+            ],
+            "missing_value_statistics": {
+              "total_cell_count": 24,
+              "missing_cell_count": 1,
+              "missing_cell_ratio": 0.041666666666666664,
+              "rows_with_missing_count": 1,
+              "rows_with_missing_ratio": 0.16666666666666666,
+              "fully_missing_row_count": 0,
+              "fully_missing_row_ratio": 0.0,
+              "columns_with_missing_count": 1,
+              "columns_with_missing_ratio": 0.25
+            },
+            "duplicate_statistics": {
+              "duplicate_row_count": 0,
+              "duplicate_row_ratio": 0.0,
+              "duplicate_group_row_count": 0,
+              "duplicate_group_row_ratio": 0.0
+            }
+          }
+        ]
+      },
+      "quality_findings": [
+        {
+          "issue_type": "missing_values",
+          "severity": "warning",
+          "scope": "column",
+          "table_name": "orchard_samples",
+          "relation_name": "orchard_samples",
+          "message": "Column contains missing values.",
+          "column_name": "reading",
+          "affected_count": 1,
+          "affected_ratio": 0.16666666666666666,
+          "evidence": {
+            "missing_count": 1,
+            "non_missing_count": 5,
+            "row_count": 6
+          }
+        }
+      ],
+      "insights": [
+        {
+          "insight_type": "dataset_structure",
+          "scope": "dataset",
+          "message": "Dataset contains 1 table(s).",
+          "table_name": null,
+          "relation_name": null,
+          "column_name": null,
+          "evidence": {
+            "table_count": 1,
+            "total_row_count": 6,
+            "total_column_count": 4
+          }
+        },
+        {
+          "insight_type": "table_structure",
+          "scope": "table",
+          "message": "Table 'orchard_samples' contains 6 row(s) and 4 column(s).",
+          "table_name": "orchard_samples",
+          "relation_name": "orchard_samples",
+          "column_name": null,
+          "evidence": {
+            "row_count": 6,
+            "column_count": 4
+          }
+        },
+        {
+          "insight_type": "data_quality",
+          "scope": "column",
+          "message": "Column contains missing values.",
+          "table_name": "orchard_samples",
+          "relation_name": "orchard_samples",
+          "column_name": "reading",
+          "evidence": {
+            "missing_count": 1,
+            "non_missing_count": 5,
+            "row_count": 6
+          }
+        }
+      ]
+    },
+    "numerical_statements": [
+      {
+        "claim_index": 0,
+        "verified_claim": {
+          "claim": {
+            "operation": "value",
+            "expected": "2.75",
+            "left": {
+              "observation_index": 0,
+              "row_index": 0,
+              "column": "mass_weighted_mean_reading"
+            },
+            "right": null,
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "2.75",
+            "expected": "2.75",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        },
+        "text": "Claim 1 (value): expected 2.75; evidence 2.75; absolute tolerance 0; status supported."
+      }
+    ],
+    "unverified_model_interpretation": "The mass-weighted mean reading for accepted orchard samples, filtering for positive mass and non-missing readings, is 2.75.",
+    "investigation": {
+      "population": [],
+      "question": "What is the mass-weighted mean reading among accepted orchard samples? Include only samples with strictly positive mass and a non-missing reading. Use the same eligible samples in both the numerator and denominator. Return only this metric.",
+      "conclusion": "The mass-weighted mean reading for accepted orchard samples, filtering for positive mass and non-missing readings, is 2.75.",
+      "analysis": {
+        "analysis": {
+          "schema": {
+            "tables": [
+              {
+                "name": "orchard_samples",
+                "relation_name": "orchard_samples",
+                "row_count": 6,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "sample_id",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "review",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "mass",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "reading",
+                    "physical_dtype": "Int64",
+                    "logical_type": "integer",
+                    "nullable": true,
+                    "missing_count": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "profile": {
+            "tables": [
+              {
+                "name": "orchard_samples",
+                "relation_name": "orchard_samples",
+                "row_count": 6,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "sample_id",
+                    "logical_type": "integer",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 6,
+                    "distinct_ratio": 1.0,
+                    "minimum": 1,
+                    "maximum": 6,
+                    "numeric_statistics": {
+                      "minimum": 1,
+                      "maximum": 6,
+                      "mean": 3.5,
+                      "median": 3.5,
+                      "standard_deviation": 1.8708286933869707,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "review",
+                    "logical_type": "string",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.3333333333333333,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 8,
+                      "maximum_length": 8,
+                      "mean_length": 8.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "accepted",
+                      "most_frequent_count": 5,
+                      "most_frequent_ratio": 0.8333333333333334
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "mass",
+                    "logical_type": "integer",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 6,
+                    "distinct_ratio": 1.0,
+                    "minimum": -2,
+                    "maximum": 100,
+                    "numeric_statistics": {
+                      "minimum": -2,
+                      "maximum": 100,
+                      "mean": 17.833333333333332,
+                      "median": 2.0,
+                      "standard_deviation": 40.32575686415156,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "reading",
+                    "logical_type": "integer",
+                    "row_count": 6,
+                    "non_missing_count": 5,
+                    "missing_count": 1,
+                    "missing_ratio": 0.16666666666666666,
+                    "distinct_count": 5,
+                    "distinct_ratio": 1.0,
+                    "minimum": 2,
+                    "maximum": 500,
+                    "numeric_statistics": {
+                      "minimum": 2,
+                      "maximum": 500,
+                      "mean": 140.8,
+                      "median": 99.0,
+                      "standard_deviation": 206.57371565617925,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 24,
+                  "missing_cell_count": 1,
+                  "missing_cell_ratio": 0.041666666666666664,
+                  "rows_with_missing_count": 1,
+                  "rows_with_missing_ratio": 0.16666666666666666,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 1,
+                  "columns_with_missing_ratio": 0.25
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 0,
+                  "duplicate_row_ratio": 0.0,
+                  "duplicate_group_row_count": 0,
+                  "duplicate_group_row_ratio": 0.0
+                }
+              }
+            ]
+          },
+          "issues": [
+            {
+              "issue_type": "missing_values",
+              "severity": "warning",
+              "scope": "column",
+              "table_name": "orchard_samples",
+              "relation_name": "orchard_samples",
+              "message": "Column contains missing values.",
+              "column_name": "reading",
+              "affected_count": 1,
+              "affected_ratio": 0.16666666666666666,
+              "evidence": {
+                "missing_count": 1,
+                "non_missing_count": 5,
+                "row_count": 6
+              }
+            }
+          ]
+        },
+        "summary": {
+          "table_count": 1,
+          "total_row_count": 6,
+          "total_column_count": 4,
+          "issue_count": 1,
+          "info_issue_count": 0,
+          "warning_issue_count": 1,
+          "error_issue_count": 0,
+          "table_issue_count": 0,
+          "column_issue_count": 1,
+          "affected_relation_names": [
+            "orchard_samples"
+          ]
+        },
+        "insights": [
+          {
+            "insight_type": "dataset_structure",
+            "scope": "dataset",
+            "message": "Dataset contains 1 table(s).",
+            "table_name": null,
+            "relation_name": null,
+            "column_name": null,
+            "evidence": {
+              "table_count": 1,
+              "total_row_count": 6,
+              "total_column_count": 4
+            }
+          },
+          {
+            "insight_type": "table_structure",
+            "scope": "table",
+            "message": "Table 'orchard_samples' contains 6 row(s) and 4 column(s).",
+            "table_name": "orchard_samples",
+            "relation_name": "orchard_samples",
+            "column_name": null,
+            "evidence": {
+              "row_count": 6,
+              "column_count": 4
+            }
+          },
+          {
+            "insight_type": "data_quality",
+            "scope": "column",
+            "message": "Column contains missing values.",
+            "table_name": "orchard_samples",
+            "relation_name": "orchard_samples",
+            "column_name": "reading",
+            "evidence": {
+              "missing_count": 1,
+              "non_missing_count": 5,
+              "row_count": 6
+            }
+          }
+        ]
+      },
+      "observations": [
+        {
+          "question": "What is the mass-weighted mean reading among accepted orchard samples? Include only samples with strictly positive mass and a non-missing reading. Use the same eligible samples in both the numerator and denominator. Return only this metric.",
+          "sql": "SELECT SUM(\"mass\" * \"reading\") / NULLIF(SUM(\"mass\"), 0) AS \"mass_weighted_mean_reading\" FROM \"orchard_samples\" WHERE \"review\" = 'accepted' AND \"mass\" > 0 AND \"reading\" IS NOT NULL",
+          "result": {
+            "columns": [
+              "mass_weighted_mean_reading"
+            ],
+            "rows": [
+              [
+                2.75
+              ]
+            ]
+          },
+          "repair_history": []
+        }
+      ],
+      "status": "complete",
+      "generated_claims": [
+        {
+          "operation": "value",
+          "expected": "2.75",
+          "left": {
+            "observation_index": 0,
+            "row_index": 0,
+            "column": "mass_weighted_mean_reading"
+          },
+          "right": null,
+          "absolute_tolerance": 0
+        }
+      ],
+      "synthesis_failure": null,
+      "investigation_failure": null,
+      "failed_attempts": [],
+      "narrative_verified": false,
+      "verified_claims": [
+        {
+          "claim": {
+            "operation": "value",
+            "expected": "2.75",
+            "left": {
+              "observation_index": 0,
+              "row_index": 0,
+              "column": "mass_weighted_mean_reading"
+            },
+            "right": null,
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "2.75",
+            "expected": "2.75",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        }
+      ],
+      "quantitative_statements": [
+        {
+          "claim_index": 0,
+          "verified_claim": {
+            "claim": {
+              "operation": "value",
+              "expected": "2.75",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "mass_weighted_mean_reading"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "2.75",
+              "expected": "2.75",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          },
+          "text": "Claim 1 (value): expected 2.75; evidence 2.75; absolute tolerance 0; status supported."
+        }
+      ],
+      "narrative_numbers": [
+        {
+          "text": "2.75",
+          "start": 118,
+          "end": 122,
+          "value": "2.75",
+          "claim_indexes": [
+            0
+          ]
+        }
+      ],
+      "narrative_digit_coverage": {
+        "total_digit_count": 3,
+        "parsed_digit_count": 3,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "unlinked_numbers": [],
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "verification_scope": "referenced_numeric_values_only"
+    }
+  }
+}
