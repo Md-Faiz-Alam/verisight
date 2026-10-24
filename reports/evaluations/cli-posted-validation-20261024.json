@@ -1,0 +1,572 @@
+{
+  "record_type": "reviewed_synthetic_cli_validation",
+  "tested_revision": "939df6ae3f96100e6e03da851794e2415472ef74",
+  "revision_source": "Terminal output captured immediately before the run.",
+  "fixture": {
+    "filename": "transactions.csv",
+    "content": "amount,state\n100,posted\n-20,posted\n900,pending\n,pending\n",
+    "population": [
+      {
+        "relation": "transactions",
+        "column": "state",
+        "values": [
+          "posted"
+        ]
+      }
+    ]
+  },
+  "independent_expected_answer": "80",
+  "expected_answer_derivation": "100 + (-20) = 80; pending rows excluded.",
+  "observed_cli_exit_code": 0,
+  "observed_wall_seconds": 32.75,
+  "observation_source": "Captured PowerShell validation output.",
+  "export_change": "Only request.paths was replaced with a portable synthetic path. The original CLI export remains in the local temporary directory.",
+  "scope": "One known synthetic, caller-scoped, single-query CLI run. Generated SQL also supplied the correct filter, so this run does not independently test enforcement against an omitted filter. It does not establish unfamiliar-data accuracy or narrative certification.",
+  "cli_report": {
+    "schema_version": 1,
+    "report_type": "local_cli",
+    "timestamp_utc": "2026-10-24T05:47:27.740530+00:00",
+    "limitations": "Workflow completion is not analytical correctness. Numerical support checks referenced values only. Population filters do not verify business meaning or provide privacy isolation. Narrative meaning is unverified. Inspect population, grain, denominator, time period, units, and SQL.",
+    "kind": "investigation",
+    "request": {
+      "paths": [
+        "synthetic/transactions.csv"
+      ],
+      "question": "What is the net amount of posted transactions? Sum amount for the posted population. Return only this final metric, using one analytical query and exactly one numerical VALUE claim referencing the final metric cell. If evidence is insufficient, explain that and return no claims.",
+      "population": [
+        {
+          "relation": "transactions",
+          "column": "state",
+          "values": [
+            "posted"
+          ]
+        }
+      ],
+      "population_mode": "caller_selected",
+      "model": "gemini-3.1-flash-lite",
+      "max_steps": 1,
+      "max_investigation_seconds": 120.0,
+      "request_timeout_seconds": 60.0,
+      "provider_retries": 1,
+      "max_query_result_rows": 20,
+      "max_query_result_bytes": 1048576,
+      "max_query_execution_seconds": 30.0,
+      "max_query_memory_mb": 512,
+      "max_query_temp_storage_mb": 1024
+    },
+    "workflow_status": "complete",
+    "population": [
+      {
+        "relation": "transactions",
+        "column": "state",
+        "values": [
+          "posted"
+        ]
+      }
+    ],
+    "profile": {
+      "information_scope": "original_loaded_dataset",
+      "summary": {
+        "table_count": 1,
+        "total_row_count": 4,
+        "total_column_count": 2,
+        "issue_count": 1,
+        "info_issue_count": 0,
+        "warning_issue_count": 1,
+        "error_issue_count": 0,
+        "table_issue_count": 0,
+        "column_issue_count": 1,
+        "affected_relation_names": [
+          "transactions"
+        ]
+      },
+      "schema": {
+        "tables": [
+          {
+            "name": "transactions",
+            "relation_name": "transactions",
+            "row_count": 4,
+            "column_count": 2,
+            "columns": [
+              {
+                "name": "amount",
+                "physical_dtype": "Int64",
+                "logical_type": "integer",
+                "nullable": true,
+                "missing_count": 1
+              },
+              {
+                "name": "state",
+                "physical_dtype": "object",
+                "logical_type": "string",
+                "nullable": false,
+                "missing_count": 0
+              }
+            ]
+          }
+        ]
+      },
+      "profiles": {
+        "tables": [
+          {
+            "name": "transactions",
+            "relation_name": "transactions",
+            "row_count": 4,
+            "column_count": 2,
+            "columns": [
+              {
+                "name": "amount",
+                "logical_type": "integer",
+                "row_count": 4,
+                "non_missing_count": 3,
+                "missing_count": 1,
+                "missing_ratio": 0.25,
+                "distinct_count": 3,
+                "distinct_ratio": 1.0,
+                "minimum": -20,
+                "maximum": 900,
+                "numeric_statistics": {
+                  "minimum": -20,
+                  "maximum": 900,
+                  "mean": 326.6666666666667,
+                  "median": 100.0,
+                  "standard_deviation": 500.1333155602947,
+                  "non_finite_count": 0,
+                  "non_finite_ratio": 0.0
+                },
+                "text_statistics": null,
+                "datetime_statistics": null
+              },
+              {
+                "name": "state",
+                "logical_type": "string",
+                "row_count": 4,
+                "non_missing_count": 4,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 2,
+                "distinct_ratio": 0.5,
+                "minimum": null,
+                "maximum": null,
+                "numeric_statistics": null,
+                "text_statistics": {
+                  "minimum_length": 6,
+                  "maximum_length": 7,
+                  "mean_length": 6.5,
+                  "empty_count": 0,
+                  "empty_ratio": 0.0,
+                  "most_frequent_value": "posted",
+                  "most_frequent_count": 2,
+                  "most_frequent_ratio": 0.5
+                },
+                "datetime_statistics": null
+              }
+            ],
+            "missing_value_statistics": {
+              "total_cell_count": 8,
+              "missing_cell_count": 1,
+              "missing_cell_ratio": 0.125,
+              "rows_with_missing_count": 1,
+              "rows_with_missing_ratio": 0.25,
+              "fully_missing_row_count": 0,
+              "fully_missing_row_ratio": 0.0,
+              "columns_with_missing_count": 1,
+              "columns_with_missing_ratio": 0.5
+            },
+            "duplicate_statistics": {
+              "duplicate_row_count": 0,
+              "duplicate_row_ratio": 0.0,
+              "duplicate_group_row_count": 0,
+              "duplicate_group_row_ratio": 0.0
+            }
+          }
+        ]
+      },
+      "quality_findings": [
+        {
+          "issue_type": "missing_values",
+          "severity": "warning",
+          "scope": "column",
+          "table_name": "transactions",
+          "relation_name": "transactions",
+          "message": "Column contains missing values.",
+          "column_name": "amount",
+          "affected_count": 1,
+          "affected_ratio": 0.25,
+          "evidence": {
+            "missing_count": 1,
+            "non_missing_count": 3,
+            "row_count": 4
+          }
+        }
+      ],
+      "insights": [
+        {
+          "insight_type": "dataset_structure",
+          "scope": "dataset",
+          "message": "Dataset contains 1 table(s).",
+          "table_name": null,
+          "relation_name": null,
+          "column_name": null,
+          "evidence": {
+            "table_count": 1,
+            "total_row_count": 4,
+            "total_column_count": 2
+          }
+        },
+        {
+          "insight_type": "table_structure",
+          "scope": "table",
+          "message": "Table 'transactions' contains 4 row(s) and 2 column(s).",
+          "table_name": "transactions",
+          "relation_name": "transactions",
+          "column_name": null,
+          "evidence": {
+            "row_count": 4,
+            "column_count": 2
+          }
+        },
+        {
+          "insight_type": "data_quality",
+          "scope": "column",
+          "message": "Column contains missing values.",
+          "table_name": "transactions",
+          "relation_name": "transactions",
+          "column_name": "amount",
+          "evidence": {
+            "missing_count": 1,
+            "non_missing_count": 3,
+            "row_count": 4
+          }
+        }
+      ]
+    },
+    "numerical_statements": [
+      {
+        "claim_index": 0,
+        "verified_claim": {
+          "claim": {
+            "operation": "value",
+            "expected": "80",
+            "left": {
+              "observation_index": 0,
+              "row_index": 0,
+              "column": "net amount"
+            },
+            "right": null,
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "80",
+            "expected": "80",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        },
+        "text": "Claim 1 (value): expected 80; evidence 80; absolute tolerance 0; status supported."
+      }
+    ],
+    "unverified_model_interpretation": "The sum of the amount for all transactions in the 'posted' state is 80.",
+    "investigation": {
+      "population": [
+        {
+          "relation": "transactions",
+          "column": "state",
+          "values": [
+            "posted"
+          ]
+        }
+      ],
+      "question": "What is the net amount of posted transactions? Sum amount for the posted population. Return only this final metric, using one analytical query and exactly one numerical VALUE claim referencing the final metric cell. If evidence is insufficient, explain that and return no claims.",
+      "conclusion": "The sum of the amount for all transactions in the 'posted' state is 80.",
+      "analysis": {
+        "analysis": {
+          "schema": {
+            "tables": [
+              {
+                "name": "transactions",
+                "relation_name": "transactions",
+                "row_count": 4,
+                "column_count": 2,
+                "columns": [
+                  {
+                    "name": "amount",
+                    "physical_dtype": "Int64",
+                    "logical_type": "integer",
+                    "nullable": true,
+                    "missing_count": 1
+                  },
+                  {
+                    "name": "state",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "profile": {
+            "tables": [
+              {
+                "name": "transactions",
+                "relation_name": "transactions",
+                "row_count": 4,
+                "column_count": 2,
+                "columns": [
+                  {
+                    "name": "amount",
+                    "logical_type": "integer",
+                    "row_count": 4,
+                    "non_missing_count": 3,
+                    "missing_count": 1,
+                    "missing_ratio": 0.25,
+                    "distinct_count": 3,
+                    "distinct_ratio": 1.0,
+                    "minimum": -20,
+                    "maximum": 900,
+                    "numeric_statistics": {
+                      "minimum": -20,
+                      "maximum": 900,
+                      "mean": 326.6666666666667,
+                      "median": 100.0,
+                      "standard_deviation": 500.1333155602947,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "state",
+                    "logical_type": "string",
+                    "row_count": 4,
+                    "non_missing_count": 4,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.5,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 6,
+                      "maximum_length": 7,
+                      "mean_length": 6.5,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "posted",
+                      "most_frequent_count": 2,
+                      "most_frequent_ratio": 0.5
+                    },
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 8,
+                  "missing_cell_count": 1,
+                  "missing_cell_ratio": 0.125,
+                  "rows_with_missing_count": 1,
+                  "rows_with_missing_ratio": 0.25,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 1,
+                  "columns_with_missing_ratio": 0.5
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 0,
+                  "duplicate_row_ratio": 0.0,
+                  "duplicate_group_row_count": 0,
+                  "duplicate_group_row_ratio": 0.0
+                }
+              }
+            ]
+          },
+          "issues": [
+            {
+              "issue_type": "missing_values",
+              "severity": "warning",
+              "scope": "column",
+              "table_name": "transactions",
+              "relation_name": "transactions",
+              "message": "Column contains missing values.",
+              "column_name": "amount",
+              "affected_count": 1,
+              "affected_ratio": 0.25,
+              "evidence": {
+                "missing_count": 1,
+                "non_missing_count": 3,
+                "row_count": 4
+              }
+            }
+          ]
+        },
+        "summary": {
+          "table_count": 1,
+          "total_row_count": 4,
+          "total_column_count": 2,
+          "issue_count": 1,
+          "info_issue_count": 0,
+          "warning_issue_count": 1,
+          "error_issue_count": 0,
+          "table_issue_count": 0,
+          "column_issue_count": 1,
+          "affected_relation_names": [
+            "transactions"
+          ]
+        },
+        "insights": [
+          {
+            "insight_type": "dataset_structure",
+            "scope": "dataset",
+            "message": "Dataset contains 1 table(s).",
+            "table_name": null,
+            "relation_name": null,
+            "column_name": null,
+            "evidence": {
+              "table_count": 1,
+              "total_row_count": 4,
+              "total_column_count": 2
+            }
+          },
+          {
+            "insight_type": "table_structure",
+            "scope": "table",
+            "message": "Table 'transactions' contains 4 row(s) and 2 column(s).",
+            "table_name": "transactions",
+            "relation_name": "transactions",
+            "column_name": null,
+            "evidence": {
+              "row_count": 4,
+              "column_count": 2
+            }
+          },
+          {
+            "insight_type": "data_quality",
+            "scope": "column",
+            "message": "Column contains missing values.",
+            "table_name": "transactions",
+            "relation_name": "transactions",
+            "column_name": "amount",
+            "evidence": {
+              "missing_count": 1,
+              "non_missing_count": 3,
+              "row_count": 4
+            }
+          }
+        ]
+      },
+      "observations": [
+        {
+          "question": "What is the sum of the 'amount' column in the 'transactions' table where the 'state' column is 'posted'?",
+          "sql": "SELECT SUM(\"amount\") AS \"net amount\" FROM \"transactions\" WHERE \"state\" = 'posted'",
+          "result": {
+            "columns": [
+              "net amount"
+            ],
+            "rows": [
+              [
+                80
+              ]
+            ]
+          },
+          "repair_history": []
+        }
+      ],
+      "status": "complete",
+      "generated_claims": [
+        {
+          "operation": "value",
+          "expected": "80",
+          "left": {
+            "observation_index": 0,
+            "row_index": 0,
+            "column": "net amount"
+          },
+          "right": null,
+          "absolute_tolerance": 0
+        }
+      ],
+      "synthesis_failure": null,
+      "investigation_failure": null,
+      "failed_attempts": [],
+      "narrative_verified": false,
+      "verified_claims": [
+        {
+          "claim": {
+            "operation": "value",
+            "expected": "80",
+            "left": {
+              "observation_index": 0,
+              "row_index": 0,
+              "column": "net amount"
+            },
+            "right": null,
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "80",
+            "expected": "80",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        }
+      ],
+      "quantitative_statements": [
+        {
+          "claim_index": 0,
+          "verified_claim": {
+            "claim": {
+              "operation": "value",
+              "expected": "80",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "net amount"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "80",
+              "expected": "80",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          },
+          "text": "Claim 1 (value): expected 80; evidence 80; absolute tolerance 0; status supported."
+        }
+      ],
+      "narrative_numbers": [
+        {
+          "text": "80",
+          "start": 68,
+          "end": 70,
+          "value": "80",
+          "claim_indexes": [
+            0
+          ]
+        }
+      ],
+      "narrative_digit_coverage": {
+        "total_digit_count": 2,
+        "parsed_digit_count": 2,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "unlinked_numbers": [],
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "verification_scope": "referenced_numeric_values_only"
+    }
+  }
+}
