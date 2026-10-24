@@ -759,9 +759,14 @@ def test_sql_interrupt_retains_the_timer_budget_source(
         else QueryTimeoutError
     )
 
+    from threading import Event
+
+    finished = MagicMock()
+    finished.wait.return_value = True
     with (
         patch.object(executor, "_connection", return_value=context),
         patch("verisight.execution.engine.Timer") as timer,
+        patch("verisight.execution.engine.Event", side_effect=[Event(), finished]),
         investigation_deadline(investigation_seconds),
     ):
 

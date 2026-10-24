@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from threading import Event, Timer
+from time import monotonic
 from uuid import UUID
 
 import duckdb
@@ -83,6 +84,9 @@ class DuckDBExecutor:
         ensure_ascii=False and no optional whitespace. Reject oversized output
         without truncating it. The budget applies after DuckDB produces cells;
         it is not a bound on native allocations or total process memory.
+        Cancellation is cooperative: expired queries are rejected at dispatch,
+        fetch, and completion boundaries, with repeated native interrupts until
+        execution unwinds. This is not a hard process termination deadline.
         """
 
         check_deadline()
@@ -102,21 +106,42 @@ class DuckDBExecutor:
         try:
             with self._connection(dataset) as connection:
                 timed_out = Event()
+                finished = Event()
 
                 def interrupt_query() -> None:
                     timed_out.set()
                     connection.interrupt()
+                    # An interrupt before DuckDB starts a query can be lost.
+                    # Keep interrupting until the owning thread stops using it.
+                    while not finished.wait(0.01):
+                        connection.interrupt()
 
                 timeout_seconds = remaining_seconds(self._execution_timeout_seconds)
                 shared_deadline_limited = (
                     timeout_seconds < self._execution_timeout_seconds
                 )
+                expires = monotonic() + timeout_seconds
+
+                def check_timeout() -> None:
+                    check_deadline()
+                    if timed_out.is_set() or monotonic() >= expires:
+                        if shared_deadline_limited:
+                            raise InvestigationDeadlineExceeded(
+                                "Investigation time budget was exhausted."
+                            ) from None
+                        raise QueryTimeoutError(
+                            "Analytical query exceeded the execution timeout "
+                            f"of {self._execution_timeout_seconds:g} seconds."
+                        )
+
                 timer = Timer(timeout_seconds, interrupt_query)
                 timer.daemon = True
                 timer.start()
 
                 try:
+                    check_timeout()
                     cursor = connection.execute(query)
+                    check_timeout()
 
                     columns = tuple(
                         description[0] for description in cursor.description
@@ -130,8 +155,9 @@ class DuckDBExecutor:
 
                     rows: list[QueryRow] = []
                     while True:
-                        check_deadline()
+                        check_timeout()
                         fetched = cursor.fetchone()
+                        check_timeout()
                         if fetched is None:
                             break
                         if len(rows) >= self._max_result_rows:
@@ -145,22 +171,14 @@ class DuckDBExecutor:
                             size = self._add_result_bytes(size + int(index > 0), value)
                         self._check_result_bytes(size)
                         rows.append(row)
+                    check_timeout()
                 except duckdb.Error as exc:
-                    check_deadline()
-                    if timed_out.is_set():
-                        if shared_deadline_limited:
-                            raise InvestigationDeadlineExceeded(
-                                "Investigation time budget was exhausted."
-                            ) from None
-                        raise QueryTimeoutError(
-                            "Analytical query exceeded the execution timeout "
-                            f"of {self._execution_timeout_seconds:g} seconds."
-                        ) from exc
-
+                    check_timeout()
                     raise QueryRuntimeError(
                         f"Analytical query execution failed: {exc}"
                     ) from exc
                 finally:
+                    finished.set()
                     timer.cancel()
                     timer.join()
 

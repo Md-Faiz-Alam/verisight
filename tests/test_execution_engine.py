@@ -12,6 +12,7 @@ from verisight.execution.exceptions import (
     QueryTimeoutError,
     QueryValidationError,
 )
+from verisight.execution.models import QueryScalar
 from verisight.ingestion.models import (
     LoadedDataset,
     LoadedTable,
@@ -1181,3 +1182,69 @@ def test_result_byte_failure_preserves_previous_observations(tmp_path: Path) -> 
     assert result.failed_attempts[0].error_type == "QueryResultLimitError"
     synthesizer.synthesize.assert_not_called()
     repairer.repair.assert_not_called()
+
+
+@pytest.mark.parametrize("phase", ["dispatch", "execute", "fetch", "completion"])
+def test_expired_query_never_returns_success(phase: str) -> None:
+    """Cover lost interrupts and delayed timer scheduling without timing sleeps."""
+    from threading import Event
+    from unittest.mock import MagicMock, patch
+
+    dataset = LoadedDataset(tables=[])
+    executor = DuckDBExecutor(execution_timeout_seconds=1)
+    connection = MagicMock()
+    cursor = connection.execute.return_value
+    cursor.description = [("value",)]
+    cursor.fetchone.side_effect = [(1,), None]
+    clock = [0.0]
+    finished = MagicMock()
+    # Force a second interrupt, then let the synthetic callback return.
+    finished.wait.side_effect = [False, True]
+    add_bytes = executor._add_result_bytes
+
+    def encode(used: int, value: QueryScalar) -> int:
+        result = add_bytes(used, value)
+        if phase == "completion" and value == 1:
+            # Expire during row encoding, after the successful fetch checks.
+            clock[0] = 2.0
+        return result
+
+    with (
+        patch.object(executor, "_connection") as context,
+        patch.object(executor, "_add_result_bytes", side_effect=encode),
+        patch("verisight.execution.engine.Timer") as timer,
+        patch("verisight.execution.engine.Event", side_effect=[Event(), finished]),
+        patch("verisight.execution.engine.monotonic", lambda: clock[0]),
+    ):
+        context.return_value.__enter__.return_value = connection
+
+        def expire() -> None:
+            timer.call_args.args[1]()
+
+        def execute(_query: str) -> object:
+            # Expiry within execute models the gap after the dispatch check.
+            clock[0] = 2.0
+            return cursor
+
+        def fetch() -> tuple[int]:
+            clock[0] = 2.0
+            return (1,)
+
+        if phase == "dispatch":
+            timer.return_value.start.side_effect = expire
+        elif phase == "execute":
+            connection.execute.side_effect = execute
+        elif phase == "fetch":
+            cursor.fetchone.side_effect = fetch
+
+        with pytest.raises(QueryTimeoutError, match="1 seconds"):
+            executor.execute(dataset, "SELECT 1 AS value")
+        if phase == "dispatch":
+            connection.execute.assert_not_called()
+            assert connection.interrupt.call_count == 2
+        else:
+            connection.execute.assert_called_once()
+        finished.set.assert_called_once_with()
+        timer.return_value.cancel.assert_called_once_with()
+        timer.return_value.join.assert_called_once_with()
+        context.return_value.__exit__.assert_called_once()
