@@ -231,19 +231,29 @@ def test_failure_metadata_handles_nested_and_cyclic_causes() -> None:
 
 
 @pytest.mark.parametrize(
-    "sql",
+    ("sql", "error_type"),
     [
-        "SELECT * FROM measurements private_alias "
-        "JOIN measurements private_alias ON true",
-        "SELECT * FROM (SELECT 1 AS value) private_alias "
-        "JOIN (SELECT 2 AS value) private_alias ON true",
-        "WITH x AS (SELECT * FROM measurements) "
-        "SELECT * FROM x private_alias JOIN x private_alias ON true",
+        (
+            "SELECT * FROM measurements private_alias "
+            "JOIN measurements private_alias ON true",
+            OptimizeError,
+        ),
+        (
+            "SELECT * FROM (SELECT 1 AS value) private_alias "
+            "JOIN (SELECT 2 AS value) private_alias ON true",
+            OptimizeError,
+        ),
+        (
+            "WITH x AS (SELECT * FROM measurements) "
+            "SELECT * FROM x private_alias JOIN x private_alias ON true",
+            OptimizeError,
+        ),
+        ("SELECT " + "(" * 200 + "1" + ")" * 200, RecursionError),
     ],
-    ids=["tables", "subqueries", "cte"],
+    ids=["tables", "subqueries", "cte", "nested-sql"],
 )
-def test_duplicate_aliases_have_a_safe_public_validation_error(
-    tmp_path: Path, sql: str
+def test_sql_analysis_failures_have_a_safe_public_validation_error(
+    tmp_path: Path, sql: str, error_type: type[Exception]
 ) -> None:
     path = tmp_path / "measurements.csv"
     path.write_text("value\n10\n20\n", encoding="utf-8")
@@ -252,7 +262,7 @@ def test_duplicate_aliases_have_a_safe_public_validation_error(
     with pytest.raises(QueryValidationError) as caught:
         app.execute(path, sql)
 
-    assert isinstance(caught.value.__cause__, OptimizeError)
+    assert isinstance(caught.value.__cause__, error_type)
     assert str(caught.value) == "Dataset access is not allowed: SQL analysis failed."
     assert "private_alias" not in str(caught.value)
     public = run_public_operation(lambda: app.execute(path, sql))
@@ -270,8 +280,16 @@ def test_duplicate_aliases_have_a_safe_public_validation_error(
 
 
 @pytest.mark.parametrize("recover", [False, True])
-def test_duplicate_alias_failure_preserves_evidence_and_allows_recovery(
-    tmp_path: Path, recover: bool
+@pytest.mark.parametrize(
+    "invalid_sql",
+    [
+        "SELECT * FROM measurements a JOIN measurements a ON true",
+        "SELECT " + "(" * 200 + "1" + ")" * 200,
+    ],
+    ids=["duplicate-alias", "nested-sql"],
+)
+def test_sql_analysis_failure_preserves_evidence_and_allows_recovery(
+    tmp_path: Path, recover: bool, invalid_sql: str
 ) -> None:
     path = tmp_path / "measurements.csv"
     path.write_text("value\n10\n20\n", encoding="utf-8")
@@ -294,7 +312,7 @@ def test_duplicate_alias_failure_preserves_evidence_and_allows_recovery(
     )
     planning.generate.side_effect = [
         SQL,
-        "SELECT * FROM measurements a JOIN measurements a ON true",
+        invalid_sql,
         valid_join,
     ]
     repair = Mock()

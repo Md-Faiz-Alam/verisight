@@ -232,7 +232,7 @@ def validate_dataset_relations(
 
         scopes = list(traverse_scope(expression))
         selected_sources = [scope.selected_sources for scope in scopes]
-    except (OptimizeError, ParseError, ValueError) as exc:
+    except (OptimizeError, ParseError, ValueError, RecursionError) as exc:
         raise QueryValidationError(
             "Dataset access is not allowed: SQL analysis failed."
         ) from exc
