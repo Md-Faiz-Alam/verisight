@@ -928,8 +928,9 @@ def test_default_gemini_investigator_can_request_observe_and_synthesize(
     ]
 
     synthesizer_client = MagicMock()
+    conclusion = f"The dataset contains three orders totaling {expected}."
     synthesizer_client.generate.return_value = (
-        '{"conclusion":"The dataset contains three orders totaling 60.",'
+        '{"conclusion":"' + conclusion + '",'
         '"claims":[{"operation":"value","expected":"'
         + expected
         + '","left":{"observation_index":'
@@ -962,7 +963,7 @@ def test_default_gemini_investigator_can_request_observe_and_synthesize(
         )
 
     assert result.status is InvestigationStatus.COMPLETE
-    assert result.conclusion == "The dataset contains three orders totaling 60."
+    assert result.conclusion == conclusion
     assert result.observation_count == 1
     assert len(result.generated_claims) == 1
     assert len(result.verified_claims) == 1

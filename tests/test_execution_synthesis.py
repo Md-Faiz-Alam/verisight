@@ -363,6 +363,7 @@ def test_structured_budget_failure_preserves_incomplete_investigation(
 ) -> None:
     path = tmp_path / "measurements.csv"
     path.write_text("value\n10\n", encoding="utf-8")
+
     client = _Client(_response([]))
     app = VeriSight(
         settings=Settings(allow_llm_data_disclosure=False),
@@ -417,6 +418,7 @@ def test_invalid_synthesis_preserves_real_sql_observation(
 ) -> None:
     path = tmp_path / "measurements.csv"
     path.write_text("value\n10\n20\n", encoding="utf-8")
+
     client = _Client(response)
     app = VeriSight(
         settings=Settings(allow_llm_data_disclosure=False),
@@ -468,6 +470,7 @@ def test_expected_synthesis_failure_preserves_observations(
 
     path = tmp_path / "measurements.csv"
     path.write_text("value\n10\n20\n", encoding="utf-8")
+
     client = FailingClient()
     app = VeriSight(
         settings=Settings(allow_llm_data_disclosure=False),
@@ -551,6 +554,10 @@ def test_structured_synthesis_accepts_complete_json_fences(
         (_response([_claim()] * 51), "invalid_schema_or_claim"),
         (_response([{**_claim(), "operation": "ratio"}]), "invalid_schema_or_claim"),
         ("synthetic-private" * 4000, "response_too_large"),
+        (
+            json.dumps({"conclusion": "synthetic-private total 999.", "claims": []}),
+            "unlinked_narrative_number",
+        ),
     ],
     ids=[
         "malformed-json",
@@ -560,6 +567,7 @@ def test_structured_synthesis_accepts_complete_json_fences(
         "too-many-claims",
         "unsupported-operation",
         "oversized-response",
+        "unlinked-narrative-number",
     ],
 )
 def test_format_repair_uses_safe_feedback_and_revalidates(
@@ -837,3 +845,142 @@ def test_structured_synthesis_omits_profiles_but_preserves_complete_sql_evidence
     verification = NumericalClaimVerifier().verify(synthesis.claims[0], observations)
     assert verification.status is VerificationStatus.SUPPORTED
     assert verification.actual == 30
+
+
+@pytest.mark.parametrize("repair_succeeds", [False, True])
+def test_unlinked_weighted_answer_is_repaired_or_preserves_sql_evidence(
+    tmp_path: Path, repair_succeeds: bool
+) -> None:
+    path = tmp_path / "orchard_samples.csv"
+    path.write_text(
+        "review,mass,reading\naccepted,1,2\naccepted,3,3\nrejected,100,99\n",
+        encoding="utf-8",
+    )
+
+    class ComponentPlanner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(
+                request.question,
+                "SELECT SUM(mass * reading) AS weighted_reading_sum, "
+                "SUM(mass) AS total_mass FROM orchard_samples "
+                "WHERE review = 'accepted' AND mass > 0 AND reading IS NOT NULL",
+            )
+
+    claims = [
+        {
+            **_claim(value),
+            "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": column,
+            },
+        }
+        for value, column in (("11", "weighted_reading_sum"), ("4", "total_mass"))
+    ]
+    rejected = json.dumps(
+        {"conclusion": "The mass-weighted mean is 2.75.", "claims": claims}
+    )
+    repaired = json.dumps(
+        {
+            "conclusion": (
+                "Only intermediate components were collected; the final "
+                "weighted mean is not available as a verified result cell."
+            ),
+            "claims": claims,
+        }
+    )
+    client = _SequenceClient([rejected, repaired if repair_succeeds else rejected])
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        planner=ComponentPlanner(),
+        investigator=_Investigator(),
+        synthesizer=StructuredInvestigationSynthesizer(client),
+    )
+
+    result = app.investigate(path, "What is the mass-weighted mean?", max_steps=1)
+
+    assert len(client.prompts) == 2
+    assert '"validation_error": "unlinked_narrative_number"' in client.prompts[1]
+    assert "The mass-weighted mean is 2.75." not in client.prompts[1]
+    assert result.observations[0].result.rows == ((11, 4),)
+    assert result.narrative_verified is False
+    assert "2.75" not in result.conclusion
+    if repair_succeeds:
+        assert result.status is InvestigationStatus.COMPLETE
+        assert "Only intermediate components" in result.conclusion
+        assert [str(claim.expected) for claim in result.generated_claims] == ["11", "4"]
+        assert all(
+            item.verification.status is VerificationStatus.SUPPORTED
+            for item in result.verified_claims
+        )
+    else:
+        assert result.status is InvestigationStatus.INCOMPLETE
+        assert result.generated_claims == ()
+        assert result.synthesis_failure is not None
+        assert result.synthesis_failure.kind is SynthesisFailureKind.SYNTHESIS_ERROR
+
+
+def test_final_metric_cell_is_accepted_and_verified_without_repair() -> None:
+    state = _build_state().add_observation(
+        QueryObservation(
+            question="Measure the weighted mean.",
+            sql="SELECT 2.75 AS weighted_mean",
+            result=QueryResult(columns=("weighted_mean",), rows=((2.75,),)),
+        )
+    )
+    claim = {
+        **_claim("2.75"),
+        "left": {
+            "observation_index": 0,
+            "row_index": 0,
+            "column": "weighted_mean",
+        },
+    }
+    client = _Client(json.dumps({"conclusion": "The mean is 2.75.", "claims": [claim]}))
+
+    synthesis = StructuredInvestigationSynthesizer(client).synthesize(state)
+
+    assert len(client.prompts) == 1
+    verification = NumericalClaimVerifier().verify(
+        synthesis.claims[0], state.observations
+    )
+    assert verification.status is VerificationStatus.SUPPORTED
+    assert str(verification.actual) == "2.75"
+
+
+def test_question_numbers_remain_context_without_certifying_claims() -> None:
+    base = _build_state()
+    state = InvestigationState(
+        question="For cohort 2026 inspect label 1,23 and measure the total.",
+        analysis=base.analysis,
+        observations=(
+            QueryObservation(
+                question="Measure the total.",
+                sql="SELECT 30 AS total",
+                result=QueryResult(columns=("total",), rows=((30,),)),
+            ),
+        ),
+    )
+    client = _Client(
+        json.dumps(
+            {"conclusion": "For cohort 2026 the total is 31.", "claims": [_claim("31")]}
+        )
+    )
+
+    synthesis = StructuredInvestigationSynthesizer(client).synthesize(state)
+
+    assert len(client.prompts) == 1
+    verification = NumericalClaimVerifier().verify(
+        synthesis.claims[0], state.observations
+    )
+    assert verification.status is VerificationStatus.CONTRADICTED
+
+
+def test_narrative_linkage_does_not_certify_unsupported_token_syntax() -> None:
+    client = _Client(json.dumps({"conclusion": "The label is 1,23.", "claims": []}))
+
+    synthesis = StructuredInvestigationSynthesizer(client).synthesize(_build_state())
+
+    assert synthesis.conclusion == "The label is 1,23."
+    assert synthesis.claims == ()
+    assert len(client.prompts) == 1

@@ -362,12 +362,20 @@ def test_structured_investigation_renders_only_claim_linked_quantities(
     tmp_path: Path,
 ) -> None:
     class Client:
+        def __init__(self) -> None:
+            self.calls = 0
+
         def generate(self, prompt: str) -> str:
+            self.calls += 1
             left = {"observation_index": 0, "row_index": 0, "column": "current_total"}
             right = {"observation_index": 0, "row_index": 0, "column": "previous_total"}
             return json.dumps(
                 {
-                    "conclusion": "There are 9999 rows. Revenue caused the change.",
+                    "conclusion": (
+                        "There are 9999 rows. Revenue caused the change."
+                        if self.calls == 1
+                        else "Revenue caused the change."
+                    ),
                     "claims": [
                         {
                             "operation": "value",
@@ -399,19 +407,21 @@ def test_structured_investigation_renders_only_claim_linked_quantities(
 
     path = tmp_path / "measurements.csv"
     path.write_text("current_value,previous_value\n10,8\n20,12\n", encoding="utf-8")
+    client = Client()
     app = VeriSight(
         settings=Settings(allow_llm_data_disclosure=False),
         planner=_SyntheticPlanner(),
         investigator=_OneQueryInvestigator(),
-        synthesizer=StructuredInvestigationSynthesizer(Client()),
+        synthesizer=StructuredInvestigationSynthesizer(client),
     )
 
     result = app.investigate(path, "Compare the totals.", max_steps=1)
 
     assert result.status is InvestigationStatus.COMPLETE
     assert result.narrative_verified is False
-    assert "9999" in result.conclusion
-    assert result.unlinked_numbers == ("9999",)
+    assert client.calls == 2
+    assert result.conclusion == "Revenue caused the change."
+    assert result.unlinked_numbers == ()
     assert [statement.text for statement in result.quantitative_statements] == [
         (
             "Claim 1 (value): expected 30; evidence 30; "

@@ -22,6 +22,7 @@ from verisight.execution.gemini import (
 )
 from verisight.execution.generation import TextGenerationClient
 from verisight.execution.investigation import InvestigationState
+from verisight.execution.narrative_audit import find_narrative_numbers
 from verisight.execution.prompt_budget import PromptBudget
 from verisight.execution.prompting import ANALYTICAL_SCOPE_RULES, METRIC_SCALE_RULES
 from verisight.execution.synthesis import StructuredSynthesis
@@ -113,7 +114,10 @@ class _SynthesisFormatError(InvestigationError):
     def __init__(
         self,
         reason: Literal[
-            "response_too_large", "invalid_json", "invalid_schema_or_claim"
+            "response_too_large",
+            "invalid_json",
+            "invalid_schema_or_claim",
+            "unlinked_narrative_number",
         ],
     ) -> None:
         self.reason = reason
@@ -128,7 +132,8 @@ class _SynthesisFormatError(InvestigationError):
 class StructuredInvestigationSynthesizer:
     """Return claims for automatic numerical checking by the orchestrator.
 
-    The narrative and the completeness of its claim list remain unverified.
+    Parsed narrative numbers must match claim values or question context.
+    Narrative meaning and the completeness of its claim list remain unverified.
     This component performs no queries and accepts no model-selected tolerance.
     """
 
@@ -244,7 +249,7 @@ class StructuredInvestigationSynthesizer:
         )
         response = self._generate(prompt)
         try:
-            return self._parse_response(response)
+            return self._check_narrative(self._parse_response(response), state.question)
         except _SynthesisFormatError as exc:
             feedback = json.dumps({"validation_error": exc.reason})
 
@@ -257,9 +262,36 @@ class StructuredInvestigationSynthesizer:
             "Use decimal strings for expected values, only value or difference "
             "operations, and no more than 50 claims. "
             "Do not change the evidence or invent missing values. "
+            "Parsed conclusion numbers must match declared claim values or "
+            "numbers in the original question. Otherwise omit the unsupported "
+            "numerical assertion and explain the missing evidence. "
             "The rejected response is intentionally omitted.\n"
         )
-        return self._parse_response(self._generate(repair_prompt))
+        return self._check_narrative(
+            self._parse_response(self._generate(repair_prompt)), state.question
+        )
+
+    @staticmethod
+    def _check_narrative(
+        synthesis: StructuredSynthesis, question: str
+    ) -> StructuredSynthesis:
+        """Enforce limited token linkage, not numerical support or semantics.
+
+        Question values may be repeated as context, such as a requested year.
+        Matching a value does not establish that its use is justified. Unsupported
+        token syntax and number words retain the existing audit limitations.
+        """
+        allowed_values = tuple(
+            Decimal(str(claim.expected)) for claim in synthesis.claims
+        ) + tuple(
+            token.value
+            for token in find_narrative_numbers(question, ())
+            if token.value is not None
+        )
+        for token in find_narrative_numbers(synthesis.conclusion, allowed_values):
+            if token.value is not None and not token.claim_indexes:
+                raise _SynthesisFormatError("unlinked_narrative_number")
+        return synthesis
 
     def _generate(self, prompt: str) -> str:
         """Preserve provider classification without adding generation retries."""
