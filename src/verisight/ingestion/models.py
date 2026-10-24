@@ -35,11 +35,11 @@ class LoadedTable:
     def __post_init__(self) -> None:
         """Validate the table and initialize its relation identity."""
 
-        self._validate_unique_columns()
+        self.validate_column_names()
         self.relation_name = self.name
 
-    def _validate_unique_columns(self) -> None:
-        """Reject duplicate names and names that collide as SQL identifiers."""
+    def validate_column_names(self) -> None:
+        """Reject unusable or ambiguous SQL names without changing source labels."""
 
         duplicated = self.data.columns.duplicated(keep=False)
 
@@ -51,12 +51,18 @@ class LoadedTable:
                 f"{formatted_columns}."
             )
 
+        names = tuple(str(column) for column in self.data.columns)
+        if any(not name.strip() for name in names):
+            raise TableValidationError("Table column names must not be blank.")
+        if any("\x00" in name for name in names):
+            raise TableValidationError(
+                "Table column names must not contain NUL characters."
+            )
+
         # DuckDB stringifies column labels and compares identifiers using
         # ASCII case-insensitive matching, even when they are quoted.
         # Unicode casefolding would incorrectly merge distinct identifiers.
-        identifiers = pd.Index(
-            str(column).translate(_ASCII_LOWERCASE) for column in self.data.columns
-        )
+        identifiers = pd.Index(name.translate(_ASCII_LOWERCASE) for name in names)
         ambiguous = identifiers.duplicated(keep=False)
         if ambiguous.any():
             formatted_columns = ", ".join(

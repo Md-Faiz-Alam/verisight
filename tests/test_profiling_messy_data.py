@@ -271,7 +271,7 @@ def test_profiles_unusual_column_names() -> None:
                 ]
             ),
             "日本語": ["東京", "大阪"],
-            "": [1, 2],
+            "Unnamed: 0": [1, 2],
         }
     )
 
@@ -285,7 +285,7 @@ def test_profiles_unusual_column_names() -> None:
         "amount ($)",
         "created-at",
         "日本語",
-        "",
+        "Unnamed: 0",
     )
 
 

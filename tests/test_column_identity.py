@@ -167,7 +167,7 @@ def test_raw_headers_are_rejected_before_generation(
     assert synthesizer.mock_calls == []
 
 
-@pytest.mark.parametrize("extension", ["csv", "xlsx"])
+@pytest.mark.parametrize("extension", ["csv", "xlsx", "json"])
 @pytest.mark.parametrize(
     "headers",
     [
@@ -189,6 +189,10 @@ def test_valid_source_headers_remain_exact_and_queryable(
             writer = csv.writer(file, lineterminator="\n")
             writer.writerow(headers)
             writer.writerow([10, 900])
+    elif extension == "json":
+        path.write_text(
+            json.dumps([{headers[0]: 10, headers[1]: 900}]), encoding="utf-8"
+        )
     else:
         pd.DataFrame([[10, 900]], columns=list(headers)).to_excel(
             path, sheet_name="measurements", index=False
@@ -296,3 +300,90 @@ def test_distinct_relation_names_keep_their_identity_through_sql(
     )
     assert result.rows == ((1, 2),)
     assert tuple(table.relation_name for table in dataset.tables) == names
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [("", "value"), ("", "C0"), (" \t", "value"), ("bad\x00name", "value")],
+    ids=["empty", "generated-name-collision", "whitespace", "nul"],
+)
+def test_json_rejects_unusable_column_names_before_sql_and_generation(
+    tmp_path: Path, headers: tuple[str, str]
+) -> None:
+    path = tmp_path / "private_measurements.json"
+    content = json.dumps([{headers[0]: 10, headers[1]: 900}])
+    path.write_text(content, encoding="utf-8")
+    planner = Mock()
+    investigator = Mock()
+    synthesizer = Mock()
+    app = VeriSight(
+        settings=_settings(),
+        planner=planner,
+        investigator=investigator,
+        synthesizer=synthesizer,
+    )
+    with patch("verisight.execution.engine.duckdb.connect") as connect:
+        for operation in (
+            lambda: app.analyze(path),
+            lambda: app.execute(path, "SELECT * FROM private_measurements"),
+            lambda: app.ask(path, "Read values"),
+            lambda: app.investigate(path, "Read values", max_steps=1),
+        ):
+            public = run_public_operation(operation)
+            assert public.value is None
+            assert public.error is not None
+            assert public.error.code is ErrorCode.TABLE_VALIDATION_ERROR
+            assert "private_measurements" not in public.error.message
+        connect.assert_not_called()
+    assert planner.mock_calls == []
+    assert investigator.mock_calls == []
+    assert synthesizer.mock_calls == []
+    assert path.read_text(encoding="utf-8") == content
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [("", "value"), ("bad\x00name", "value"), ("Amount", "amount")],
+    ids=["blank", "nul", "case-collision"],
+)
+def test_executor_rechecks_mutated_columns_without_changing_source_data(
+    headers: tuple[str, str],
+) -> None:
+    source = SourceMetadata(Path("source.json"), "source.json", ".json", 1)
+    table = LoadedTable(
+        name="measurements",
+        data=pd.DataFrame({"left": [10], "right": [900]}),
+        source=source,
+    )
+    dataset = LoadedDataset(tables=[table])
+    table.data.columns = list(headers)
+    original = table.data.copy(deep=True)
+    executor = DuckDBExecutor()
+    with patch("verisight.execution.engine.duckdb.connect") as connect:
+        with pytest.raises(TableValidationError):
+            executor.execute(dataset, "SELECT * FROM measurements")
+        connect.assert_not_called()
+    pd.testing.assert_frame_equal(table.data, original)
+
+
+def test_json_name_validation_does_not_rewrite_nested_keys_or_cell_values(
+    tmp_path: Path,
+) -> None:
+    from verisight.ingestion.loaders.json import JsonLoader
+
+    path = tmp_path / "measurements.json"
+    nested = {"": 1, "key\x00part": 2}
+    note = "text\x00value"
+    path.write_text(
+        json.dumps([{"metadata": nested, "note": note, "C0": 10}]),
+        encoding="utf-8",
+    )
+    table = JsonLoader(_settings()).load(path)
+    assert tuple(table.data.columns) == ("metadata", "note", "C0")
+    assert table.data.loc[0, "metadata"] == nested
+    assert table.data.loc[0, "note"] == note
+    result = VeriSight(settings=_settings()).execute(
+        path, 'SELECT "note", "C0" FROM measurements'
+    )
+    assert result.columns == ("note", "C0")
+    assert result.rows == ((note, 10),)

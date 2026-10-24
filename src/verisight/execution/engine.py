@@ -95,6 +95,8 @@ class DuckDBExecutor:
         check_deadline()
         # Loaded datasets remain mutable; recheck identities before registration.
         dataset.validate_relation_names()
+        for table in dataset.tables:
+            table.validate_column_names()
         if self._population != ():
             QueryContextBuilder().build(
                 SchemaInferer().infer_dataset(dataset), population=self._population
