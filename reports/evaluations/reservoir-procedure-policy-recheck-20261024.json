@@ -1,0 +1,865 @@
+{
+  "record_type": "reviewed_reservoir_procedure_policy_recheck",
+  "run_record": {
+    "record_type": "reservoir_procedure_policy_recheck",
+    "timestamp_utc": "2026-10-24T17:26:35.929327+00:00",
+    "tested_revision": "5474cee641f0cf475dd465e6e95f02db807289e5",
+    "frozen_manifest_sha256": "863981dd9fec757bf90085236fa4d4a36bf9b965a50fb0401c9743d71b0c4675",
+    "matched_manifest_newlines": [
+      "CRLF"
+    ],
+    "question": "Using two separate analytical queries, first measure total accepted litres for period before, then measure total accepted litres for period after. Exclude rejected readings and other periods. Report only after minus before, in litres, as one DIFFERENCE claim referencing the two observed totals.",
+    "fixture": {
+      "reservoir_readings.csv": "reading_id,period,review,litres\n1,before,accepted,40\n2,before,accepted,60\n3,after,accepted,90\n4,after,accepted,60\n5,after,rejected,999\n6,other,accepted,700\n"
+    },
+    "independent_totals": {
+      "before": "100",
+      "after": "150"
+    },
+    "expected": "50",
+    "model": "gemini-3.1-flash-lite",
+    "max_steps": 2,
+    "max_investigation_seconds": 120,
+    "request_timeout_seconds": 60,
+    "provider_retries": 1,
+    "status": "finished",
+    "limitations": "One known synthetic development-case recheck. No automatic whole-case retry. Prompt changes do not establish runtime enforcement or general analytical reliability. SQL scope and procedural compliance require review.",
+    "cli_exit_code": 0,
+    "elapsed_seconds": 66.686,
+    "original_export_sha256": "0acb595b10e9b30a07fbf00aaf202f23e45996c957c73e72eb32d097f14e1e9f",
+    "automatic_checks": {
+      "report_kind": "investigation",
+      "workflow_status": "complete",
+      "observed_query_count": 2,
+      "exactly_two_observations": true,
+      "observed_claim_count": 3,
+      "exactly_one_difference_claim": false,
+      "supported_difference_with_expected_operand_values": false,
+      "references_follow_requested_observation_order": false,
+      "sql_scope_and_procedure_review": "pending",
+      "overall_task_acceptance": "not_assessed"
+    }
+  },
+  "original_export_sha256": "0acb595b10e9b30a07fbf00aaf202f23e45996c957c73e72eb32d097f14e1e9f",
+  "reviewed_assessment": {
+    "overall": "requested_contract_not_satisfied",
+    "numerical_answer": "correct_and_supported",
+    "independent_expected_difference": "50",
+    "separate_queries_in_requested_order": true,
+    "other_periods_excluded_from_query_result": true,
+    "rejected_readings_excluded": true,
+    "observed_query_count": 2,
+    "observed_claim_count": 3,
+    "exactly_one_difference_claim_as_only_claim": false,
+    "conclusion_reports_only_final_difference": false,
+    "difference_references_after_minus_before": true,
+    "exact_accepted_population_beyond_fixture": "not_established"
+  },
+  "automatic_check_correction": {
+    "original_checks_preserved": true,
+    "explanation": "The runner assessed difference support and reference order only when exactly one claim existed. Their original false values therefore conflate output cardinality with independent numerical and reference checks. Inspection confirms a supported DIFFERENCE claim of 50, referencing observation 1 after=150 minus observation 0 before=100. The three-claim output still fails the task contract."
+  },
+  "review_notes": "Two separate queries measured before and then after. Each SQL statement restricts its period and excludes rejected readings. Both totals and the difference are numerically supported. However, synthesis returned two additional VALUE claims and repeated the component totals in the conclusion despite the final-only request. SQL uses review != 'rejected', which matches accepted rows in this fixture but does not establish exact accepted-state selection when other review states exist.",
+  "limitations": "One known synthetic development-case recheck, not held-out evidence. It does not isolate model variation or establish deterministic enforcement of natural-language procedures and output requirements. No additional model call was made while preparing this record.",
+  "export_notes": "Only request.paths in the embedded CLI report was replaced with portable synthetic paths. Original run metadata, automatic checks, CLI export, stdout, and stderr remain unchanged locally. Previous evaluation reports are unchanged.",
+  "cli_report": {
+    "schema_version": 1,
+    "report_type": "local_cli",
+    "timestamp_utc": "2026-10-24T17:27:42.422355+00:00",
+    "limitations": "Workflow completion is not analytical correctness. Numerical support checks referenced values only. Population filters do not verify business meaning or provide privacy isolation. Narrative meaning is unverified. Inspect population, grain, denominator, time period, units, and SQL.",
+    "kind": "investigation",
+    "request": {
+      "paths": [
+        "synthetic/reservoir_two_queries/reservoir_readings.csv"
+      ],
+      "question": "Using two separate analytical queries, first measure total accepted litres for period before, then measure total accepted litres for period after. Exclude rejected readings and other periods. Report only after minus before, in litres, as one DIFFERENCE claim referencing the two observed totals.",
+      "population": [],
+      "population_mode": "unscoped",
+      "model": "gemini-3.1-flash-lite",
+      "max_steps": 2,
+      "max_investigation_seconds": 120.0,
+      "request_timeout_seconds": 60.0,
+      "provider_retries": 1,
+      "max_query_result_rows": 20,
+      "max_query_result_bytes": 1048576,
+      "max_query_execution_seconds": 30.0,
+      "max_query_memory_mb": 512,
+      "max_query_temp_storage_mb": 1024
+    },
+    "workflow_status": "complete",
+    "population": [],
+    "profile": {
+      "information_scope": "original_loaded_dataset",
+      "summary": {
+        "table_count": 1,
+        "total_row_count": 6,
+        "total_column_count": 4,
+        "issue_count": 0,
+        "info_issue_count": 0,
+        "warning_issue_count": 0,
+        "error_issue_count": 0,
+        "table_issue_count": 0,
+        "column_issue_count": 0,
+        "affected_relation_names": []
+      },
+      "schema": {
+        "tables": [
+          {
+            "name": "reservoir_readings",
+            "relation_name": "reservoir_readings",
+            "row_count": 6,
+            "column_count": 4,
+            "columns": [
+              {
+                "name": "reading_id",
+                "physical_dtype": "int64",
+                "logical_type": "integer",
+                "nullable": false,
+                "missing_count": 0
+              },
+              {
+                "name": "period",
+                "physical_dtype": "object",
+                "logical_type": "string",
+                "nullable": false,
+                "missing_count": 0
+              },
+              {
+                "name": "review",
+                "physical_dtype": "object",
+                "logical_type": "string",
+                "nullable": false,
+                "missing_count": 0
+              },
+              {
+                "name": "litres",
+                "physical_dtype": "int64",
+                "logical_type": "integer",
+                "nullable": false,
+                "missing_count": 0
+              }
+            ]
+          }
+        ]
+      },
+      "profiles": {
+        "tables": [
+          {
+            "name": "reservoir_readings",
+            "relation_name": "reservoir_readings",
+            "row_count": 6,
+            "column_count": 4,
+            "columns": [
+              {
+                "name": "reading_id",
+                "logical_type": "integer",
+                "row_count": 6,
+                "non_missing_count": 6,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 6,
+                "distinct_ratio": 1.0,
+                "minimum": 1,
+                "maximum": 6,
+                "numeric_statistics": {
+                  "minimum": 1,
+                  "maximum": 6,
+                  "mean": 3.5,
+                  "median": 3.5,
+                  "standard_deviation": 1.8708286933869707,
+                  "non_finite_count": 0,
+                  "non_finite_ratio": 0.0
+                },
+                "text_statistics": null,
+                "datetime_statistics": null
+              },
+              {
+                "name": "period",
+                "logical_type": "string",
+                "row_count": 6,
+                "non_missing_count": 6,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 3,
+                "distinct_ratio": 0.5,
+                "minimum": null,
+                "maximum": null,
+                "numeric_statistics": null,
+                "text_statistics": {
+                  "minimum_length": 5,
+                  "maximum_length": 6,
+                  "mean_length": 5.333333333333333,
+                  "empty_count": 0,
+                  "empty_ratio": 0.0,
+                  "most_frequent_value": "after",
+                  "most_frequent_count": 3,
+                  "most_frequent_ratio": 0.5
+                },
+                "datetime_statistics": null
+              },
+              {
+                "name": "review",
+                "logical_type": "string",
+                "row_count": 6,
+                "non_missing_count": 6,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 2,
+                "distinct_ratio": 0.3333333333333333,
+                "minimum": null,
+                "maximum": null,
+                "numeric_statistics": null,
+                "text_statistics": {
+                  "minimum_length": 8,
+                  "maximum_length": 8,
+                  "mean_length": 8.0,
+                  "empty_count": 0,
+                  "empty_ratio": 0.0,
+                  "most_frequent_value": "accepted",
+                  "most_frequent_count": 5,
+                  "most_frequent_ratio": 0.8333333333333334
+                },
+                "datetime_statistics": null
+              },
+              {
+                "name": "litres",
+                "logical_type": "integer",
+                "row_count": 6,
+                "non_missing_count": 6,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 5,
+                "distinct_ratio": 0.8333333333333334,
+                "minimum": 40,
+                "maximum": 999,
+                "numeric_statistics": {
+                  "minimum": 40,
+                  "maximum": 999,
+                  "mean": 324.8333333333333,
+                  "median": 75.0,
+                  "standard_deviation": 417.56456586576724,
+                  "non_finite_count": 0,
+                  "non_finite_ratio": 0.0
+                },
+                "text_statistics": null,
+                "datetime_statistics": null
+              }
+            ],
+            "missing_value_statistics": {
+              "total_cell_count": 24,
+              "missing_cell_count": 0,
+              "missing_cell_ratio": 0.0,
+              "rows_with_missing_count": 0,
+              "rows_with_missing_ratio": 0.0,
+              "fully_missing_row_count": 0,
+              "fully_missing_row_ratio": 0.0,
+              "columns_with_missing_count": 0,
+              "columns_with_missing_ratio": 0.0
+            },
+            "duplicate_statistics": {
+              "duplicate_row_count": 0,
+              "duplicate_row_ratio": 0.0,
+              "duplicate_group_row_count": 0,
+              "duplicate_group_row_ratio": 0.0
+            }
+          }
+        ]
+      },
+      "quality_findings": [],
+      "insights": [
+        {
+          "insight_type": "dataset_structure",
+          "scope": "dataset",
+          "message": "Dataset contains 1 table(s).",
+          "table_name": null,
+          "relation_name": null,
+          "column_name": null,
+          "evidence": {
+            "table_count": 1,
+            "total_row_count": 6,
+            "total_column_count": 4
+          }
+        },
+        {
+          "insight_type": "table_structure",
+          "scope": "table",
+          "message": "Table 'reservoir_readings' contains 6 row(s) and 4 column(s).",
+          "table_name": "reservoir_readings",
+          "relation_name": "reservoir_readings",
+          "column_name": null,
+          "evidence": {
+            "row_count": 6,
+            "column_count": 4
+          }
+        }
+      ]
+    },
+    "numerical_statements": [
+      {
+        "claim_index": 0,
+        "verified_claim": {
+          "claim": {
+            "operation": "value",
+            "expected": "100",
+            "left": {
+              "observation_index": 0,
+              "row_index": 0,
+              "column": "total_accepted_litres_before"
+            },
+            "right": null,
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "100",
+            "expected": "100",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        },
+        "text": "Claim 1 (value): expected 100; evidence 100; absolute tolerance 0; status supported."
+      },
+      {
+        "claim_index": 1,
+        "verified_claim": {
+          "claim": {
+            "operation": "value",
+            "expected": "150",
+            "left": {
+              "observation_index": 1,
+              "row_index": 0,
+              "column": "total_accepted_litres_after"
+            },
+            "right": null,
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "150",
+            "expected": "150",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        },
+        "text": "Claim 2 (value): expected 150; evidence 150; absolute tolerance 0; status supported."
+      },
+      {
+        "claim_index": 2,
+        "verified_claim": {
+          "claim": {
+            "operation": "difference",
+            "expected": "50",
+            "left": {
+              "observation_index": 1,
+              "row_index": 0,
+              "column": "total_accepted_litres_after"
+            },
+            "right": {
+              "observation_index": 0,
+              "row_index": 0,
+              "column": "total_accepted_litres_before"
+            },
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "50",
+            "expected": "50",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        },
+        "text": "Claim 3 (difference, left minus right): expected 50; evidence 50; absolute tolerance 0; status supported."
+      }
+    ],
+    "unverified_model_interpretation": "The total accepted litres for the 'before' period were 100, and for the 'after' period were 150. The difference between the 'after' and 'before' periods is 50 litres.",
+    "investigation": {
+      "population": [],
+      "question": "Using two separate analytical queries, first measure total accepted litres for period before, then measure total accepted litres for period after. Exclude rejected readings and other periods. Report only after minus before, in litres, as one DIFFERENCE claim referencing the two observed totals.",
+      "conclusion": "The total accepted litres for the 'before' period were 100, and for the 'after' period were 150. The difference between the 'after' and 'before' periods is 50 litres.",
+      "analysis": {
+        "analysis": {
+          "schema": {
+            "tables": [
+              {
+                "name": "reservoir_readings",
+                "relation_name": "reservoir_readings",
+                "row_count": 6,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "reading_id",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "period",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "review",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "litres",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "profile": {
+            "tables": [
+              {
+                "name": "reservoir_readings",
+                "relation_name": "reservoir_readings",
+                "row_count": 6,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "reading_id",
+                    "logical_type": "integer",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 6,
+                    "distinct_ratio": 1.0,
+                    "minimum": 1,
+                    "maximum": 6,
+                    "numeric_statistics": {
+                      "minimum": 1,
+                      "maximum": 6,
+                      "mean": 3.5,
+                      "median": 3.5,
+                      "standard_deviation": 1.8708286933869707,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "period",
+                    "logical_type": "string",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 3,
+                    "distinct_ratio": 0.5,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 5,
+                      "maximum_length": 6,
+                      "mean_length": 5.333333333333333,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "after",
+                      "most_frequent_count": 3,
+                      "most_frequent_ratio": 0.5
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "review",
+                    "logical_type": "string",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.3333333333333333,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 8,
+                      "maximum_length": 8,
+                      "mean_length": 8.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "accepted",
+                      "most_frequent_count": 5,
+                      "most_frequent_ratio": 0.8333333333333334
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "litres",
+                    "logical_type": "integer",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 5,
+                    "distinct_ratio": 0.8333333333333334,
+                    "minimum": 40,
+                    "maximum": 999,
+                    "numeric_statistics": {
+                      "minimum": 40,
+                      "maximum": 999,
+                      "mean": 324.8333333333333,
+                      "median": 75.0,
+                      "standard_deviation": 417.56456586576724,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 24,
+                  "missing_cell_count": 0,
+                  "missing_cell_ratio": 0.0,
+                  "rows_with_missing_count": 0,
+                  "rows_with_missing_ratio": 0.0,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 0,
+                  "columns_with_missing_ratio": 0.0
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 0,
+                  "duplicate_row_ratio": 0.0,
+                  "duplicate_group_row_count": 0,
+                  "duplicate_group_row_ratio": 0.0
+                }
+              }
+            ]
+          },
+          "issues": []
+        },
+        "summary": {
+          "table_count": 1,
+          "total_row_count": 6,
+          "total_column_count": 4,
+          "issue_count": 0,
+          "info_issue_count": 0,
+          "warning_issue_count": 0,
+          "error_issue_count": 0,
+          "table_issue_count": 0,
+          "column_issue_count": 0,
+          "affected_relation_names": []
+        },
+        "insights": [
+          {
+            "insight_type": "dataset_structure",
+            "scope": "dataset",
+            "message": "Dataset contains 1 table(s).",
+            "table_name": null,
+            "relation_name": null,
+            "column_name": null,
+            "evidence": {
+              "table_count": 1,
+              "total_row_count": 6,
+              "total_column_count": 4
+            }
+          },
+          {
+            "insight_type": "table_structure",
+            "scope": "table",
+            "message": "Table 'reservoir_readings' contains 6 row(s) and 4 column(s).",
+            "table_name": "reservoir_readings",
+            "relation_name": "reservoir_readings",
+            "column_name": null,
+            "evidence": {
+              "row_count": 6,
+              "column_count": 4
+            }
+          }
+        ]
+      },
+      "observations": [
+        {
+          "question": "What is the total sum of litres for the 'before' period, excluding all readings where the review status is 'rejected'?",
+          "sql": "SELECT SUM(\"litres\") AS \"total_accepted_litres_before\" FROM \"reservoir_readings\" WHERE \"period\" = 'before' AND \"review\" != 'rejected'",
+          "result": {
+            "columns": [
+              "total_accepted_litres_before"
+            ],
+            "rows": [
+              [
+                100
+              ]
+            ]
+          },
+          "repair_history": []
+        },
+        {
+          "question": "What is the total sum of litres for the 'after' period, excluding all readings where the review status is 'rejected'?",
+          "sql": "SELECT SUM(\"litres\") AS \"total_accepted_litres_after\" FROM \"reservoir_readings\" WHERE \"period\" = 'after' AND \"review\" != 'rejected'",
+          "result": {
+            "columns": [
+              "total_accepted_litres_after"
+            ],
+            "rows": [
+              [
+                150
+              ]
+            ]
+          },
+          "repair_history": []
+        }
+      ],
+      "status": "complete",
+      "generated_claims": [
+        {
+          "operation": "value",
+          "expected": "100",
+          "left": {
+            "observation_index": 0,
+            "row_index": 0,
+            "column": "total_accepted_litres_before"
+          },
+          "right": null,
+          "absolute_tolerance": 0
+        },
+        {
+          "operation": "value",
+          "expected": "150",
+          "left": {
+            "observation_index": 1,
+            "row_index": 0,
+            "column": "total_accepted_litres_after"
+          },
+          "right": null,
+          "absolute_tolerance": 0
+        },
+        {
+          "operation": "difference",
+          "expected": "50",
+          "left": {
+            "observation_index": 1,
+            "row_index": 0,
+            "column": "total_accepted_litres_after"
+          },
+          "right": {
+            "observation_index": 0,
+            "row_index": 0,
+            "column": "total_accepted_litres_before"
+          },
+          "absolute_tolerance": 0
+        }
+      ],
+      "synthesis_failure": null,
+      "investigation_failure": null,
+      "failed_attempts": [],
+      "narrative_verified": false,
+      "verified_claims": [
+        {
+          "claim": {
+            "operation": "value",
+            "expected": "100",
+            "left": {
+              "observation_index": 0,
+              "row_index": 0,
+              "column": "total_accepted_litres_before"
+            },
+            "right": null,
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "100",
+            "expected": "100",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        },
+        {
+          "claim": {
+            "operation": "value",
+            "expected": "150",
+            "left": {
+              "observation_index": 1,
+              "row_index": 0,
+              "column": "total_accepted_litres_after"
+            },
+            "right": null,
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "150",
+            "expected": "150",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        },
+        {
+          "claim": {
+            "operation": "difference",
+            "expected": "50",
+            "left": {
+              "observation_index": 1,
+              "row_index": 0,
+              "column": "total_accepted_litres_after"
+            },
+            "right": {
+              "observation_index": 0,
+              "row_index": 0,
+              "column": "total_accepted_litres_before"
+            },
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "50",
+            "expected": "50",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        }
+      ],
+      "quantitative_statements": [
+        {
+          "claim_index": 0,
+          "verified_claim": {
+            "claim": {
+              "operation": "value",
+              "expected": "100",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "total_accepted_litres_before"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "100",
+              "expected": "100",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          },
+          "text": "Claim 1 (value): expected 100; evidence 100; absolute tolerance 0; status supported."
+        },
+        {
+          "claim_index": 1,
+          "verified_claim": {
+            "claim": {
+              "operation": "value",
+              "expected": "150",
+              "left": {
+                "observation_index": 1,
+                "row_index": 0,
+                "column": "total_accepted_litres_after"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "150",
+              "expected": "150",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          },
+          "text": "Claim 2 (value): expected 150; evidence 150; absolute tolerance 0; status supported."
+        },
+        {
+          "claim_index": 2,
+          "verified_claim": {
+            "claim": {
+              "operation": "difference",
+              "expected": "50",
+              "left": {
+                "observation_index": 1,
+                "row_index": 0,
+                "column": "total_accepted_litres_after"
+              },
+              "right": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "total_accepted_litres_before"
+              },
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "50",
+              "expected": "50",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          },
+          "text": "Claim 3 (difference, left minus right): expected 50; evidence 50; absolute tolerance 0; status supported."
+        }
+      ],
+      "narrative_numbers": [
+        {
+          "text": "100",
+          "start": 55,
+          "end": 58,
+          "value": "100",
+          "claim_indexes": [
+            0
+          ]
+        },
+        {
+          "text": "150",
+          "start": 92,
+          "end": 95,
+          "value": "150",
+          "claim_indexes": [
+            1
+          ]
+        },
+        {
+          "text": "50",
+          "start": 156,
+          "end": 158,
+          "value": "50",
+          "claim_indexes": [
+            2
+          ]
+        }
+      ],
+      "narrative_digit_coverage": {
+        "total_digit_count": 8,
+        "parsed_digit_count": 8,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "unlinked_numbers": [],
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "verification_scope": "referenced_numeric_values_only"
+    }
+  }
+}
