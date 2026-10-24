@@ -1,4 +1,5 @@
 from pathlib import Path
+from threading import TIMEOUT_MAX
 
 import duckdb
 import pandas as pd
@@ -827,14 +828,24 @@ def test_executor_connection_applies_memory_limit() -> None:
     assert memory_limit != "unlimited"
 
 
-def test_executor_rejects_non_positive_execution_timeout() -> None:
+@pytest.mark.parametrize(
+    "seconds",
+    [0.0, -1.0, float("inf"), float("-inf"), float("nan"), TIMEOUT_MAX * 2],
+    ids=[
+        "zero",
+        "negative",
+        "positive-infinity",
+        "negative-infinity",
+        "nan",
+        "above-platform-timer-limit",
+    ],
+)
+def test_executor_rejects_invalid_execution_timeout(seconds: float) -> None:
     with pytest.raises(
         ValueError,
-        match="Query execution timeout must be positive.",
+        match="Query execution timeout must be finite, positive, and within",
     ):
-        DuckDBExecutor(
-            execution_timeout_seconds=0,
-        )
+        DuckDBExecutor(execution_timeout_seconds=seconds)
 
 
 def test_timeout_error_is_query_execution_error() -> None:

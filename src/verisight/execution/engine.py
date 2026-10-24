@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from threading import Event, Timer
+from threading import TIMEOUT_MAX, Event, Timer
 from time import monotonic
 from uuid import UUID
 
@@ -59,8 +59,11 @@ class DuckDBExecutor:
         if memory_limit_mb <= 0:
             raise ValueError("Query memory limit must be positive.")
 
-        if execution_timeout_seconds <= 0:
-            raise ValueError("Query execution timeout must be positive.")
+        if not 0 < execution_timeout_seconds <= TIMEOUT_MAX:
+            raise ValueError(
+                "Query execution timeout must be finite, positive, and within "
+                "the platform timer limit."
+            )
 
         if temp_storage_limit_mb <= 0:
             raise ValueError("Query temporary storage limit must be positive.")

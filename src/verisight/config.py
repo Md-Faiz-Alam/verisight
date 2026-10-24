@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from threading import TIMEOUT_MAX
 from typing import Literal
 
 from pydantic import Field
@@ -52,6 +53,8 @@ class Settings(BaseSettings):
     max_query_execution_seconds: float = Field(
         default=30.0,
         gt=0,
+        le=TIMEOUT_MAX,
+        allow_inf_nan=False,
     )
 
     max_query_temp_storage_mb: int = Field(

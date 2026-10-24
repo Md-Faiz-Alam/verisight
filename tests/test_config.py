@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from threading import TIMEOUT_MAX
 from typing import Literal
 
 import pytest
@@ -190,11 +191,29 @@ def test_settings_load_query_execution_timeout_from_environment(
     assert settings.max_query_execution_seconds == 12.5
 
 
-def test_settings_reject_non_positive_query_execution_timeout() -> None:
-    with pytest.raises(ValidationError):
-        SettingsWithoutEnvFile(
-            max_query_execution_seconds=0,
-        )
+@pytest.mark.parametrize("source", ["argument", "environment"])
+@pytest.mark.parametrize(
+    "seconds",
+    [0.0, -1.0, float("inf"), float("-inf"), float("nan"), TIMEOUT_MAX * 2],
+    ids=[
+        "zero",
+        "negative",
+        "positive-infinity",
+        "negative-infinity",
+        "nan",
+        "above-platform-timer-limit",
+    ],
+)
+def test_settings_reject_invalid_query_execution_timeout(
+    monkeypatch: pytest.MonkeyPatch, source: str, seconds: float
+) -> None:
+    if source == "environment":
+        monkeypatch.setenv("VERISIGHT_MAX_QUERY_EXECUTION_SECONDS", str(seconds))
+        with pytest.raises(ValidationError):
+            SettingsWithoutEnvFile()
+    else:
+        with pytest.raises(ValidationError):
+            SettingsWithoutEnvFile(max_query_execution_seconds=seconds)
 
 
 def test_settings_load_query_temp_storage_limit_from_environment(
