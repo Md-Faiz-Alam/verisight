@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "report_type": "caller_scoped_live_validation",
+  "timestamp_utc": "2026-10-24T03:25:54.081862+00:00",
+  "revision": {
+    "commit": "34c3f30465142ce93b43ab705824f718ce760b9c",
+    "tracked_changes": false,
+    "status_scope": "tracked_files_only"
+  },
+  "python_version": "3.11.9",
+  "sdk_version": "2.27.0",
+  "case": "education_entities",
+  "requested_population": [
+    {
+      "relation": "enrolments",
+      "column": "enrolment state",
+      "values": [
+        "active"
+      ]
+    },
+    {
+      "relation": "enrolments",
+      "column": "cohort",
+      "values": [
+        2026
+      ]
+    },
+    {
+      "relation": "enrolments",
+      "column": "outcome",
+      "values": [
+        "complete",
+        "incomplete"
+      ]
+    }
+  ],
+  "max_steps": 1,
+  "limitations": "Caller supplies the population constraints. This does not measure autonomous population interpretation or certify narrative semantics. Only committed synthetic fixture content is retained.",
+  "model": "gemini-3.1-flash-lite",
+  "run_settings": {
+    "allow_llm_data_disclosure": true,
+    "request_timeout_seconds": 60.0,
+    "provider_retries": 1,
+    "retry_base_delay_seconds": 1.0,
+    "max_investigation_seconds": 120.0,
+    "max_query_execution_seconds": 30.0,
+    "max_query_result_rows": 10000,
+    "max_query_result_bytes": 1048576,
+    "max_query_memory_mb": 512,
+    "max_query_temp_storage_mb": 1024
+  },
+  "result": {
+    "expected": "37.5",
+    "observation_count": 1,
+    "claim_count": 1,
+    "narrative_verified": false,
+    "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+    "narrative_number_count": 4,
+    "unlinked_number_count": 3,
+    "narrative_digit_coverage": {
+      "total_digit_count": 9,
+      "parsed_digit_count": 9,
+      "unparsed_digit_count": 0,
+      "status": "all_digits_parsed"
+    },
+    "verification_status": "supported",
+    "actual": "37.5",
+    "outcome": "correct_numeric",
+    "synthetic_evidence": {
+      "question": "Among distinct active learners in cohort 2026 with a known outcome, what percentage completed? Outcomes are complete or incomplete. Count learner identities, not enrolment rows. Exclude cancelled enrolments, missing outcomes, and other cohorts. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+      "conclusion": "Among the 8 distinct active learners in cohort 2026 with a known outcome (complete or incomplete), 3 completed the program, resulting in a completion rate of 37.5%.",
+      "population": [
+        {
+          "relation": "enrolments",
+          "column": "enrolment state",
+          "values": [
+            "active"
+          ]
+        },
+        {
+          "relation": "enrolments",
+          "column": "cohort",
+          "values": [
+            2026
+          ]
+        },
+        {
+          "relation": "enrolments",
+          "column": "outcome",
+          "values": [
+            "complete",
+            "incomplete"
+          ]
+        }
+      ],
+      "observations": [
+        {
+          "question": "For learners in cohort 2026 with an active enrolment state and an outcome of either 'complete' or 'incomplete', what are the total count of distinct learner IDs and the count of distinct learner IDs where the outcome is 'complete'?",
+          "sql": "SELECT\n  COUNT(DISTINCT \"learner id\") AS \"total distinct learners\",\n  COUNT(DISTINCT CASE WHEN \"outcome\" = 'complete' THEN \"learner id\" END) AS \"completed distinct learners\",\n  100.0 * COUNT(DISTINCT CASE WHEN \"outcome\" = 'complete' THEN \"learner id\" END) / NULLIF(COUNT(DISTINCT \"learner id\"), 0) AS \"completion percentage\"\nFROM \"enrolments\"\nWHERE \"cohort\" = 2026\n  AND \"enrolment state\" = 'active'\n  AND \"outcome\" IN ('complete', 'incomplete')",
+          "result": {
+            "columns": [
+              "total distinct learners",
+              "completed distinct learners",
+              "completion percentage"
+            ],
+            "rows": [
+              [
+                8,
+                3,
+                37.5
+              ]
+            ]
+          },
+          "repair_history": []
+        }
+      ],
+      "verified_claims": [
+        {
+          "claim": {
+            "operation": "value",
+            "expected": "37.5",
+            "left": {
+              "observation_index": 0,
+              "row_index": 0,
+              "column": "completion percentage"
+            },
+            "right": null,
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "37.5",
+            "expected": "37.5",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        }
+      ],
+      "failed_attempts": []
+    },
+    "control_baseline": {
+      "kind": "supplied_sql_control",
+      "expected": "37.5",
+      "actual": "37.5",
+      "outcome": "correct_numeric",
+      "elapsed_seconds": 0.371
+    },
+    "population_boundary_control": {
+      "kind": "supplied_broad_sql_with_caller_population",
+      "sql": "SELECT COUNT(DISTINCT \"learner id\") AS learners, COUNT(DISTINCT CASE WHEN outcome = 'complete' THEN \"learner id\" END) AS completed, 100.0 * COUNT(DISTINCT CASE WHEN outcome = 'complete' THEN \"learner id\" END) / NULLIF(COUNT(DISTINCT \"learner id\"), 0) AS metric FROM enrolments WHERE cohort = 2026 AND \"enrolment state\" <> 'cancelled' AND outcome IS NOT NULL",
+      "result": {
+        "columns": [
+          "learners",
+          "completed",
+          "metric"
+        ],
+        "rows": [
+          [
+            8,
+            3,
+            37.5
+          ]
+        ]
+      },
+      "expected_rows": [
+        [
+          8,
+          3,
+          37.5
+        ]
+      ],
+      "outcome": "passed"
+    },
+    "generation_calls": [
+      {
+        "stage": "investigator",
+        "call_number": 1,
+        "attempts": 1,
+        "elapsed_seconds": 5.322,
+        "returned_text": true
+      },
+      {
+        "stage": "text_generation",
+        "call_number": 1,
+        "attempts": 1,
+        "elapsed_seconds": 2.999,
+        "returned_text": true
+      },
+      {
+        "stage": "investigator",
+        "call_number": 2,
+        "attempts": 1,
+        "elapsed_seconds": 2.101,
+        "returned_text": true
+      },
+      {
+        "stage": "structured_synthesis",
+        "call_number": 1,
+        "attempts": 1,
+        "elapsed_seconds": 2.261,
+        "returned_text": true
+      }
+    ]
+  },
+  "elapsed_seconds": 13.298
+}
