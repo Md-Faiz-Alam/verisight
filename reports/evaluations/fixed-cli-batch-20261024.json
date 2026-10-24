@@ -1,0 +1,2978 @@
+{
+  "record_type": "fixed_synthetic_cli_batch",
+  "manifest_sha256": "863981dd9fec757bf90085236fa4d4a36bf9b965a50fb0401c9743d71b0c4675",
+  "manifest": {
+    "protocol": "fixed_synthetic_cli_evaluation",
+    "prepared_at_revision": "46da4c9c1b57a6ee6fa41c9f30b9b664596f1011",
+    "limitations": "Known synthetic development cases, not held-out generalization evidence. Supplied SQL controls are not a competing AI baseline.",
+    "population_mode": "unscoped",
+    "model": "gemini-3.1-flash-lite",
+    "max_investigation_seconds": 120,
+    "request_timeout_seconds": 60,
+    "provider_retries": 1,
+    "execution_policy": "One CLI invocation per case. Keep every outcome. No automatic whole-case reruns or prompt edits after observing results. Never supply expected answers or control SQL to generation.",
+    "cases": [
+      {
+        "id": "freight_join",
+        "question": "What is the total shipment charge for delivered shipments that have at least one rail leg? Count each shipment's charge exactly once, even when it has multiple rail legs. Return only this metric.",
+        "max_steps": 1,
+        "expected": "200",
+        "derivation": "Qualifying shipment charges: A=120 and B=80.",
+        "files": {
+          "freight_shipments.csv": "shipment_id,state,charge\nA,delivered,120\nB,delivered,80\nC,delivered,40\nD,cancelled,999\n",
+          "freight_legs.csv": "leg_id,shipment_id,mode\n1,A,rail\n2,A,rail\n3,B,rail\n4,C,road\n5,D,rail\n"
+        },
+        "controls": [
+          {
+            "sql": "SELECT SUM(s.charge) AS metric FROM freight_shipments s WHERE s.state = 'delivered' AND EXISTS (SELECT 1 FROM freight_legs l WHERE l.shipment_id = s.shipment_id AND l.mode = 'rail')",
+            "expected": "200",
+            "observed_actual": "200",
+            "outcome": "correct_numeric"
+          }
+        ]
+      },
+      {
+        "id": "orchard_weighted",
+        "question": "What is the mass-weighted mean reading among accepted orchard samples? Include only samples with strictly positive mass and a non-missing reading. Use the same eligible samples in both the numerator and denominator. Return only this metric.",
+        "max_steps": 1,
+        "expected": "2.75",
+        "derivation": "(1*2 + 3*3)/(1+3) = 11/4.",
+        "files": {
+          "orchard_samples.csv": "sample_id,review,mass,reading\n1,accepted,1,2\n2,accepted,3,3\n3,rejected,100,99\n4,accepted,0,500\n5,accepted,-2,100\n6,accepted,5,\n"
+        },
+        "controls": [
+          {
+            "sql": "SELECT SUM(mass * reading) * 1.0 / SUM(mass) AS metric FROM orchard_samples WHERE review = 'accepted' AND mass > 0 AND reading IS NOT NULL",
+            "expected": "2.75",
+            "observed_actual": "2.75",
+            "outcome": "correct_numeric"
+          }
+        ]
+      },
+      {
+        "id": "programme_population",
+        "question": "Among distinct people in cohort 2026 whose enrolment state is exactly active and whose outcome is complete or incomplete, what percentage completed? Count people, not enrolment rows. Exclude waitlisted and cancelled enrolments, missing outcomes, and other cohorts. Return the percentage on the 0-to-100 scale.",
+        "max_steps": 1,
+        "expected": "37.5",
+        "derivation": "Three completed people among eight eligible people.",
+        "files": {
+          "program_enrolments.csv": "person_id,cohort,state,outcome\np1,2026,active,complete\np1,2026,active,complete\np2,2026,active,complete\np3,2026,active,complete\np4,2026,active,incomplete\np5,2026,active,incomplete\np6,2026,active,incomplete\np7,2026,active,incomplete\np8,2026,active,incomplete\np9,2026,waitlisted,complete\np10,2026,waitlisted,complete\np11,2026,cancelled,complete\np12,2026,active,\np13,2025,active,complete\n"
+        },
+        "controls": [
+          {
+            "sql": "SELECT 100.0 * COUNT(DISTINCT CASE WHEN outcome = 'complete' THEN person_id END) / COUNT(DISTINCT person_id) AS metric FROM program_enrolments WHERE cohort = 2026 AND state = 'active' AND outcome IN ('complete', 'incomplete')",
+            "expected": "37.5",
+            "observed_actual": "37.5",
+            "outcome": "correct_numeric"
+          }
+        ]
+      },
+      {
+        "id": "reservoir_two_queries",
+        "question": "Using two separate analytical queries, first measure total accepted litres for period before, then measure total accepted litres for period after. Exclude rejected readings and other periods. Report only after minus before, in litres, as one DIFFERENCE claim referencing the two observed totals.",
+        "max_steps": 2,
+        "expected": "50",
+        "derivation": "After=150; before=100; after minus before=50.",
+        "files": {
+          "reservoir_readings.csv": "reading_id,period,review,litres\n1,before,accepted,40\n2,before,accepted,60\n3,after,accepted,90\n4,after,accepted,60\n5,after,rejected,999\n6,other,accepted,700\n"
+        },
+        "controls": [
+          {
+            "sql": "SELECT SUM(litres) AS metric FROM reservoir_readings WHERE review = 'accepted' AND period = 'before'",
+            "expected": "100",
+            "observed_actual": "100",
+            "outcome": "correct_numeric"
+          },
+          {
+            "sql": "SELECT SUM(litres) AS metric FROM reservoir_readings WHERE review = 'accepted' AND period = 'after'",
+            "expected": "150",
+            "observed_actual": "150",
+            "outcome": "correct_numeric"
+          }
+        ]
+      }
+    ]
+  },
+  "original_automatic_summary": {
+    "protocol": "fixed_synthetic_cli_evaluation",
+    "tested_revision": "46da4c9c1b57a6ee6fa41c9f30b9b664596f1011",
+    "manifest_sha256": "863981dd9fec757bf90085236fa4d4a36bf9b965a50fb0401c9743d71b0c4675",
+    "model": "gemini-3.1-flash-lite",
+    "population_mode": "unscoped",
+    "status": "finished",
+    "limitations": "Numerical scoring checks one supported claim against an independent answer. SQL semantics and narrative still require inspection. Two-query structure is assessed separately from numerical accuracy. These are synthetic development cases.",
+    "results": [
+      {
+        "case": "freight_join",
+        "expected": "200",
+        "status": "finished",
+        "report": "freight_join\\live-report.json",
+        "stdout_log": "freight_join\\stdout.log",
+        "stderr_log": "freight_join\\stderr.log",
+        "exit_code": 0,
+        "elapsed_seconds": 11.333,
+        "report_kind": "investigation",
+        "numeric_outcome": "correct_numeric",
+        "workflow_status": "complete",
+        "observation_count": 1,
+        "claim_count": 1,
+        "narrative_verified": false,
+        "unlinked_number_count": 0,
+        "investigation_failure": null,
+        "synthesis_failure": null,
+        "verification_status": "supported",
+        "actual": "200",
+        "claimed_value": "200",
+        "two_query_difference_structure": false
+      },
+      {
+        "case": "orchard_weighted",
+        "expected": "2.75",
+        "status": "finished",
+        "report": "orchard_weighted\\live-report.json",
+        "stdout_log": "orchard_weighted\\stdout.log",
+        "stderr_log": "orchard_weighted\\stderr.log",
+        "exit_code": 0,
+        "elapsed_seconds": 15.306,
+        "report_kind": "investigation",
+        "numeric_outcome": "unscored_multiple_claims",
+        "workflow_status": "complete",
+        "observation_count": 1,
+        "claim_count": 2,
+        "narrative_verified": false,
+        "unlinked_number_count": 1,
+        "investigation_failure": null,
+        "synthesis_failure": null,
+        "two_query_difference_structure": false
+      },
+      {
+        "case": "programme_population",
+        "expected": "37.5",
+        "status": "finished",
+        "report": "programme_population\\live-report.json",
+        "stdout_log": "programme_population\\stdout.log",
+        "stderr_log": "programme_population\\stderr.log",
+        "exit_code": 0,
+        "elapsed_seconds": 10.744,
+        "report_kind": "investigation",
+        "numeric_outcome": "correct_numeric",
+        "workflow_status": "complete",
+        "observation_count": 1,
+        "claim_count": 1,
+        "narrative_verified": false,
+        "unlinked_number_count": 1,
+        "investigation_failure": null,
+        "synthesis_failure": null,
+        "verification_status": "supported",
+        "actual": "37.5",
+        "claimed_value": "37.5",
+        "two_query_difference_structure": false
+      },
+      {
+        "case": "reservoir_two_queries",
+        "expected": "50",
+        "status": "finished",
+        "report": "reservoir_two_queries\\live-report.json",
+        "stdout_log": "reservoir_two_queries\\stdout.log",
+        "stderr_log": "reservoir_two_queries\\stderr.log",
+        "exit_code": 1,
+        "elapsed_seconds": 13.962,
+        "report_kind": "investigation",
+        "numeric_outcome": "incomplete",
+        "workflow_status": "incomplete",
+        "observation_count": 2,
+        "claim_count": 0,
+        "narrative_verified": false,
+        "unlinked_number_count": 0,
+        "investigation_failure": {
+          "stage": "investigator",
+          "kind": "provider_unavailable",
+          "diagnostics": {
+            "http_status": 429,
+            "retryable": true,
+            "attempts": 2,
+            "stage": "investigator",
+            "call_number": 3
+          }
+        },
+        "synthesis_failure": null,
+        "two_query_difference_structure": false
+      }
+    ]
+  },
+  "review_notes": {
+    "scope": "Manual inspection of SQL, evidence, and claims for these fixtures only. Original automatic outcomes are unchanged.",
+    "freight_join": "SQL uses membership in matching rail shipment IDs, avoiding leg multiplication. Delivered shipment charges sum to 200; the final VALUE claim references that result.",
+    "orchard_weighted": "SQL returns components 11 and 4. Both component claims are supported. The conclusion states the mathematically correct 2.75, but that final metric has no SQL result cell or verified claim and is reported as unlinked.",
+    "programme_population": "SQL applies exact active status, cohort 2026, known outcomes, distinct person counts, and percentage scaling. The result and final claim are 37.5. Unlinked 2026 is question context.",
+    "reservoir_two_queries": "The first observation lists period values. The second measures before=100. No after total was collected. The third investigator call failed with HTTP 429 after two attempts. Partial observations were retained; no final claim exists."
+  },
+  "reports": {
+    "freight_join": {
+      "original_export_sha256": "4882e8bee92539b3ff5858ce24f6612509aacfdd7ac274cc5a83e64fde8f1871",
+      "report": {
+        "schema_version": 1,
+        "report_type": "local_cli",
+        "timestamp_utc": "2026-10-24T06:02:43.500623+00:00",
+        "limitations": "Workflow completion is not analytical correctness. Numerical support checks referenced values only. Population filters do not verify business meaning or provide privacy isolation. Narrative meaning is unverified. Inspect population, grain, denominator, time period, units, and SQL.",
+        "kind": "investigation",
+        "request": {
+          "paths": [
+            "synthetic/freight_join/freight_shipments.csv",
+            "synthetic/freight_join/freight_legs.csv"
+          ],
+          "question": "What is the total shipment charge for delivered shipments that have at least one rail leg? Count each shipment's charge exactly once, even when it has multiple rail legs. Return only this metric.",
+          "population": [],
+          "population_mode": "unscoped",
+          "model": "gemini-3.1-flash-lite",
+          "max_steps": 1,
+          "max_investigation_seconds": 120.0,
+          "request_timeout_seconds": 60.0,
+          "provider_retries": 1,
+          "max_query_result_rows": 20,
+          "max_query_result_bytes": 1048576,
+          "max_query_execution_seconds": 30.0,
+          "max_query_memory_mb": 512,
+          "max_query_temp_storage_mb": 1024
+        },
+        "workflow_status": "complete",
+        "population": [],
+        "profile": {
+          "information_scope": "original_loaded_dataset",
+          "summary": {
+            "table_count": 2,
+            "total_row_count": 9,
+            "total_column_count": 6,
+            "issue_count": 0,
+            "info_issue_count": 0,
+            "warning_issue_count": 0,
+            "error_issue_count": 0,
+            "table_issue_count": 0,
+            "column_issue_count": 0,
+            "affected_relation_names": []
+          },
+          "schema": {
+            "tables": [
+              {
+                "name": "freight_shipments",
+                "relation_name": "freight_shipments",
+                "row_count": 4,
+                "column_count": 3,
+                "columns": [
+                  {
+                    "name": "shipment_id",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "state",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "charge",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  }
+                ]
+              },
+              {
+                "name": "freight_legs",
+                "relation_name": "freight_legs",
+                "row_count": 5,
+                "column_count": 3,
+                "columns": [
+                  {
+                    "name": "leg_id",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "shipment_id",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "mode",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "profiles": {
+            "tables": [
+              {
+                "name": "freight_shipments",
+                "relation_name": "freight_shipments",
+                "row_count": 4,
+                "column_count": 3,
+                "columns": [
+                  {
+                    "name": "shipment_id",
+                    "logical_type": "string",
+                    "row_count": 4,
+                    "non_missing_count": 4,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 4,
+                    "distinct_ratio": 1.0,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 1,
+                      "maximum_length": 1,
+                      "mean_length": 1.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "A",
+                      "most_frequent_count": 1,
+                      "most_frequent_ratio": 0.25
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "state",
+                    "logical_type": "string",
+                    "row_count": 4,
+                    "non_missing_count": 4,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.5,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 9,
+                      "maximum_length": 9,
+                      "mean_length": 9.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "delivered",
+                      "most_frequent_count": 3,
+                      "most_frequent_ratio": 0.75
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "charge",
+                    "logical_type": "integer",
+                    "row_count": 4,
+                    "non_missing_count": 4,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 4,
+                    "distinct_ratio": 1.0,
+                    "minimum": 40,
+                    "maximum": 999,
+                    "numeric_statistics": {
+                      "minimum": 40,
+                      "maximum": 999,
+                      "mean": 309.75,
+                      "median": 100.0,
+                      "standard_deviation": 460.65921966966715,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 12,
+                  "missing_cell_count": 0,
+                  "missing_cell_ratio": 0.0,
+                  "rows_with_missing_count": 0,
+                  "rows_with_missing_ratio": 0.0,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 0,
+                  "columns_with_missing_ratio": 0.0
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 0,
+                  "duplicate_row_ratio": 0.0,
+                  "duplicate_group_row_count": 0,
+                  "duplicate_group_row_ratio": 0.0
+                }
+              },
+              {
+                "name": "freight_legs",
+                "relation_name": "freight_legs",
+                "row_count": 5,
+                "column_count": 3,
+                "columns": [
+                  {
+                    "name": "leg_id",
+                    "logical_type": "integer",
+                    "row_count": 5,
+                    "non_missing_count": 5,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 5,
+                    "distinct_ratio": 1.0,
+                    "minimum": 1,
+                    "maximum": 5,
+                    "numeric_statistics": {
+                      "minimum": 1,
+                      "maximum": 5,
+                      "mean": 3.0,
+                      "median": 3.0,
+                      "standard_deviation": 1.5811388300841898,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "shipment_id",
+                    "logical_type": "string",
+                    "row_count": 5,
+                    "non_missing_count": 5,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 4,
+                    "distinct_ratio": 0.8,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 1,
+                      "maximum_length": 1,
+                      "mean_length": 1.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "A",
+                      "most_frequent_count": 2,
+                      "most_frequent_ratio": 0.4
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "mode",
+                    "logical_type": "string",
+                    "row_count": 5,
+                    "non_missing_count": 5,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.4,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 4,
+                      "maximum_length": 4,
+                      "mean_length": 4.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "rail",
+                      "most_frequent_count": 4,
+                      "most_frequent_ratio": 0.8
+                    },
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 15,
+                  "missing_cell_count": 0,
+                  "missing_cell_ratio": 0.0,
+                  "rows_with_missing_count": 0,
+                  "rows_with_missing_ratio": 0.0,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 0,
+                  "columns_with_missing_ratio": 0.0
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 0,
+                  "duplicate_row_ratio": 0.0,
+                  "duplicate_group_row_count": 0,
+                  "duplicate_group_row_ratio": 0.0
+                }
+              }
+            ]
+          },
+          "quality_findings": [],
+          "insights": [
+            {
+              "insight_type": "dataset_structure",
+              "scope": "dataset",
+              "message": "Dataset contains 2 table(s).",
+              "table_name": null,
+              "relation_name": null,
+              "column_name": null,
+              "evidence": {
+                "table_count": 2,
+                "total_row_count": 9,
+                "total_column_count": 6
+              }
+            },
+            {
+              "insight_type": "table_structure",
+              "scope": "table",
+              "message": "Table 'freight_shipments' contains 4 row(s) and 3 column(s).",
+              "table_name": "freight_shipments",
+              "relation_name": "freight_shipments",
+              "column_name": null,
+              "evidence": {
+                "row_count": 4,
+                "column_count": 3
+              }
+            },
+            {
+              "insight_type": "table_structure",
+              "scope": "table",
+              "message": "Table 'freight_legs' contains 5 row(s) and 3 column(s).",
+              "table_name": "freight_legs",
+              "relation_name": "freight_legs",
+              "column_name": null,
+              "evidence": {
+                "row_count": 5,
+                "column_count": 3
+              }
+            }
+          ]
+        },
+        "numerical_statements": [
+          {
+            "claim_index": 0,
+            "verified_claim": {
+              "claim": {
+                "operation": "value",
+                "expected": "200",
+                "left": {
+                  "observation_index": 0,
+                  "row_index": 0,
+                  "column": "sum(s.charge)"
+                },
+                "right": null,
+                "absolute_tolerance": 0
+              },
+              "verification": {
+                "status": "supported",
+                "actual": "200",
+                "expected": "200",
+                "absolute_tolerance": "0",
+                "reason": "The numerical evidence supports the claimed value.",
+                "rounding_policy": null,
+                "rounded_actual": null
+              }
+            },
+            "text": "Claim 1 (value): expected 200; evidence 200; absolute tolerance 0; status supported."
+          }
+        ],
+        "unverified_model_interpretation": "The total shipment charge for delivered shipments that include at least one rail leg is 200.",
+        "investigation": {
+          "population": [],
+          "question": "What is the total shipment charge for delivered shipments that have at least one rail leg? Count each shipment's charge exactly once, even when it has multiple rail legs. Return only this metric.",
+          "conclusion": "The total shipment charge for delivered shipments that include at least one rail leg is 200.",
+          "analysis": {
+            "analysis": {
+              "schema": {
+                "tables": [
+                  {
+                    "name": "freight_shipments",
+                    "relation_name": "freight_shipments",
+                    "row_count": 4,
+                    "column_count": 3,
+                    "columns": [
+                      {
+                        "name": "shipment_id",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "state",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "charge",
+                        "physical_dtype": "int64",
+                        "logical_type": "integer",
+                        "nullable": false,
+                        "missing_count": 0
+                      }
+                    ]
+                  },
+                  {
+                    "name": "freight_legs",
+                    "relation_name": "freight_legs",
+                    "row_count": 5,
+                    "column_count": 3,
+                    "columns": [
+                      {
+                        "name": "leg_id",
+                        "physical_dtype": "int64",
+                        "logical_type": "integer",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "shipment_id",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "mode",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              "profile": {
+                "tables": [
+                  {
+                    "name": "freight_shipments",
+                    "relation_name": "freight_shipments",
+                    "row_count": 4,
+                    "column_count": 3,
+                    "columns": [
+                      {
+                        "name": "shipment_id",
+                        "logical_type": "string",
+                        "row_count": 4,
+                        "non_missing_count": 4,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 4,
+                        "distinct_ratio": 1.0,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 1,
+                          "maximum_length": 1,
+                          "mean_length": 1.0,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "A",
+                          "most_frequent_count": 1,
+                          "most_frequent_ratio": 0.25
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "state",
+                        "logical_type": "string",
+                        "row_count": 4,
+                        "non_missing_count": 4,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 2,
+                        "distinct_ratio": 0.5,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 9,
+                          "maximum_length": 9,
+                          "mean_length": 9.0,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "delivered",
+                          "most_frequent_count": 3,
+                          "most_frequent_ratio": 0.75
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "charge",
+                        "logical_type": "integer",
+                        "row_count": 4,
+                        "non_missing_count": 4,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 4,
+                        "distinct_ratio": 1.0,
+                        "minimum": 40,
+                        "maximum": 999,
+                        "numeric_statistics": {
+                          "minimum": 40,
+                          "maximum": 999,
+                          "mean": 309.75,
+                          "median": 100.0,
+                          "standard_deviation": 460.65921966966715,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      }
+                    ],
+                    "missing_value_statistics": {
+                      "total_cell_count": 12,
+                      "missing_cell_count": 0,
+                      "missing_cell_ratio": 0.0,
+                      "rows_with_missing_count": 0,
+                      "rows_with_missing_ratio": 0.0,
+                      "fully_missing_row_count": 0,
+                      "fully_missing_row_ratio": 0.0,
+                      "columns_with_missing_count": 0,
+                      "columns_with_missing_ratio": 0.0
+                    },
+                    "duplicate_statistics": {
+                      "duplicate_row_count": 0,
+                      "duplicate_row_ratio": 0.0,
+                      "duplicate_group_row_count": 0,
+                      "duplicate_group_row_ratio": 0.0
+                    }
+                  },
+                  {
+                    "name": "freight_legs",
+                    "relation_name": "freight_legs",
+                    "row_count": 5,
+                    "column_count": 3,
+                    "columns": [
+                      {
+                        "name": "leg_id",
+                        "logical_type": "integer",
+                        "row_count": 5,
+                        "non_missing_count": 5,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 5,
+                        "distinct_ratio": 1.0,
+                        "minimum": 1,
+                        "maximum": 5,
+                        "numeric_statistics": {
+                          "minimum": 1,
+                          "maximum": 5,
+                          "mean": 3.0,
+                          "median": 3.0,
+                          "standard_deviation": 1.5811388300841898,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "shipment_id",
+                        "logical_type": "string",
+                        "row_count": 5,
+                        "non_missing_count": 5,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 4,
+                        "distinct_ratio": 0.8,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 1,
+                          "maximum_length": 1,
+                          "mean_length": 1.0,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "A",
+                          "most_frequent_count": 2,
+                          "most_frequent_ratio": 0.4
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "mode",
+                        "logical_type": "string",
+                        "row_count": 5,
+                        "non_missing_count": 5,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 2,
+                        "distinct_ratio": 0.4,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 4,
+                          "maximum_length": 4,
+                          "mean_length": 4.0,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "rail",
+                          "most_frequent_count": 4,
+                          "most_frequent_ratio": 0.8
+                        },
+                        "datetime_statistics": null
+                      }
+                    ],
+                    "missing_value_statistics": {
+                      "total_cell_count": 15,
+                      "missing_cell_count": 0,
+                      "missing_cell_ratio": 0.0,
+                      "rows_with_missing_count": 0,
+                      "rows_with_missing_ratio": 0.0,
+                      "fully_missing_row_count": 0,
+                      "fully_missing_row_ratio": 0.0,
+                      "columns_with_missing_count": 0,
+                      "columns_with_missing_ratio": 0.0
+                    },
+                    "duplicate_statistics": {
+                      "duplicate_row_count": 0,
+                      "duplicate_row_ratio": 0.0,
+                      "duplicate_group_row_count": 0,
+                      "duplicate_group_row_ratio": 0.0
+                    }
+                  }
+                ]
+              },
+              "issues": []
+            },
+            "summary": {
+              "table_count": 2,
+              "total_row_count": 9,
+              "total_column_count": 6,
+              "issue_count": 0,
+              "info_issue_count": 0,
+              "warning_issue_count": 0,
+              "error_issue_count": 0,
+              "table_issue_count": 0,
+              "column_issue_count": 0,
+              "affected_relation_names": []
+            },
+            "insights": [
+              {
+                "insight_type": "dataset_structure",
+                "scope": "dataset",
+                "message": "Dataset contains 2 table(s).",
+                "table_name": null,
+                "relation_name": null,
+                "column_name": null,
+                "evidence": {
+                  "table_count": 2,
+                  "total_row_count": 9,
+                  "total_column_count": 6
+                }
+              },
+              {
+                "insight_type": "table_structure",
+                "scope": "table",
+                "message": "Table 'freight_shipments' contains 4 row(s) and 3 column(s).",
+                "table_name": "freight_shipments",
+                "relation_name": "freight_shipments",
+                "column_name": null,
+                "evidence": {
+                  "row_count": 4,
+                  "column_count": 3
+                }
+              },
+              {
+                "insight_type": "table_structure",
+                "scope": "table",
+                "message": "Table 'freight_legs' contains 5 row(s) and 3 column(s).",
+                "table_name": "freight_legs",
+                "relation_name": "freight_legs",
+                "column_name": null,
+                "evidence": {
+                  "row_count": 5,
+                  "column_count": 3
+                }
+              }
+            ]
+          },
+          "observations": [
+            {
+              "question": "What is the sum of 'charge' for all unique 'shipment_id's from 'freight_shipments' where 'state' is 'delivered' and the 'shipment_id' appears in 'freight_legs' with a 'mode' of 'rail'?",
+              "sql": "SELECT SUM(\"s\".\"charge\") FROM \"freight_shipments\" AS \"s\" WHERE \"s\".\"state\" = 'delivered' AND \"s\".\"shipment_id\" IN (SELECT \"l\".\"shipment_id\" FROM \"freight_legs\" AS \"l\" WHERE \"l\".\"mode\" = 'rail')",
+              "result": {
+                "columns": [
+                  "sum(s.charge)"
+                ],
+                "rows": [
+                  [
+                    200
+                  ]
+                ]
+              },
+              "repair_history": []
+            }
+          ],
+          "status": "complete",
+          "generated_claims": [
+            {
+              "operation": "value",
+              "expected": "200",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "sum(s.charge)"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            }
+          ],
+          "synthesis_failure": null,
+          "investigation_failure": null,
+          "failed_attempts": [],
+          "narrative_verified": false,
+          "verified_claims": [
+            {
+              "claim": {
+                "operation": "value",
+                "expected": "200",
+                "left": {
+                  "observation_index": 0,
+                  "row_index": 0,
+                  "column": "sum(s.charge)"
+                },
+                "right": null,
+                "absolute_tolerance": 0
+              },
+              "verification": {
+                "status": "supported",
+                "actual": "200",
+                "expected": "200",
+                "absolute_tolerance": "0",
+                "reason": "The numerical evidence supports the claimed value.",
+                "rounding_policy": null,
+                "rounded_actual": null
+              }
+            }
+          ],
+          "quantitative_statements": [
+            {
+              "claim_index": 0,
+              "verified_claim": {
+                "claim": {
+                  "operation": "value",
+                  "expected": "200",
+                  "left": {
+                    "observation_index": 0,
+                    "row_index": 0,
+                    "column": "sum(s.charge)"
+                  },
+                  "right": null,
+                  "absolute_tolerance": 0
+                },
+                "verification": {
+                  "status": "supported",
+                  "actual": "200",
+                  "expected": "200",
+                  "absolute_tolerance": "0",
+                  "reason": "The numerical evidence supports the claimed value.",
+                  "rounding_policy": null,
+                  "rounded_actual": null
+                }
+              },
+              "text": "Claim 1 (value): expected 200; evidence 200; absolute tolerance 0; status supported."
+            }
+          ],
+          "narrative_numbers": [
+            {
+              "text": "200",
+              "start": 88,
+              "end": 91,
+              "value": "200",
+              "claim_indexes": [
+                0
+              ]
+            }
+          ],
+          "narrative_digit_coverage": {
+            "total_digit_count": 3,
+            "parsed_digit_count": 3,
+            "unparsed_digit_count": 0,
+            "status": "all_digits_parsed"
+          },
+          "unlinked_numbers": [],
+          "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+          "verification_scope": "referenced_numeric_values_only"
+        }
+      }
+    },
+    "orchard_weighted": {
+      "original_export_sha256": "ec1135cd88ec639d6ace0b2bb13a4f9721ae771448a83a52f3cfcb9f6df96749",
+      "report": {
+        "schema_version": 1,
+        "report_type": "local_cli",
+        "timestamp_utc": "2026-10-24T06:02:58.814705+00:00",
+        "limitations": "Workflow completion is not analytical correctness. Numerical support checks referenced values only. Population filters do not verify business meaning or provide privacy isolation. Narrative meaning is unverified. Inspect population, grain, denominator, time period, units, and SQL.",
+        "kind": "investigation",
+        "request": {
+          "paths": [
+            "synthetic/orchard_weighted/orchard_samples.csv"
+          ],
+          "question": "What is the mass-weighted mean reading among accepted orchard samples? Include only samples with strictly positive mass and a non-missing reading. Use the same eligible samples in both the numerator and denominator. Return only this metric.",
+          "population": [],
+          "population_mode": "unscoped",
+          "model": "gemini-3.1-flash-lite",
+          "max_steps": 1,
+          "max_investigation_seconds": 120.0,
+          "request_timeout_seconds": 60.0,
+          "provider_retries": 1,
+          "max_query_result_rows": 20,
+          "max_query_result_bytes": 1048576,
+          "max_query_execution_seconds": 30.0,
+          "max_query_memory_mb": 512,
+          "max_query_temp_storage_mb": 1024
+        },
+        "workflow_status": "complete",
+        "population": [],
+        "profile": {
+          "information_scope": "original_loaded_dataset",
+          "summary": {
+            "table_count": 1,
+            "total_row_count": 6,
+            "total_column_count": 4,
+            "issue_count": 1,
+            "info_issue_count": 0,
+            "warning_issue_count": 1,
+            "error_issue_count": 0,
+            "table_issue_count": 0,
+            "column_issue_count": 1,
+            "affected_relation_names": [
+              "orchard_samples"
+            ]
+          },
+          "schema": {
+            "tables": [
+              {
+                "name": "orchard_samples",
+                "relation_name": "orchard_samples",
+                "row_count": 6,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "sample_id",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "review",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "mass",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "reading",
+                    "physical_dtype": "Int64",
+                    "logical_type": "integer",
+                    "nullable": true,
+                    "missing_count": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "profiles": {
+            "tables": [
+              {
+                "name": "orchard_samples",
+                "relation_name": "orchard_samples",
+                "row_count": 6,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "sample_id",
+                    "logical_type": "integer",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 6,
+                    "distinct_ratio": 1.0,
+                    "minimum": 1,
+                    "maximum": 6,
+                    "numeric_statistics": {
+                      "minimum": 1,
+                      "maximum": 6,
+                      "mean": 3.5,
+                      "median": 3.5,
+                      "standard_deviation": 1.8708286933869707,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "review",
+                    "logical_type": "string",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.3333333333333333,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 8,
+                      "maximum_length": 8,
+                      "mean_length": 8.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "accepted",
+                      "most_frequent_count": 5,
+                      "most_frequent_ratio": 0.8333333333333334
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "mass",
+                    "logical_type": "integer",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 6,
+                    "distinct_ratio": 1.0,
+                    "minimum": -2,
+                    "maximum": 100,
+                    "numeric_statistics": {
+                      "minimum": -2,
+                      "maximum": 100,
+                      "mean": 17.833333333333332,
+                      "median": 2.0,
+                      "standard_deviation": 40.32575686415156,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "reading",
+                    "logical_type": "integer",
+                    "row_count": 6,
+                    "non_missing_count": 5,
+                    "missing_count": 1,
+                    "missing_ratio": 0.16666666666666666,
+                    "distinct_count": 5,
+                    "distinct_ratio": 1.0,
+                    "minimum": 2,
+                    "maximum": 500,
+                    "numeric_statistics": {
+                      "minimum": 2,
+                      "maximum": 500,
+                      "mean": 140.8,
+                      "median": 99.0,
+                      "standard_deviation": 206.57371565617925,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 24,
+                  "missing_cell_count": 1,
+                  "missing_cell_ratio": 0.041666666666666664,
+                  "rows_with_missing_count": 1,
+                  "rows_with_missing_ratio": 0.16666666666666666,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 1,
+                  "columns_with_missing_ratio": 0.25
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 0,
+                  "duplicate_row_ratio": 0.0,
+                  "duplicate_group_row_count": 0,
+                  "duplicate_group_row_ratio": 0.0
+                }
+              }
+            ]
+          },
+          "quality_findings": [
+            {
+              "issue_type": "missing_values",
+              "severity": "warning",
+              "scope": "column",
+              "table_name": "orchard_samples",
+              "relation_name": "orchard_samples",
+              "message": "Column contains missing values.",
+              "column_name": "reading",
+              "affected_count": 1,
+              "affected_ratio": 0.16666666666666666,
+              "evidence": {
+                "missing_count": 1,
+                "non_missing_count": 5,
+                "row_count": 6
+              }
+            }
+          ],
+          "insights": [
+            {
+              "insight_type": "dataset_structure",
+              "scope": "dataset",
+              "message": "Dataset contains 1 table(s).",
+              "table_name": null,
+              "relation_name": null,
+              "column_name": null,
+              "evidence": {
+                "table_count": 1,
+                "total_row_count": 6,
+                "total_column_count": 4
+              }
+            },
+            {
+              "insight_type": "table_structure",
+              "scope": "table",
+              "message": "Table 'orchard_samples' contains 6 row(s) and 4 column(s).",
+              "table_name": "orchard_samples",
+              "relation_name": "orchard_samples",
+              "column_name": null,
+              "evidence": {
+                "row_count": 6,
+                "column_count": 4
+              }
+            },
+            {
+              "insight_type": "data_quality",
+              "scope": "column",
+              "message": "Column contains missing values.",
+              "table_name": "orchard_samples",
+              "relation_name": "orchard_samples",
+              "column_name": "reading",
+              "evidence": {
+                "missing_count": 1,
+                "non_missing_count": 5,
+                "row_count": 6
+              }
+            }
+          ]
+        },
+        "numerical_statements": [
+          {
+            "claim_index": 0,
+            "verified_claim": {
+              "claim": {
+                "operation": "value",
+                "expected": "11",
+                "left": {
+                  "observation_index": 0,
+                  "row_index": 0,
+                  "column": "weighted_reading_sum"
+                },
+                "right": null,
+                "absolute_tolerance": 0
+              },
+              "verification": {
+                "status": "supported",
+                "actual": "11",
+                "expected": "11",
+                "absolute_tolerance": "0",
+                "reason": "The numerical evidence supports the claimed value.",
+                "rounding_policy": null,
+                "rounded_actual": null
+              }
+            },
+            "text": "Claim 1 (value): expected 11; evidence 11; absolute tolerance 0; status supported."
+          },
+          {
+            "claim_index": 1,
+            "verified_claim": {
+              "claim": {
+                "operation": "value",
+                "expected": "4",
+                "left": {
+                  "observation_index": 0,
+                  "row_index": 0,
+                  "column": "total_mass"
+                },
+                "right": null,
+                "absolute_tolerance": 0
+              },
+              "verification": {
+                "status": "supported",
+                "actual": "4",
+                "expected": "4",
+                "absolute_tolerance": "0",
+                "reason": "The numerical evidence supports the claimed value.",
+                "rounding_policy": null,
+                "rounded_actual": null
+              }
+            },
+            "text": "Claim 2 (value): expected 4; evidence 4; absolute tolerance 0; status supported."
+          }
+        ],
+        "unverified_model_interpretation": "The mass-weighted mean reading for accepted orchard samples with strictly positive mass and non-missing readings was calculated by dividing the sum of (mass * reading) by the total mass of the eligible samples. The result is 2.75.",
+        "investigation": {
+          "population": [],
+          "question": "What is the mass-weighted mean reading among accepted orchard samples? Include only samples with strictly positive mass and a non-missing reading. Use the same eligible samples in both the numerator and denominator. Return only this metric.",
+          "conclusion": "The mass-weighted mean reading for accepted orchard samples with strictly positive mass and non-missing readings was calculated by dividing the sum of (mass * reading) by the total mass of the eligible samples. The result is 2.75.",
+          "analysis": {
+            "analysis": {
+              "schema": {
+                "tables": [
+                  {
+                    "name": "orchard_samples",
+                    "relation_name": "orchard_samples",
+                    "row_count": 6,
+                    "column_count": 4,
+                    "columns": [
+                      {
+                        "name": "sample_id",
+                        "physical_dtype": "int64",
+                        "logical_type": "integer",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "review",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "mass",
+                        "physical_dtype": "int64",
+                        "logical_type": "integer",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "reading",
+                        "physical_dtype": "Int64",
+                        "logical_type": "integer",
+                        "nullable": true,
+                        "missing_count": 1
+                      }
+                    ]
+                  }
+                ]
+              },
+              "profile": {
+                "tables": [
+                  {
+                    "name": "orchard_samples",
+                    "relation_name": "orchard_samples",
+                    "row_count": 6,
+                    "column_count": 4,
+                    "columns": [
+                      {
+                        "name": "sample_id",
+                        "logical_type": "integer",
+                        "row_count": 6,
+                        "non_missing_count": 6,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 6,
+                        "distinct_ratio": 1.0,
+                        "minimum": 1,
+                        "maximum": 6,
+                        "numeric_statistics": {
+                          "minimum": 1,
+                          "maximum": 6,
+                          "mean": 3.5,
+                          "median": 3.5,
+                          "standard_deviation": 1.8708286933869707,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "review",
+                        "logical_type": "string",
+                        "row_count": 6,
+                        "non_missing_count": 6,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 2,
+                        "distinct_ratio": 0.3333333333333333,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 8,
+                          "maximum_length": 8,
+                          "mean_length": 8.0,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "accepted",
+                          "most_frequent_count": 5,
+                          "most_frequent_ratio": 0.8333333333333334
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "mass",
+                        "logical_type": "integer",
+                        "row_count": 6,
+                        "non_missing_count": 6,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 6,
+                        "distinct_ratio": 1.0,
+                        "minimum": -2,
+                        "maximum": 100,
+                        "numeric_statistics": {
+                          "minimum": -2,
+                          "maximum": 100,
+                          "mean": 17.833333333333332,
+                          "median": 2.0,
+                          "standard_deviation": 40.32575686415156,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "reading",
+                        "logical_type": "integer",
+                        "row_count": 6,
+                        "non_missing_count": 5,
+                        "missing_count": 1,
+                        "missing_ratio": 0.16666666666666666,
+                        "distinct_count": 5,
+                        "distinct_ratio": 1.0,
+                        "minimum": 2,
+                        "maximum": 500,
+                        "numeric_statistics": {
+                          "minimum": 2,
+                          "maximum": 500,
+                          "mean": 140.8,
+                          "median": 99.0,
+                          "standard_deviation": 206.57371565617925,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      }
+                    ],
+                    "missing_value_statistics": {
+                      "total_cell_count": 24,
+                      "missing_cell_count": 1,
+                      "missing_cell_ratio": 0.041666666666666664,
+                      "rows_with_missing_count": 1,
+                      "rows_with_missing_ratio": 0.16666666666666666,
+                      "fully_missing_row_count": 0,
+                      "fully_missing_row_ratio": 0.0,
+                      "columns_with_missing_count": 1,
+                      "columns_with_missing_ratio": 0.25
+                    },
+                    "duplicate_statistics": {
+                      "duplicate_row_count": 0,
+                      "duplicate_row_ratio": 0.0,
+                      "duplicate_group_row_count": 0,
+                      "duplicate_group_row_ratio": 0.0
+                    }
+                  }
+                ]
+              },
+              "issues": [
+                {
+                  "issue_type": "missing_values",
+                  "severity": "warning",
+                  "scope": "column",
+                  "table_name": "orchard_samples",
+                  "relation_name": "orchard_samples",
+                  "message": "Column contains missing values.",
+                  "column_name": "reading",
+                  "affected_count": 1,
+                  "affected_ratio": 0.16666666666666666,
+                  "evidence": {
+                    "missing_count": 1,
+                    "non_missing_count": 5,
+                    "row_count": 6
+                  }
+                }
+              ]
+            },
+            "summary": {
+              "table_count": 1,
+              "total_row_count": 6,
+              "total_column_count": 4,
+              "issue_count": 1,
+              "info_issue_count": 0,
+              "warning_issue_count": 1,
+              "error_issue_count": 0,
+              "table_issue_count": 0,
+              "column_issue_count": 1,
+              "affected_relation_names": [
+                "orchard_samples"
+              ]
+            },
+            "insights": [
+              {
+                "insight_type": "dataset_structure",
+                "scope": "dataset",
+                "message": "Dataset contains 1 table(s).",
+                "table_name": null,
+                "relation_name": null,
+                "column_name": null,
+                "evidence": {
+                  "table_count": 1,
+                  "total_row_count": 6,
+                  "total_column_count": 4
+                }
+              },
+              {
+                "insight_type": "table_structure",
+                "scope": "table",
+                "message": "Table 'orchard_samples' contains 6 row(s) and 4 column(s).",
+                "table_name": "orchard_samples",
+                "relation_name": "orchard_samples",
+                "column_name": null,
+                "evidence": {
+                  "row_count": 6,
+                  "column_count": 4
+                }
+              },
+              {
+                "insight_type": "data_quality",
+                "scope": "column",
+                "message": "Column contains missing values.",
+                "table_name": "orchard_samples",
+                "relation_name": "orchard_samples",
+                "column_name": "reading",
+                "evidence": {
+                  "missing_count": 1,
+                  "non_missing_count": 5,
+                  "row_count": 6
+                }
+              }
+            ]
+          },
+          "observations": [
+            {
+              "question": "Calculate the sum of (mass * reading) and the sum of mass for all rows in orchard_samples where review is 'accepted', mass > 0, and reading IS NOT NULL.",
+              "sql": "SELECT SUM(\"mass\" * \"reading\") AS \"weighted_reading_sum\", SUM(\"mass\") AS \"total_mass\" FROM \"orchard_samples\" WHERE \"review\" = 'accepted' AND \"mass\" > 0 AND \"reading\" IS NOT NULL",
+              "result": {
+                "columns": [
+                  "weighted_reading_sum",
+                  "total_mass"
+                ],
+                "rows": [
+                  [
+                    11,
+                    4
+                  ]
+                ]
+              },
+              "repair_history": []
+            }
+          ],
+          "status": "complete",
+          "generated_claims": [
+            {
+              "operation": "value",
+              "expected": "11",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "weighted_reading_sum"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            {
+              "operation": "value",
+              "expected": "4",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "total_mass"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            }
+          ],
+          "synthesis_failure": null,
+          "investigation_failure": null,
+          "failed_attempts": [],
+          "narrative_verified": false,
+          "verified_claims": [
+            {
+              "claim": {
+                "operation": "value",
+                "expected": "11",
+                "left": {
+                  "observation_index": 0,
+                  "row_index": 0,
+                  "column": "weighted_reading_sum"
+                },
+                "right": null,
+                "absolute_tolerance": 0
+              },
+              "verification": {
+                "status": "supported",
+                "actual": "11",
+                "expected": "11",
+                "absolute_tolerance": "0",
+                "reason": "The numerical evidence supports the claimed value.",
+                "rounding_policy": null,
+                "rounded_actual": null
+              }
+            },
+            {
+              "claim": {
+                "operation": "value",
+                "expected": "4",
+                "left": {
+                  "observation_index": 0,
+                  "row_index": 0,
+                  "column": "total_mass"
+                },
+                "right": null,
+                "absolute_tolerance": 0
+              },
+              "verification": {
+                "status": "supported",
+                "actual": "4",
+                "expected": "4",
+                "absolute_tolerance": "0",
+                "reason": "The numerical evidence supports the claimed value.",
+                "rounding_policy": null,
+                "rounded_actual": null
+              }
+            }
+          ],
+          "quantitative_statements": [
+            {
+              "claim_index": 0,
+              "verified_claim": {
+                "claim": {
+                  "operation": "value",
+                  "expected": "11",
+                  "left": {
+                    "observation_index": 0,
+                    "row_index": 0,
+                    "column": "weighted_reading_sum"
+                  },
+                  "right": null,
+                  "absolute_tolerance": 0
+                },
+                "verification": {
+                  "status": "supported",
+                  "actual": "11",
+                  "expected": "11",
+                  "absolute_tolerance": "0",
+                  "reason": "The numerical evidence supports the claimed value.",
+                  "rounding_policy": null,
+                  "rounded_actual": null
+                }
+              },
+              "text": "Claim 1 (value): expected 11; evidence 11; absolute tolerance 0; status supported."
+            },
+            {
+              "claim_index": 1,
+              "verified_claim": {
+                "claim": {
+                  "operation": "value",
+                  "expected": "4",
+                  "left": {
+                    "observation_index": 0,
+                    "row_index": 0,
+                    "column": "total_mass"
+                  },
+                  "right": null,
+                  "absolute_tolerance": 0
+                },
+                "verification": {
+                  "status": "supported",
+                  "actual": "4",
+                  "expected": "4",
+                  "absolute_tolerance": "0",
+                  "reason": "The numerical evidence supports the claimed value.",
+                  "rounding_policy": null,
+                  "rounded_actual": null
+                }
+              },
+              "text": "Claim 2 (value): expected 4; evidence 4; absolute tolerance 0; status supported."
+            }
+          ],
+          "narrative_numbers": [
+            {
+              "text": "2.75",
+              "start": 225,
+              "end": 229,
+              "value": "2.75",
+              "claim_indexes": []
+            }
+          ],
+          "narrative_digit_coverage": {
+            "total_digit_count": 3,
+            "parsed_digit_count": 3,
+            "unparsed_digit_count": 0,
+            "status": "all_digits_parsed"
+          },
+          "unlinked_numbers": [
+            "2.75"
+          ],
+          "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+          "verification_scope": "referenced_numeric_values_only"
+        }
+      }
+    },
+    "programme_population": {
+      "original_export_sha256": "4d12cb223a13c9cae5b0a29348ba6e83bed9460dec5cf2f8c6c6093b0b364a24",
+      "report": {
+        "schema_version": 1,
+        "report_type": "local_cli",
+        "timestamp_utc": "2026-10-24T06:03:09.591588+00:00",
+        "limitations": "Workflow completion is not analytical correctness. Numerical support checks referenced values only. Population filters do not verify business meaning or provide privacy isolation. Narrative meaning is unverified. Inspect population, grain, denominator, time period, units, and SQL.",
+        "kind": "investigation",
+        "request": {
+          "paths": [
+            "synthetic/programme_population/program_enrolments.csv"
+          ],
+          "question": "Among distinct people in cohort 2026 whose enrolment state is exactly active and whose outcome is complete or incomplete, what percentage completed? Count people, not enrolment rows. Exclude waitlisted and cancelled enrolments, missing outcomes, and other cohorts. Return the percentage on the 0-to-100 scale.",
+          "population": [],
+          "population_mode": "unscoped",
+          "model": "gemini-3.1-flash-lite",
+          "max_steps": 1,
+          "max_investigation_seconds": 120.0,
+          "request_timeout_seconds": 60.0,
+          "provider_retries": 1,
+          "max_query_result_rows": 20,
+          "max_query_result_bytes": 1048576,
+          "max_query_execution_seconds": 30.0,
+          "max_query_memory_mb": 512,
+          "max_query_temp_storage_mb": 1024
+        },
+        "workflow_status": "complete",
+        "population": [],
+        "profile": {
+          "information_scope": "original_loaded_dataset",
+          "summary": {
+            "table_count": 1,
+            "total_row_count": 14,
+            "total_column_count": 4,
+            "issue_count": 2,
+            "info_issue_count": 0,
+            "warning_issue_count": 2,
+            "error_issue_count": 0,
+            "table_issue_count": 1,
+            "column_issue_count": 1,
+            "affected_relation_names": [
+              "program_enrolments"
+            ]
+          },
+          "schema": {
+            "tables": [
+              {
+                "name": "program_enrolments",
+                "relation_name": "program_enrolments",
+                "row_count": 14,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "person_id",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "cohort",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "state",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "outcome",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": true,
+                    "missing_count": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "profiles": {
+            "tables": [
+              {
+                "name": "program_enrolments",
+                "relation_name": "program_enrolments",
+                "row_count": 14,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "person_id",
+                    "logical_type": "string",
+                    "row_count": 14,
+                    "non_missing_count": 14,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 13,
+                    "distinct_ratio": 0.9285714285714286,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 2,
+                      "maximum_length": 3,
+                      "mean_length": 2.2857142857142856,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "p1",
+                      "most_frequent_count": 2,
+                      "most_frequent_ratio": 0.14285714285714285
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "cohort",
+                    "logical_type": "integer",
+                    "row_count": 14,
+                    "non_missing_count": 14,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.14285714285714285,
+                    "minimum": 2025,
+                    "maximum": 2026,
+                    "numeric_statistics": {
+                      "minimum": 2025,
+                      "maximum": 2026,
+                      "mean": 2025.9285714285713,
+                      "median": 2026.0,
+                      "standard_deviation": 0.2672612419124244,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "state",
+                    "logical_type": "string",
+                    "row_count": 14,
+                    "non_missing_count": 14,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 3,
+                    "distinct_ratio": 0.21428571428571427,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 6,
+                      "maximum_length": 10,
+                      "mean_length": 6.785714285714286,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "active",
+                      "most_frequent_count": 11,
+                      "most_frequent_ratio": 0.7857142857142857
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "outcome",
+                    "logical_type": "string",
+                    "row_count": 14,
+                    "non_missing_count": 13,
+                    "missing_count": 1,
+                    "missing_ratio": 0.07142857142857142,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.15384615384615385,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 8,
+                      "maximum_length": 10,
+                      "mean_length": 8.76923076923077,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "complete",
+                      "most_frequent_count": 8,
+                      "most_frequent_ratio": 0.6153846153846154
+                    },
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 56,
+                  "missing_cell_count": 1,
+                  "missing_cell_ratio": 0.017857142857142856,
+                  "rows_with_missing_count": 1,
+                  "rows_with_missing_ratio": 0.07142857142857142,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 1,
+                  "columns_with_missing_ratio": 0.25
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 1,
+                  "duplicate_row_ratio": 0.07142857142857142,
+                  "duplicate_group_row_count": 2,
+                  "duplicate_group_row_ratio": 0.14285714285714285
+                }
+              }
+            ]
+          },
+          "quality_findings": [
+            {
+              "issue_type": "missing_values",
+              "severity": "warning",
+              "scope": "column",
+              "table_name": "program_enrolments",
+              "relation_name": "program_enrolments",
+              "message": "Column contains missing values.",
+              "column_name": "outcome",
+              "affected_count": 1,
+              "affected_ratio": 0.07142857142857142,
+              "evidence": {
+                "missing_count": 1,
+                "non_missing_count": 13,
+                "row_count": 14
+              }
+            },
+            {
+              "issue_type": "duplicate_rows",
+              "severity": "warning",
+              "scope": "table",
+              "table_name": "program_enrolments",
+              "relation_name": "program_enrolments",
+              "message": "Table contains duplicate rows.",
+              "column_name": null,
+              "affected_count": 1,
+              "affected_ratio": 0.07142857142857142,
+              "evidence": {
+                "duplicate_row_count": 1,
+                "duplicate_group_row_count": 2,
+                "row_count": 14
+              }
+            }
+          ],
+          "insights": [
+            {
+              "insight_type": "dataset_structure",
+              "scope": "dataset",
+              "message": "Dataset contains 1 table(s).",
+              "table_name": null,
+              "relation_name": null,
+              "column_name": null,
+              "evidence": {
+                "table_count": 1,
+                "total_row_count": 14,
+                "total_column_count": 4
+              }
+            },
+            {
+              "insight_type": "table_structure",
+              "scope": "table",
+              "message": "Table 'program_enrolments' contains 14 row(s) and 4 column(s).",
+              "table_name": "program_enrolments",
+              "relation_name": "program_enrolments",
+              "column_name": null,
+              "evidence": {
+                "row_count": 14,
+                "column_count": 4
+              }
+            },
+            {
+              "insight_type": "data_quality",
+              "scope": "column",
+              "message": "Column contains missing values.",
+              "table_name": "program_enrolments",
+              "relation_name": "program_enrolments",
+              "column_name": "outcome",
+              "evidence": {
+                "missing_count": 1,
+                "non_missing_count": 13,
+                "row_count": 14
+              }
+            },
+            {
+              "insight_type": "data_quality",
+              "scope": "table",
+              "message": "Table contains duplicate rows.",
+              "table_name": "program_enrolments",
+              "relation_name": "program_enrolments",
+              "column_name": null,
+              "evidence": {
+                "duplicate_row_count": 1,
+                "duplicate_group_row_count": 2,
+                "row_count": 14
+              }
+            }
+          ]
+        },
+        "numerical_statements": [
+          {
+            "claim_index": 0,
+            "verified_claim": {
+              "claim": {
+                "operation": "value",
+                "expected": "37.5",
+                "left": {
+                  "observation_index": 0,
+                  "row_index": 0,
+                  "column": "percentage_completed"
+                },
+                "right": null,
+                "absolute_tolerance": 0
+              },
+              "verification": {
+                "status": "supported",
+                "actual": "37.5",
+                "expected": "37.5",
+                "absolute_tolerance": "0",
+                "reason": "The numerical evidence supports the claimed value.",
+                "rounding_policy": null,
+                "rounded_actual": null
+              }
+            },
+            "text": "Claim 1 (value): expected 37.5; evidence 37.5; absolute tolerance 0; status supported."
+          }
+        ],
+        "unverified_model_interpretation": "Among distinct people in cohort 2026 with an active enrollment state and either a 'complete' or 'incomplete' outcome, the percentage of individuals who achieved a 'complete' outcome is 37.5%.",
+        "investigation": {
+          "population": [],
+          "question": "Among distinct people in cohort 2026 whose enrolment state is exactly active and whose outcome is complete or incomplete, what percentage completed? Count people, not enrolment rows. Exclude waitlisted and cancelled enrolments, missing outcomes, and other cohorts. Return the percentage on the 0-to-100 scale.",
+          "conclusion": "Among distinct people in cohort 2026 with an active enrollment state and either a 'complete' or 'incomplete' outcome, the percentage of individuals who achieved a 'complete' outcome is 37.5%.",
+          "analysis": {
+            "analysis": {
+              "schema": {
+                "tables": [
+                  {
+                    "name": "program_enrolments",
+                    "relation_name": "program_enrolments",
+                    "row_count": 14,
+                    "column_count": 4,
+                    "columns": [
+                      {
+                        "name": "person_id",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "cohort",
+                        "physical_dtype": "int64",
+                        "logical_type": "integer",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "state",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "outcome",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": true,
+                        "missing_count": 1
+                      }
+                    ]
+                  }
+                ]
+              },
+              "profile": {
+                "tables": [
+                  {
+                    "name": "program_enrolments",
+                    "relation_name": "program_enrolments",
+                    "row_count": 14,
+                    "column_count": 4,
+                    "columns": [
+                      {
+                        "name": "person_id",
+                        "logical_type": "string",
+                        "row_count": 14,
+                        "non_missing_count": 14,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 13,
+                        "distinct_ratio": 0.9285714285714286,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 2,
+                          "maximum_length": 3,
+                          "mean_length": 2.2857142857142856,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "p1",
+                          "most_frequent_count": 2,
+                          "most_frequent_ratio": 0.14285714285714285
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "cohort",
+                        "logical_type": "integer",
+                        "row_count": 14,
+                        "non_missing_count": 14,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 2,
+                        "distinct_ratio": 0.14285714285714285,
+                        "minimum": 2025,
+                        "maximum": 2026,
+                        "numeric_statistics": {
+                          "minimum": 2025,
+                          "maximum": 2026,
+                          "mean": 2025.9285714285713,
+                          "median": 2026.0,
+                          "standard_deviation": 0.2672612419124244,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "state",
+                        "logical_type": "string",
+                        "row_count": 14,
+                        "non_missing_count": 14,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 3,
+                        "distinct_ratio": 0.21428571428571427,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 6,
+                          "maximum_length": 10,
+                          "mean_length": 6.785714285714286,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "active",
+                          "most_frequent_count": 11,
+                          "most_frequent_ratio": 0.7857142857142857
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "outcome",
+                        "logical_type": "string",
+                        "row_count": 14,
+                        "non_missing_count": 13,
+                        "missing_count": 1,
+                        "missing_ratio": 0.07142857142857142,
+                        "distinct_count": 2,
+                        "distinct_ratio": 0.15384615384615385,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 8,
+                          "maximum_length": 10,
+                          "mean_length": 8.76923076923077,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "complete",
+                          "most_frequent_count": 8,
+                          "most_frequent_ratio": 0.6153846153846154
+                        },
+                        "datetime_statistics": null
+                      }
+                    ],
+                    "missing_value_statistics": {
+                      "total_cell_count": 56,
+                      "missing_cell_count": 1,
+                      "missing_cell_ratio": 0.017857142857142856,
+                      "rows_with_missing_count": 1,
+                      "rows_with_missing_ratio": 0.07142857142857142,
+                      "fully_missing_row_count": 0,
+                      "fully_missing_row_ratio": 0.0,
+                      "columns_with_missing_count": 1,
+                      "columns_with_missing_ratio": 0.25
+                    },
+                    "duplicate_statistics": {
+                      "duplicate_row_count": 1,
+                      "duplicate_row_ratio": 0.07142857142857142,
+                      "duplicate_group_row_count": 2,
+                      "duplicate_group_row_ratio": 0.14285714285714285
+                    }
+                  }
+                ]
+              },
+              "issues": [
+                {
+                  "issue_type": "missing_values",
+                  "severity": "warning",
+                  "scope": "column",
+                  "table_name": "program_enrolments",
+                  "relation_name": "program_enrolments",
+                  "message": "Column contains missing values.",
+                  "column_name": "outcome",
+                  "affected_count": 1,
+                  "affected_ratio": 0.07142857142857142,
+                  "evidence": {
+                    "missing_count": 1,
+                    "non_missing_count": 13,
+                    "row_count": 14
+                  }
+                },
+                {
+                  "issue_type": "duplicate_rows",
+                  "severity": "warning",
+                  "scope": "table",
+                  "table_name": "program_enrolments",
+                  "relation_name": "program_enrolments",
+                  "message": "Table contains duplicate rows.",
+                  "column_name": null,
+                  "affected_count": 1,
+                  "affected_ratio": 0.07142857142857142,
+                  "evidence": {
+                    "duplicate_row_count": 1,
+                    "duplicate_group_row_count": 2,
+                    "row_count": 14
+                  }
+                }
+              ]
+            },
+            "summary": {
+              "table_count": 1,
+              "total_row_count": 14,
+              "total_column_count": 4,
+              "issue_count": 2,
+              "info_issue_count": 0,
+              "warning_issue_count": 2,
+              "error_issue_count": 0,
+              "table_issue_count": 1,
+              "column_issue_count": 1,
+              "affected_relation_names": [
+                "program_enrolments"
+              ]
+            },
+            "insights": [
+              {
+                "insight_type": "dataset_structure",
+                "scope": "dataset",
+                "message": "Dataset contains 1 table(s).",
+                "table_name": null,
+                "relation_name": null,
+                "column_name": null,
+                "evidence": {
+                  "table_count": 1,
+                  "total_row_count": 14,
+                  "total_column_count": 4
+                }
+              },
+              {
+                "insight_type": "table_structure",
+                "scope": "table",
+                "message": "Table 'program_enrolments' contains 14 row(s) and 4 column(s).",
+                "table_name": "program_enrolments",
+                "relation_name": "program_enrolments",
+                "column_name": null,
+                "evidence": {
+                  "row_count": 14,
+                  "column_count": 4
+                }
+              },
+              {
+                "insight_type": "data_quality",
+                "scope": "column",
+                "message": "Column contains missing values.",
+                "table_name": "program_enrolments",
+                "relation_name": "program_enrolments",
+                "column_name": "outcome",
+                "evidence": {
+                  "missing_count": 1,
+                  "non_missing_count": 13,
+                  "row_count": 14
+                }
+              },
+              {
+                "insight_type": "data_quality",
+                "scope": "table",
+                "message": "Table contains duplicate rows.",
+                "table_name": "program_enrolments",
+                "relation_name": "program_enrolments",
+                "column_name": null,
+                "evidence": {
+                  "duplicate_row_count": 1,
+                  "duplicate_group_row_count": 2,
+                  "row_count": 14
+                }
+              }
+            ]
+          },
+          "observations": [
+            {
+              "question": "For the cohort 2026, count the number of distinct person_ids that have an active enrolment state and an outcome of 'complete', and separately count the number of distinct person_ids that have an active enrolment state and an outcome of 'complete' or 'incomplete', excluding any rows where the outcome is missing or the state is waitlisted/cancelled.",
+              "sql": "SELECT 100.0 * COUNT(DISTINCT CASE WHEN \"outcome\" = 'complete' THEN \"person_id\" END) / NULLIF(COUNT(DISTINCT CASE WHEN \"outcome\" IN ('complete', 'incomplete') THEN \"person_id\" END), 0) AS \"percentage_completed\" FROM \"program_enrolments\" WHERE \"cohort\" = 2026 AND \"state\" = 'active' AND \"outcome\" IN ('complete', 'incomplete')",
+              "result": {
+                "columns": [
+                  "percentage_completed"
+                ],
+                "rows": [
+                  [
+                    37.5
+                  ]
+                ]
+              },
+              "repair_history": []
+            }
+          ],
+          "status": "complete",
+          "generated_claims": [
+            {
+              "operation": "value",
+              "expected": "37.5",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "percentage_completed"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            }
+          ],
+          "synthesis_failure": null,
+          "investigation_failure": null,
+          "failed_attempts": [],
+          "narrative_verified": false,
+          "verified_claims": [
+            {
+              "claim": {
+                "operation": "value",
+                "expected": "37.5",
+                "left": {
+                  "observation_index": 0,
+                  "row_index": 0,
+                  "column": "percentage_completed"
+                },
+                "right": null,
+                "absolute_tolerance": 0
+              },
+              "verification": {
+                "status": "supported",
+                "actual": "37.5",
+                "expected": "37.5",
+                "absolute_tolerance": "0",
+                "reason": "The numerical evidence supports the claimed value.",
+                "rounding_policy": null,
+                "rounded_actual": null
+              }
+            }
+          ],
+          "quantitative_statements": [
+            {
+              "claim_index": 0,
+              "verified_claim": {
+                "claim": {
+                  "operation": "value",
+                  "expected": "37.5",
+                  "left": {
+                    "observation_index": 0,
+                    "row_index": 0,
+                    "column": "percentage_completed"
+                  },
+                  "right": null,
+                  "absolute_tolerance": 0
+                },
+                "verification": {
+                  "status": "supported",
+                  "actual": "37.5",
+                  "expected": "37.5",
+                  "absolute_tolerance": "0",
+                  "reason": "The numerical evidence supports the claimed value.",
+                  "rounding_policy": null,
+                  "rounded_actual": null
+                }
+              },
+              "text": "Claim 1 (value): expected 37.5; evidence 37.5; absolute tolerance 0; status supported."
+            }
+          ],
+          "narrative_numbers": [
+            {
+              "text": "2026",
+              "start": 32,
+              "end": 36,
+              "value": "2026",
+              "claim_indexes": []
+            },
+            {
+              "text": "37.5%",
+              "start": 185,
+              "end": 190,
+              "value": "37.5",
+              "claim_indexes": [
+                0
+              ]
+            }
+          ],
+          "narrative_digit_coverage": {
+            "total_digit_count": 7,
+            "parsed_digit_count": 7,
+            "unparsed_digit_count": 0,
+            "status": "all_digits_parsed"
+          },
+          "unlinked_numbers": [
+            "2026"
+          ],
+          "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+          "verification_scope": "referenced_numeric_values_only"
+        }
+      }
+    },
+    "reservoir_two_queries": {
+      "original_export_sha256": "57dac8f6907d5ba4a02b2a850aefb6bc428db3c3affaeffd308b9b81ac15b03b",
+      "report": {
+        "schema_version": 1,
+        "report_type": "local_cli",
+        "timestamp_utc": "2026-10-24T06:03:23.538563+00:00",
+        "limitations": "Workflow completion is not analytical correctness. Numerical support checks referenced values only. Population filters do not verify business meaning or provide privacy isolation. Narrative meaning is unverified. Inspect population, grain, denominator, time period, units, and SQL.",
+        "kind": "investigation",
+        "request": {
+          "paths": [
+            "synthetic/reservoir_two_queries/reservoir_readings.csv"
+          ],
+          "question": "Using two separate analytical queries, first measure total accepted litres for period before, then measure total accepted litres for period after. Exclude rejected readings and other periods. Report only after minus before, in litres, as one DIFFERENCE claim referencing the two observed totals.",
+          "population": [],
+          "population_mode": "unscoped",
+          "model": "gemini-3.1-flash-lite",
+          "max_steps": 2,
+          "max_investigation_seconds": 120.0,
+          "request_timeout_seconds": 60.0,
+          "provider_retries": 1,
+          "max_query_result_rows": 20,
+          "max_query_result_bytes": 1048576,
+          "max_query_execution_seconds": 30.0,
+          "max_query_memory_mb": 512,
+          "max_query_temp_storage_mb": 1024
+        },
+        "workflow_status": "incomplete",
+        "population": [],
+        "profile": {
+          "information_scope": "original_loaded_dataset",
+          "summary": {
+            "table_count": 1,
+            "total_row_count": 6,
+            "total_column_count": 4,
+            "issue_count": 0,
+            "info_issue_count": 0,
+            "warning_issue_count": 0,
+            "error_issue_count": 0,
+            "table_issue_count": 0,
+            "column_issue_count": 0,
+            "affected_relation_names": []
+          },
+          "schema": {
+            "tables": [
+              {
+                "name": "reservoir_readings",
+                "relation_name": "reservoir_readings",
+                "row_count": 6,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "reading_id",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "period",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "review",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "litres",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "profiles": {
+            "tables": [
+              {
+                "name": "reservoir_readings",
+                "relation_name": "reservoir_readings",
+                "row_count": 6,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "reading_id",
+                    "logical_type": "integer",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 6,
+                    "distinct_ratio": 1.0,
+                    "minimum": 1,
+                    "maximum": 6,
+                    "numeric_statistics": {
+                      "minimum": 1,
+                      "maximum": 6,
+                      "mean": 3.5,
+                      "median": 3.5,
+                      "standard_deviation": 1.8708286933869707,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "period",
+                    "logical_type": "string",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 3,
+                    "distinct_ratio": 0.5,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 5,
+                      "maximum_length": 6,
+                      "mean_length": 5.333333333333333,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "after",
+                      "most_frequent_count": 3,
+                      "most_frequent_ratio": 0.5
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "review",
+                    "logical_type": "string",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.3333333333333333,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 8,
+                      "maximum_length": 8,
+                      "mean_length": 8.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "accepted",
+                      "most_frequent_count": 5,
+                      "most_frequent_ratio": 0.8333333333333334
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "litres",
+                    "logical_type": "integer",
+                    "row_count": 6,
+                    "non_missing_count": 6,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 5,
+                    "distinct_ratio": 0.8333333333333334,
+                    "minimum": 40,
+                    "maximum": 999,
+                    "numeric_statistics": {
+                      "minimum": 40,
+                      "maximum": 999,
+                      "mean": 324.8333333333333,
+                      "median": 75.0,
+                      "standard_deviation": 417.56456586576724,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 24,
+                  "missing_cell_count": 0,
+                  "missing_cell_ratio": 0.0,
+                  "rows_with_missing_count": 0,
+                  "rows_with_missing_ratio": 0.0,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 0,
+                  "columns_with_missing_ratio": 0.0
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 0,
+                  "duplicate_row_ratio": 0.0,
+                  "duplicate_group_row_count": 0,
+                  "duplicate_group_row_ratio": 0.0
+                }
+              }
+            ]
+          },
+          "quality_findings": [],
+          "insights": [
+            {
+              "insight_type": "dataset_structure",
+              "scope": "dataset",
+              "message": "Dataset contains 1 table(s).",
+              "table_name": null,
+              "relation_name": null,
+              "column_name": null,
+              "evidence": {
+                "table_count": 1,
+                "total_row_count": 6,
+                "total_column_count": 4
+              }
+            },
+            {
+              "insight_type": "table_structure",
+              "scope": "table",
+              "message": "Table 'reservoir_readings' contains 6 row(s) and 4 column(s).",
+              "table_name": "reservoir_readings",
+              "relation_name": "reservoir_readings",
+              "column_name": null,
+              "evidence": {
+                "row_count": 6,
+                "column_count": 4
+              }
+            }
+          ]
+        },
+        "numerical_statements": [],
+        "unverified_model_interpretation": "Investigation incomplete: the next investigation decision could not be completed. No analytical conclusion has been established.",
+        "investigation": {
+          "population": [],
+          "question": "Using two separate analytical queries, first measure total accepted litres for period before, then measure total accepted litres for period after. Exclude rejected readings and other periods. Report only after minus before, in litres, as one DIFFERENCE claim referencing the two observed totals.",
+          "conclusion": "Investigation incomplete: the next investigation decision could not be completed. No analytical conclusion has been established.",
+          "analysis": {
+            "analysis": {
+              "schema": {
+                "tables": [
+                  {
+                    "name": "reservoir_readings",
+                    "relation_name": "reservoir_readings",
+                    "row_count": 6,
+                    "column_count": 4,
+                    "columns": [
+                      {
+                        "name": "reading_id",
+                        "physical_dtype": "int64",
+                        "logical_type": "integer",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "period",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "review",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "litres",
+                        "physical_dtype": "int64",
+                        "logical_type": "integer",
+                        "nullable": false,
+                        "missing_count": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              "profile": {
+                "tables": [
+                  {
+                    "name": "reservoir_readings",
+                    "relation_name": "reservoir_readings",
+                    "row_count": 6,
+                    "column_count": 4,
+                    "columns": [
+                      {
+                        "name": "reading_id",
+                        "logical_type": "integer",
+                        "row_count": 6,
+                        "non_missing_count": 6,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 6,
+                        "distinct_ratio": 1.0,
+                        "minimum": 1,
+                        "maximum": 6,
+                        "numeric_statistics": {
+                          "minimum": 1,
+                          "maximum": 6,
+                          "mean": 3.5,
+                          "median": 3.5,
+                          "standard_deviation": 1.8708286933869707,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "period",
+                        "logical_type": "string",
+                        "row_count": 6,
+                        "non_missing_count": 6,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 3,
+                        "distinct_ratio": 0.5,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 5,
+                          "maximum_length": 6,
+                          "mean_length": 5.333333333333333,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "after",
+                          "most_frequent_count": 3,
+                          "most_frequent_ratio": 0.5
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "review",
+                        "logical_type": "string",
+                        "row_count": 6,
+                        "non_missing_count": 6,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 2,
+                        "distinct_ratio": 0.3333333333333333,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 8,
+                          "maximum_length": 8,
+                          "mean_length": 8.0,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "accepted",
+                          "most_frequent_count": 5,
+                          "most_frequent_ratio": 0.8333333333333334
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "litres",
+                        "logical_type": "integer",
+                        "row_count": 6,
+                        "non_missing_count": 6,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 5,
+                        "distinct_ratio": 0.8333333333333334,
+                        "minimum": 40,
+                        "maximum": 999,
+                        "numeric_statistics": {
+                          "minimum": 40,
+                          "maximum": 999,
+                          "mean": 324.8333333333333,
+                          "median": 75.0,
+                          "standard_deviation": 417.56456586576724,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      }
+                    ],
+                    "missing_value_statistics": {
+                      "total_cell_count": 24,
+                      "missing_cell_count": 0,
+                      "missing_cell_ratio": 0.0,
+                      "rows_with_missing_count": 0,
+                      "rows_with_missing_ratio": 0.0,
+                      "fully_missing_row_count": 0,
+                      "fully_missing_row_ratio": 0.0,
+                      "columns_with_missing_count": 0,
+                      "columns_with_missing_ratio": 0.0
+                    },
+                    "duplicate_statistics": {
+                      "duplicate_row_count": 0,
+                      "duplicate_row_ratio": 0.0,
+                      "duplicate_group_row_count": 0,
+                      "duplicate_group_row_ratio": 0.0
+                    }
+                  }
+                ]
+              },
+              "issues": []
+            },
+            "summary": {
+              "table_count": 1,
+              "total_row_count": 6,
+              "total_column_count": 4,
+              "issue_count": 0,
+              "info_issue_count": 0,
+              "warning_issue_count": 0,
+              "error_issue_count": 0,
+              "table_issue_count": 0,
+              "column_issue_count": 0,
+              "affected_relation_names": []
+            },
+            "insights": [
+              {
+                "insight_type": "dataset_structure",
+                "scope": "dataset",
+                "message": "Dataset contains 1 table(s).",
+                "table_name": null,
+                "relation_name": null,
+                "column_name": null,
+                "evidence": {
+                  "table_count": 1,
+                  "total_row_count": 6,
+                  "total_column_count": 4
+                }
+              },
+              {
+                "insight_type": "table_structure",
+                "scope": "table",
+                "message": "Table 'reservoir_readings' contains 6 row(s) and 4 column(s).",
+                "table_name": "reservoir_readings",
+                "relation_name": "reservoir_readings",
+                "column_name": null,
+                "evidence": {
+                  "row_count": 6,
+                  "column_count": 4
+                }
+              }
+            ]
+          },
+          "observations": [
+            {
+              "question": "What are the unique values found in the 'period' column of the 'reservoir_readings' table?",
+              "sql": "SELECT DISTINCT \"period\" FROM \"reservoir_readings\"",
+              "result": {
+                "columns": [
+                  "period"
+                ],
+                "rows": [
+                  [
+                    "after"
+                  ],
+                  [
+                    "other"
+                  ],
+                  [
+                    "before"
+                  ]
+                ]
+              },
+              "repair_history": []
+            },
+            {
+              "question": "Calculate the sum of 'litres' from 'reservoir_readings' where 'period' is 'before' and 'review' is 'accepted'.",
+              "sql": "SELECT SUM(\"litres\") AS \"total_accepted_litres_before\" FROM \"reservoir_readings\" WHERE \"period\" = 'before' AND \"review\" = 'accepted'",
+              "result": {
+                "columns": [
+                  "total_accepted_litres_before"
+                ],
+                "rows": [
+                  [
+                    100
+                  ]
+                ]
+              },
+              "repair_history": []
+            }
+          ],
+          "status": "incomplete",
+          "generated_claims": [],
+          "synthesis_failure": null,
+          "investigation_failure": {
+            "stage": "investigator",
+            "kind": "provider_unavailable",
+            "diagnostics": {
+              "http_status": 429,
+              "retryable": true,
+              "attempts": 2,
+              "stage": "investigator",
+              "call_number": 3
+            }
+          },
+          "failed_attempts": [],
+          "narrative_verified": false,
+          "verified_claims": [],
+          "quantitative_statements": [],
+          "narrative_numbers": [],
+          "narrative_digit_coverage": {
+            "total_digit_count": 0,
+            "parsed_digit_count": 0,
+            "unparsed_digit_count": 0,
+            "status": "no_digits"
+          },
+          "unlinked_numbers": [],
+          "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+          "verification_scope": "referenced_numeric_values_only"
+        }
+      }
+    }
+  },
+  "export_notes": "Only request.paths in embedded CLI reports was replaced with portable synthetic paths. Original CLI exports and stdout/stderr logs remain in the local evaluation directory. Logs are not embedded here. Original automatic scores are retained unchanged."
+}
