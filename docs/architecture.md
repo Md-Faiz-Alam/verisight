@@ -292,6 +292,25 @@ These derived fields are rebuilt during result construction, including
 
 ## Partial results and failure contracts
 
+Task acceptance is separate from workflow completion and numerical support.
+The built-in pipeline does not deterministically verify arbitrary natural-language
+requirements such as query count, query order, claim count, requested units, or
+business meaning. Treat task compliance as **not assessed automatically**.
+A caller or evaluator must compare the original requirements with the ordered
+observations, executed SQL, result populations, and submitted claims. A known
+fixture may have an independent acceptance check; that check is not a general
+semantic verifier and must not change the recorded workflow status or numerical
+verdicts.
+
+Prompts preserve explicit analytical procedures ahead of preferences for compact
+queries and limit synthesis to the requested claim scope. Each planner or repair
+call still returns exactly one safe SQL statement for its current evidence request.
+Explicit requirements cannot override safety restrictions, response schemas, or
+budgets. If the requested procedure is unmet, synthesis is instructed to state
+the limitation rather than describe the procedure as completed. These instructions
+are model guidance, not runtime enforcement. No domain-specific procedure or
+fixture answer is built into production logic.
+
 `complete` means the workflow reached synthesis completion. It does not mean
 all claims are supported or the analytical answer is correct.
 
