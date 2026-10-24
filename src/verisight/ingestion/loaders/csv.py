@@ -118,6 +118,7 @@ class CsvLoader(BaseTableLoader):
             prefix = file.read(_ENCODING_BOM_SAMPLE_SIZE)
 
             if prefix.startswith(codecs.BOM_UTF8):
+                CsvLoader._validate_decoded_content(path, encoding="utf-8-sig")
                 return "utf-8-sig"
 
             if prefix.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
@@ -126,6 +127,7 @@ class CsvLoader(BaseTableLoader):
                 )
 
             if prefix.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+                CsvLoader._validate_decoded_content(path, encoding="utf-16")
                 return "utf-16"
 
             file.seek(0)
@@ -167,6 +169,14 @@ class CsvLoader(BaseTableLoader):
                 return "cp1252"
 
             return "latin-1"
+
+    @staticmethod
+    def _validate_decoded_content(path: Path, *, encoding: str) -> None:
+        """Reject NUL characters before pandas can silently truncate fields."""
+        with path.open("r", encoding=encoding, newline="") as file:
+            while chunk := file.read(_ENCODING_CHUNK_SIZE):
+                if "\x00" in chunk:
+                    raise DataLoadError("CSV file contains NUL characters.")
 
     @staticmethod
     def _detect_delimiter(

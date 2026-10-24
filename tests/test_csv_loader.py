@@ -534,17 +534,29 @@ def test_csv_encoding_detection_handles_split_utf8_sequence(
     assert CsvLoader._detect_encoding(file_path) == "utf-8"
 
 
-def test_csv_encoding_detection_checks_nul_after_first_chunk(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    ("encoding", "bom"),
+    [
+        ("utf-8", b""),
+        ("utf-8", codecs.BOM_UTF8),
+        ("utf-16-le", codecs.BOM_UTF16_LE),
+        ("utf-16-be", codecs.BOM_UTF16_BE),
+    ],
+    ids=["utf8", "utf8-bom", "utf16-le", "utf16-be"],
+)
+@pytest.mark.parametrize("late_nul", [False, True], ids=["early", "later-chunk"])
+def test_csv_loader_rejects_nul_in_supported_unicode_encodings(
+    tmp_path: Path, encoding: str, bom: bytes, late_nul: bool
 ) -> None:
     file_path = tmp_path / "late_nul.csv"
-    file_path.write_bytes(b"name\n" + b"a" * 65536 + b"\x00")
+    padding = "a" * 65536 if late_nul else ""
+    file_path.write_bytes(bom + ("name\n" + padding + "ab\x00cd\n").encode(encoding))
 
     with pytest.raises(
         DataLoadError,
-        match="CSV file contains NUL bytes",
+        match="CSV file contains NUL",
     ):
-        CsvLoader._detect_encoding(file_path)
+        CsvLoader(Settings()).load(file_path)
 
 
 def test_csv_encoding_detection_checks_invalid_utf8_after_first_chunk(
@@ -665,7 +677,7 @@ def test_csv_loader_keeps_safe_boundary_integers_exact(
     assert pd.api.types.is_integer_dtype(table.data["value"])
     if with_missing:
         assert str(table.data["value"].dtype) == "Int64"
-        assert pd.isna(table.data["value"].iloc[5])
+        assert pd.isna(table.data.loc[5, "value"])
 
 
 def test_csv_oversized_identifier_survives_sql_execution(tmp_path: Path) -> None:
