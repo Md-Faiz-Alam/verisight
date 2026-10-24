@@ -172,6 +172,14 @@ distinct from native booleans. Mixed boolean/numeric or boolean/text columns
 retain their scalar types in loaded data and infer as `unknown`. This does not
 guarantee heterogeneous scalar types survive conversion into a SQL column.
 
+Excel ingestion never recalculates formulas. For `.xlsx`, formulas require a
+saved result; missing caches and Excel error cells are rejected before parsing.
+Saved numeric, boolean, text, and explicitly empty-string formula results are
+supported, but their freshness is not verified. For legacy `.xls`, the loader
+uses saved values exposed by xlrd and rejects error cells; it does not recover
+formula definitions or independently identify missing or stale formula caches.
+Recalculate and save affected workbooks, or export corrected values before loading.
+
 The data boundary also rejects column names that collide under DuckDB's
 ASCII case-insensitive identifier rules and CSV inputs that pandas would turn
 into an implicit row index. Decimal fallback and explicit SQL binding protect

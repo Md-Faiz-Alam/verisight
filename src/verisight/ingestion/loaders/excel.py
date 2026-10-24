@@ -1,7 +1,11 @@
 """Excel loader for the VeriSight ingestion subsystem."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol, cast
+from xml.etree import ElementTree
+from zipfile import ZipFile
 
 import pandas as pd
 
@@ -15,6 +19,23 @@ from verisight.ingestion.models import (
 from verisight.ingestion.validation import validate_file
 
 EXCEL_EXTENSIONS = frozenset({".xls", ".xlsx"})
+# xlrd's public XL_CELL_ERROR cell type, before pandas converts it to NaN.
+_XLS_ERROR_CELL_TYPE = 5
+
+
+class _XlsSheet(Protocol):
+    """The xlrd sheet attributes used for source-cell validation."""
+
+    @property
+    def nrows(self) -> int: ...
+
+    def row_types(self, rowx: int) -> Sequence[int]: ...
+
+
+class _XlsBook(Protocol):
+    """The xlrd workbook operation used by the legacy Excel path."""
+
+    def sheet_by_name(self, sheet_name: str) -> _XlsSheet: ...
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -46,12 +67,23 @@ class ExcelLoader:
         tables: list[LoadedTable] = []
 
         try:
+            if metadata.file_extension == ".xlsx":
+                _validate_xlsx_cells(metadata.path)
             with pd.ExcelFile(metadata.path) as workbook:
                 for sheet_name in workbook.sheet_names:
                     if not isinstance(sheet_name, str):
                         raise DataLoadError(
                             "Excel workbook contains a non-string sheet name."
                         )
+
+                    if metadata.file_extension == ".xls":
+                        legacy_book = cast(_XlsBook, workbook.book)
+                        sheet = legacy_book.sheet_by_name(sheet_name)
+                        for row in range(sheet.nrows):
+                            if _XLS_ERROR_CELL_TYPE in sheet.row_types(row):
+                                raise DataLoadError(
+                                    "Excel worksheet contains error cells."
+                                )
 
                     # header=None exposes source cells before pandas renames them.
                     headers = workbook.parse(
@@ -107,6 +139,47 @@ class ExcelLoader:
             source=metadata,
             tables=tables,
         )
+
+
+def _validate_xlsx_cells(path: Path) -> None:
+    """Inspect source cells before pandas hides formulas and Excel errors.
+
+    Saved formula results are used without recalculation or freshness checks.
+    An explicitly cached empty string is supported; a missing cache is not.
+    Inspect worksheet roots rather than assuming particular ZIP entry paths.
+    """
+    with ZipFile(path) as archive:
+        for entry in archive.infolist():
+            with archive.open(entry) as source:
+                events = ElementTree.iterparse(source, events=("start", "end"))
+                try:
+                    _, root = next(events)
+                except ElementTree.ParseError:
+                    continue
+                if root.tag.rsplit("}", 1)[-1] != "worksheet":
+                    continue
+                namespace = root.tag.removesuffix("worksheet")
+                parents = [root]
+                for event, element in events:
+                    if event == "start":
+                        parents.append(element)
+                        continue
+                    if element.tag == namespace + "c":
+                        if element.get("t") == "e":
+                            raise DataLoadError("Excel worksheet contains error cells.")
+                        if element.find(namespace + "f") is not None:
+                            cached = element.find(namespace + "v")
+                            if cached is None or (
+                                cached.text is None and element.get("t") != "str"
+                            ):
+                                raise DataLoadError(
+                                    "Excel formula has no saved result. Recalculate "
+                                    "and save the workbook or export values "
+                                    "before loading."
+                                )
+                    if element.tag == namespace + "row":
+                        parents[-2].remove(element)
+                    parents.pop()
 
 
 def _restore_cells(series: pd.Series) -> pd.Series:

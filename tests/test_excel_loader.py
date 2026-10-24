@@ -1,4 +1,5 @@
 import re
+import struct
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -137,7 +138,7 @@ def test_excel_loader_wraps_read_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     file_path = tmp_path / "broken.xlsx"
-    file_path.write_bytes(b"not-a-real-excel-workbook")
+    pd.DataFrame({"id": [1]}).to_excel(file_path, index=False)
 
     def raise_read_error(
         *args: object,
@@ -158,7 +159,7 @@ def test_excel_loader_wraps_sheet_parse_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     file_path = tmp_path / "broken.xlsx"
-    file_path.write_bytes(b"not-a-real-excel-workbook")
+    pd.DataFrame({"id": [1]}).to_excel(file_path, index=False)
 
     class FailingWorkbook:
         sheet_names = ["Customers"]
@@ -195,7 +196,7 @@ def test_excel_loader_closes_workbook_after_loading(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     file_path = tmp_path / "workbook.xlsx"
-    file_path.write_bytes(b"placeholder")
+    pd.DataFrame({"id": [1]}).to_excel(file_path, index=False)
 
     closed = False
 
@@ -237,7 +238,7 @@ def test_excel_loader_rejects_non_string_sheet_name(
     """Reject unexpected worksheet names without silently converting them."""
 
     file_path = tmp_path / "invalid.xlsx"
-    file_path.write_bytes(b"placeholder")
+    pd.DataFrame({"id": [1]}).to_excel(file_path, index=False)
 
     class InvalidWorkbook:
         sheet_names = [123]
@@ -452,3 +453,129 @@ def test_excel_nullable_integer_survives_sql_execution(
 
     assert result.rows == ((number,), (None,))
     assert type(result.rows[0][0]) is int
+
+
+@pytest.mark.parametrize(
+    ("cell", "expected"),
+    [
+        ('<c r="A2"><f>1+1</f><v>2</v></c>', 2),
+        ('<c r="A2"><f>1-1</f><v>0</v></c>', 0),
+        ('<c r="A2" t="b"><f>FALSE()</f><v>0</v></c>', False),
+        ('<c r="A2" t="str"><f>"NA"</f><v>NA</v></c>', "NA"),
+        ('<c r="A2" t="str"><f>""</f><v></v></c>', None),
+        ('<c r="A2" t="inlineStr"><is><t>#DIV/0!</t></is></c>', "#DIV/0!"),
+    ],
+    ids=["number", "zero", "boolean", "text", "empty-text", "literal-error-text"],
+)
+def test_excel_saved_formula_values_and_literal_text_survive_sql(
+    tmp_path: Path, cell: str, expected: object
+) -> None:
+    path = tmp_path / "numbers.xlsx"
+    _write_exact_numeric_workbook(path, ["1"])
+    _replace_source_cell(path, cell)
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+
+    result = app.execute(path, "SELECT value FROM numbers")
+
+    assert result.rows == ((expected,),)
+    assert type(result.rows[0][0]) is type(expected)
+
+
+@pytest.mark.parametrize(
+    ("cell", "message"),
+    [
+        ('<c r="A2"><f>1+1</f></c>', "formula has no saved result"),
+        ('<c r="A2"><f>1+1</f><v></v></c>', "formula has no saved result"),
+        ('<c r="A2" t="e"><v>#DIV/0!</v></c>', "contains error cells"),
+        ('<c r="A2" t="e"><f>1/0</f><v>#DIV/0!</v></c>', "contains error cells"),
+    ],
+    ids=["missing-cache", "empty-numeric-cache", "error", "formula-error"],
+)
+def test_excel_rejects_missing_formula_results_and_errors_before_sql(
+    tmp_path: Path, cell: str, message: str
+) -> None:
+    path = tmp_path / "numbers.xlsx"
+    _write_exact_numeric_workbook(path, ["1"])
+    _replace_source_cell(path, cell)
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+
+    with pytest.raises(DataLoadError, match=message):
+        app.execute(path, "SELECT SUM(value) FROM numbers")
+
+
+def _replace_source_cell(path: Path, cell: str) -> None:
+    """Write formula/cache metadata without depending on Excel recalculation."""
+    original = path.read_bytes()
+    with ZipFile(BytesIO(original)) as source, ZipFile(path, "w") as target:
+        for entry in source.infolist():
+            content = source.read(entry.filename)
+            if entry.filename == "xl/worksheets/sheet1.xml":
+                content, count = re.subn(
+                    rb'<c r="A2"[^>]*>.*?</c>', cell.encode(), content
+                )
+                assert count == 1
+            target.writestr(entry, content)
+
+
+@pytest.mark.parametrize("with_error", [False, True], ids=["saved-value", "error"])
+def test_legacy_excel_uses_saved_formula_values_and_rejects_errors(
+    tmp_path: Path, with_error: bool
+) -> None:
+    """Exercise real xlrd parsing with a minimal synthetic BIFF2 workbook."""
+    path = tmp_path / "legacy.xls"
+
+    def record(code: int, payload: bytes) -> bytes:
+        return struct.pack("<HH", code, len(payload)) + payload
+
+    end = record(0x000A, b"")
+    sheet = record(0x0009, struct.pack("<HH", 7, 0x10))
+    sheet += record(0x0042, struct.pack("<H", 1252))
+    attributes = b"\x00" * 3
+    sheet += record(0x0004, struct.pack("<HH3sB", 0, 0, attributes, 5) + b"value")
+    tokens = b"\x1e\x01\x00\x1e\x01\x00\x03"
+    sheet += record(
+        0x0006,
+        struct.pack("<HH3sdBB", 1, 0, attributes, 2.0, 0, len(tokens)) + tokens,
+    )
+    if with_error:
+        sheet += record(0x0005, struct.pack("<HH3sBB", 2, 0, attributes, 7, 1))
+    path.write_bytes(sheet + end)
+    app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
+
+    if with_error:
+        with pytest.raises(DataLoadError, match="contains error cells"):
+            app.execute(path, "SELECT SUM(value) FROM sheet_1")
+    else:
+        result = app.execute(path, "SELECT value FROM sheet_1")
+        assert result.rows == ((2,),)
+
+
+def test_excel_validation_ignores_binary_package_parts(tmp_path: Path) -> None:
+    path = tmp_path / "numbers.xlsx"
+    _write_exact_numeric_workbook(path, ["42"])
+    with ZipFile(path, "a") as archive:
+        archive.writestr("xl/media/synthetic.bin", b"\x89PNG\r\n\x1a\n")
+
+    data = ExcelLoader(Settings()).load(path).tables[0].data
+
+    assert data["value"].tolist() == [42]
+
+
+def test_excel_formula_validation_does_not_depend_on_part_suffix(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "numbers.xlsx"
+    _write_exact_numeric_workbook(path, ["1"])
+    _replace_source_cell(path, '<c r="A2"><f>1+1</f></c>')
+    original = path.read_bytes()
+    old_name = "xl/worksheets/sheet1.xml"
+    new_name = "xl/worksheets/sheet1.data"
+    with ZipFile(BytesIO(original)) as source, ZipFile(path, "w") as target:
+        for entry in source.infolist():
+            content = source.read(entry.filename)
+            if entry.filename in ("[Content_Types].xml", "xl/_rels/workbook.xml.rels"):
+                content = content.replace(b"sheet1.xml", b"sheet1.data")
+            target.writestr(new_name if entry.filename == old_name else entry, content)
+
+    with pytest.raises(DataLoadError, match="formula has no saved result"):
+        ExcelLoader(Settings()).load(path)
