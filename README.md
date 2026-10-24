@@ -25,7 +25,8 @@ is correct. Narrative verification remains explicitly false.
 | Deterministic tests and five synthetic live evaluation cases | Implemented |
 | Python 3.11 CI on Windows and Linux | Implemented |
 | Narrative meaning and analytical correctness on unfamiliar data | Not established |
-| End-user application and production deployment | Remaining work |
+| Local CLI for profile, preview, investigation, and JSON export | Implemented |
+| Unfamiliar-data reliability and release readiness | Remaining work |
 
 ## Installation
 
@@ -46,6 +47,84 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
 ```
+
+## Local command-line workflow
+
+Install or refresh the editable package after adding the CLI entry point:
+
+```powershell
+python -m pip install -e ".[dev]"
+verisight --help
+```
+
+The same workflow is available as `python -m verisight.cli` without relying on
+the console launcher. It uses the existing Python facade and adds no UI dependency.
+
+Start with a supported local file. Profiling and preview never make model calls,
+even when a provider key and disclosure permission exist in the environment:
+
+```powershell
+verisight profile transactions.csv
+verisight investigate transactions.csv --question "What is the net posted amount?" --preview
+```
+
+Optional population constraints are supplied as a UTF-8 JSON file. UTF-8 with a
+BOM, as commonly written by Windows PowerShell, is accepted. For a relation
+named `transactions` with a text column named `state`, the complete file is:
+
+```json
+[
+  {"relation": "transactions", "column": "state", "values": ["posted"]}
+]
+```
+
+Use exact schema relation and column names shown by `profile`. One value means
+equality; multiple values mean membership. Filters combine with AND. The initial
+contract supports homogeneous strings, booleans, or signed 64-bit integers matched
+to supported column types. Nulls, dates, decimals, floating-point filters, arbitrary
+SQL predicates, and implicit conversions are rejected. The CLI accepts at most
+64 KiB of population JSON, 32 filters, and 128 values per filter.
+
+Review the question, supplied scope, original-data profile, and budgets offline:
+
+```powershell
+verisight investigate transactions.csv --question "What is the net posted amount?" --population population.json --preview
+```
+
+To run generation, configure the provider key/model and explicitly permit this
+invocation to disclose analytical context. This flag is required even if the
+existing environment configuration enables disclosure:
+
+```powershell
+verisight investigate transactions.csv --question "What is the net posted amount?" --population population.json --max-steps 3 --max-seconds 120 --request-timeout-seconds 60 --allow-llm-data-disclosure
+```
+
+Omitting `--population` runs an unscoped investigation; it does not infer or
+confirm deterministic filters from the question. Units, grain, denominators,
+time periods, and business definitions still require review. Population filtering
+does not provide privacy isolation; profiles can describe excluded rows.
+
+The CLI prints readable JSON to stdout and phase messages to stderr. Live runs
+also show a preliminary profile/request before generation. Files are loaded again
+by `investigate()`: the exported final profile comes from that actual investigation,
+not the preliminary inspection. Do not mutate input files during a run.
+
+Reports keep workflow status, numerical statements, applied population, unverified
+model interpretation, SQL observations, failures, and repair history distinct.
+A complete workflow can contain contradicted claims. Numerical support does not
+certify analytical meaning, and the CLI assigns no analytically reviewed label.
+
+Add `--output report.json` to profile, preview, or investigation commands to
+explicitly export JSON. The parent directory must exist; existing files are never
+overwritten. Exports can contain private questions, source evidence, and SQL
+literals. No file export occurs without this option. Failed operations can export
+classified errors; incomplete investigations retain available evidence.
+
+Exit codes are 0 for a completed workflow or successful offline inspection,
+1 for an incomplete investigation or operation failure, 2 for invalid command
+input or export failure, and 130 for a handled keyboard interruption. Exit code 0
+is not an answer-correctness verdict. Keyboard interruption does not promise
+recovery of an in-progress investigation or completed report.
 
 ## Local analysis and SQL
 
@@ -310,8 +389,8 @@ statement and branch coverage measures exercised paths, not universal accuracy.
 - Define and integrate per-metric rounding conventions where justified; the
   current opt-in policy rounds exact ties away from zero, matching decimal SQL
   `ROUND`, while default verification remains strict.
-- Build dataset onboarding, evidence inspection, partial-result presentation,
-  report export, and deployment acceptance evidence.
+- Validate the local CLI workflow on unfamiliar files, improve demonstrated
+  usability gaps, and establish repeatable installation and deployment evidence.
 
 See [Architecture](docs/architecture.md), [Development](docs/development.md),
 and [Roadmap](docs/roadmap.md).
