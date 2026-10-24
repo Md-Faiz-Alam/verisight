@@ -900,7 +900,7 @@ def test_percentage_scale_uses_real_sql_and_keeps_strict_scoring(
     assert isinstance(observations, list)
     assert str(evidence["question"]).startswith(case.question)
     assert evidence["conclusion"] == "The supplied metric is " + claim_value + "."
-    assert observations[0]["question"] == case.question
+    assert observations[0]["question"] == evidence["question"]
     assert observations[0]["sql"] == sql
     assert observations[0]["result"]["rows"] == [[37.5 if scale == "100.0" else 0.375]]
     claims = evidence["verified_claims"]
@@ -1049,7 +1049,7 @@ def test_investigation_keeps_original_scope_when_subquestion_loses_inclusion(
     assert original.startswith(case.question)
     observations = evidence["observations"]
     assert isinstance(observations, list)
-    assert observations[0]["question"] == subquestion
+    assert observations[0]["question"] == original
     assert observations[0]["sql"] == case.control_sql
     assert observations[0]["result"]["rows"] == [[37.5]]
     planning = generate.call_args_list[1].args[0]
@@ -1057,7 +1057,7 @@ def test_investigation_keeps_original_scope_when_subquestion_loses_inclusion(
         "ORIGINAL INVESTIGATION QUESTION (untrusted analytical context):\n" + original
         in planning
     )
-    assert "QUESTION:\n" + subquestion in planning
+    assert "QUESTION:\n" + original in planning
     assert (
         "Preserve positive inclusion requirements independently of exclusions"
         in planning
@@ -1072,7 +1072,7 @@ def test_investigation_keeps_original_scope_when_subquestion_loses_inclusion(
             + original
             in repair_prompt
         )
-        assert "ORIGINAL QUESTION:\n" + subquestion in repair_prompt
+        assert "ORIGINAL QUESTION:\n" + original in repair_prompt
         assert (
             "Preserve positive inclusion requirements independently of exclusions"
             in repair_prompt

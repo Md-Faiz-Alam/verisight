@@ -64,7 +64,16 @@ external access and automatic extension loading/installation. Configured limits
 cover result rows, query execution time, memory, and temporary storage.
 These controls are not a complete deployment security assessment.
 
-The orchestrator passes its original question with each analytical subquestion.
+With `max_steps=1`, an investigate decision plans the caller's original question,
+not the model's rewritten subquestion. A component-only query would exhaust the
+sole attempt before another query could collect the requested final metric.
+With larger budgets, the investigator's subquestion remains the planning task.
+The investigator still decides whether to request a query and when to finish.
+This policy removes a task-narrowing step; it does not guarantee correct SQL,
+sufficient evidence, or successful completion. Observation and failure questions
+identify the task actually sent to planning, including in custom runners.
+
+The orchestrator also passes the original question as context for every task.
 `QueryRequest.original_question` and `QueryRepairRequest.original_question` are
 optional context fields; `question` remains the current evidence request and
 plan identity. Planning and runtime repair receive the same original context.

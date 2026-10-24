@@ -33,7 +33,13 @@ from verisight.execution.synthesis import InvestigationSynthesizer, StructuredSy
 
 
 class InvestigationOrchestrator:
-    """Coordinate bounded autonomous analytical investigations."""
+    """Coordinate bounded autonomous analytical investigations.
+
+    A one-attempt investigation plans the caller's original task. With more
+    attempts, investigator subquestions remain the planning tasks. The
+    investigator still controls whether to query and when to finish; neither
+    policy establishes that the collected evidence answers the original task.
+    """
 
     def __init__(
         self,
@@ -174,6 +180,12 @@ class InvestigationOrchestrator:
                     raise InvestigationError(
                         "Investigator did not provide an analytical question."
                     )
+
+                # With one attempt, a rewritten subquestion cannot be followed
+                # by a query for the actual requested metric. Plan the caller's
+                # task directly; multi-step investigations retain subquestions.
+                if self._max_steps == 1:
+                    investigation_question = state.question
 
                 normalized_question = self._normalize_question(investigation_question)
                 if normalized_question in attempted_questions:

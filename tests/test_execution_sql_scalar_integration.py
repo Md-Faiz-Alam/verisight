@@ -472,7 +472,11 @@ def test_unsupported_results_never_enter_investigation_evidence(
     )
     assert result.observation_count == int(has_prior_evidence) + int(recover)
     assert result.failed_attempt_count == 1
-    assert result.failed_attempts[0].question == "Get histogram"
+    assert result.failed_attempts[0].question == (
+        "Inspect the value distribution."
+        if not has_prior_evidence and not recover
+        else "Get histogram"
+    )
     assert result.failed_attempts[0].error_type == "QueryValidationError"
     assert all(
         "histogram" not in observation.sql for observation in result.observations

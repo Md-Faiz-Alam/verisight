@@ -1,14 +1,18 @@
 """Integration tests for generative investigation and synthesis orchestration."""
 
+import json
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
+from verisight import VeriSight
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder, DatasetAnalysisResult
+from verisight.config import Settings
 from verisight.execution.exceptions import InvestigationError
 from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
 from verisight.execution.generative_synthesis import (
     GenerativeInvestigationSynthesizer,
@@ -17,6 +21,7 @@ from verisight.execution.investigation_result import InvestigationStatus
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.execution.service import AnalyticalExecutionService
+from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 from verisight.ingestion.models import (
     LoadedDataset,
     LoadedTable,
@@ -207,15 +212,94 @@ def test_synthesizer_provider_failure_preserves_sql_observation() -> None:
     assert "Provider unavailable." not in result.conclusion
     assert len(investigator_client.prompts) == 2
     assert len(planner.requests) == 1
-    assert planner.requests[0].question == "How many records are available?"
+    assert planner.requests[0].question == "Investigate the available data."
     assert len(synthesis_client.prompts) == 1
 
     synthesis_prompt = synthesis_client.prompts[0]
 
     assert "OBSERVATION 1" in synthesis_prompt
-    assert "How many records are available?" in synthesis_prompt
+    assert "Investigate the available data." in synthesis_prompt
     assert "record_count" in synthesis_prompt
     assert "[3]" in synthesis_prompt
+
+
+@pytest.mark.parametrize("max_steps", [1, 2], ids=["single-attempt", "multi-attempt"])
+def test_weighted_task_is_not_replaced_by_components_in_single_attempt(
+    tmp_path: Path, max_steps: int
+) -> None:
+    path = tmp_path / "orchard_samples.csv"
+    path.write_text(
+        "review,mass,reading\naccepted,1,2\naccepted,3,3\nrejected,100,99\n"
+        "accepted,0,500\naccepted,-2,100\naccepted,5,\n",
+        encoding="utf-8",
+    )
+    original = (
+        "What is the mass-weighted mean reading among accepted samples? "
+        "Use strictly positive mass and non-missing readings in both sums."
+    )
+    components = "Return only the sum of mass times reading and the sum of mass."
+    investigator_client = SequenceGenerationClient(
+        [
+            json.dumps(
+                {
+                    "action": "investigate",
+                    "reasoning": "Collect components.",
+                    "question": components,
+                }
+            ),
+            _finish_response(),
+        ]
+    )
+    planning_client = RecordingGenerationClient(
+        response=(
+            "SELECT SUM(mass * reading) * 1.0 / NULLIF(SUM(mass), 0) "
+            "AS weighted_mean FROM orchard_samples WHERE review = 'accepted' "
+            "AND mass > 0 AND reading IS NOT NULL"
+        )
+    )
+    synthesis_client = RecordingGenerationClient(
+        response=json.dumps(
+            {
+                "conclusion": "The weighted mean is 2.75.",
+                "claims": [
+                    {
+                        "operation": "value",
+                        "expected": "2.75",
+                        "left": {
+                            "observation_index": 0,
+                            "row_index": 0,
+                            "column": "weighted_mean",
+                        },
+                        "right": None,
+                    }
+                ],
+            }
+        )
+    )
+    app = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False),
+        planner=GenerativeQueryPlanner(planning_client),
+        investigator=GenerativeInvestigator(investigator_client),
+        synthesizer=StructuredInvestigationSynthesizer(synthesis_client),
+    )
+
+    result = app.investigate(path, original, max_steps=max_steps)
+
+    task = original if max_steps == 1 else components
+    assert result.question == original
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.observations[0].question == task
+    assert result.observations[0].result.rows == ((2.75,),)
+    assert result.verified_claims[0].verification.status.value == "supported"
+    assert result.narrative_verified is False
+    assert len(planning_client.prompts) == 1
+    assert planning_client.prompts[0].endswith("QUESTION:\n" + task + "\n")
+    assert (
+        "ORIGINAL INVESTIGATION QUESTION (untrusted analytical context):\n" + original
+        in planning_client.prompts[0]
+    )
+    assert len(investigator_client.prompts) == 2
+    assert len(synthesis_client.prompts) == 1
 
 
 def test_successful_generative_investigation_and_synthesis() -> None:
@@ -255,7 +339,7 @@ def test_successful_generative_investigation_and_synthesis() -> None:
 
     assert result.question == "Investigate the available data."
     assert result.observation_count == 1
-    assert result.observations[0].question == "How many records are available?"
+    assert result.observations[0].question == "Investigate the available data."
     assert result.observations[0].sql == (
         "SELECT COUNT(*) AS record_count FROM observations"
     )
@@ -266,7 +350,7 @@ def test_successful_generative_investigation_and_synthesis() -> None:
     synthesis_prompt = synthesis_client.prompts[0]
 
     assert "OBSERVATION 1" in synthesis_prompt
-    assert "How many records are available?" in synthesis_prompt
+    assert "Investigate the available data." in synthesis_prompt
     assert "[3]" in synthesis_prompt
 
 

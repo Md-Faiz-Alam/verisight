@@ -231,7 +231,10 @@ def test_investigation_returns_failure_and_repair_history(
         investigator=Investigator(questions),
         synthesizer=Synthesizer(synthesis_fails),
         max_steps=max_steps,
-    ).investigate(question="Review measurements.", analysis=_analysis(dataset))
+    ).investigate(
+        question=questions[0] if max_steps == 1 else "Review measurements.",
+        analysis=_analysis(dataset),
+    )
     assert result.status is InvestigationStatus(status)
     assert result.observation_count == observations
     assert result.failed_attempt_count == failures

@@ -1002,7 +1002,7 @@ def test_finishes_after_final_permitted_failed_query() -> None:
         synthesizer=synthesizer,
         max_steps=1,
     ).investigate(
-        question="Investigate the dataset.",
+        question=question,
         analysis=_build_analysis_result(),
     )
 
@@ -1041,7 +1041,7 @@ def test_single_step_budget_rejects_second_query() -> None:
 
     assert result.status is InvestigationStatus.INCOMPLETE
     assert result.observation_count == 1
-    assert execution_service.run_questions == ["First question."]
+    assert execution_service.run_questions == ["Investigate the dataset."]
     assert len(investigator.states) == 2
     assert synthesizer.states == []
 
