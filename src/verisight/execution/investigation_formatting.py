@@ -73,6 +73,16 @@ class InvestigationStateFormatter:
             self._format_observations(state),
         ]
 
+        if state.remaining_steps is not None:
+            sections.insert(
+                1,
+                "ANALYTICAL ATTEMPTS REMAINING\n"
+                f"{state.remaining_steps}\n"
+                "Successful and failed analytical attempts both consume this budget. "
+                "This is not a count of provider requests or proof of "
+                "sufficient evidence.",
+            )
+
         if state.failed_attempts:
             sections.append(self._format_failed_attempts(state))
 

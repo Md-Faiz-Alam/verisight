@@ -108,6 +108,21 @@ The orchestrator tracks successful observations and recorded failed attempts.
 provider requests. Repeated normalized questions and exhausted step budgets
 produce incomplete results.
 
+The orchestrator initializes `InvestigationState.remaining_steps` from the
+configured limit. Each successful or recorded failed attempt reduces that
+immutable snapshot, clamped at zero. Manually constructed states may leave it
+unknown (`None`). Both full and compacted investigator prompts preserve the
+actual remaining count and instruct the investigator to prioritize requested
+measurements over unnecessary exploration. Compaction does not replenish the
+budget when observation details are omitted.
+
+The runtime limit remains authoritative even if the model requests another
+query at zero. A decision after the last permitted attempt can still choose
+finish and allow synthesis from existing evidence. That decision can fail, and
+finishing does not establish that all requested measurements were collected.
+Budget visibility does not guarantee that the model allocates attempts correctly
+or that the provider remains available.
+
 Ordinary query validation, execution, and nonprovider planning failures can be
 recorded so the investigator can choose another bounded attempt.
 `InvestigationResult.failed_attempts` exposes the recorded question, exception

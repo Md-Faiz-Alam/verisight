@@ -24,13 +24,27 @@ class FailedQueryAttempt:
 
 @dataclass(frozen=True, slots=True)
 class InvestigationState:
-    """Current state of an autonomous analytical investigation."""
+    """Current state of an autonomous analytical investigation.
+
+    remaining_steps is a runtime budget snapshot, or None when unknown.
+    Successful and failed attempt transitions consume it without mutation.
+    The orchestrator independently enforces the analytical-attempt limit.
+    """
 
     question: str
     analysis: DatasetAnalysisResult
     population: tuple[PopulationFilter, ...] = field(default=(), kw_only=True)
+    remaining_steps: int | None = field(default=None, kw_only=True)
     observations: tuple[QueryObservation, ...] = ()
     failed_attempts: tuple[FailedQueryAttempt, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.remaining_steps is not None and (
+            type(self.remaining_steps) is not int or self.remaining_steps < 0
+        ):
+            raise ValueError(
+                "Remaining analytical steps must be a nonnegative integer."
+            )
 
     @property
     def observation_count(self) -> int:
@@ -62,6 +76,11 @@ class InvestigationState:
             question=self.question,
             analysis=self.analysis,
             population=self.population,
+            remaining_steps=(
+                None
+                if self.remaining_steps is None
+                else max(0, self.remaining_steps - 1)
+            ),
             observations=(*self.observations, observation),
             failed_attempts=self.failed_attempts,
         )
@@ -76,6 +95,11 @@ class InvestigationState:
             question=self.question,
             analysis=self.analysis,
             population=self.population,
+            remaining_steps=(
+                None
+                if self.remaining_steps is None
+                else max(0, self.remaining_steps - 1)
+            ),
             observations=self.observations,
             failed_attempts=(*self.failed_attempts, attempt),
         )

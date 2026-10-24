@@ -93,7 +93,10 @@ class InvestigationOrchestrator:
         """Keep the latest state available if any stage exhausts the budget."""
 
         state = InvestigationState(
-            question=question, analysis=analysis, population=self._population
+            question=question,
+            analysis=analysis,
+            population=self._population,
+            remaining_steps=self._max_steps,
         )
         attempted_questions: set[str] = set()
         attempt_count = 0

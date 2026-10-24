@@ -18,6 +18,20 @@ INVESTIGATION_REPETITION_RULES = (
     "and explain the remaining limitation in reasoning.\n"
 )
 
+INVESTIGATION_STEP_BUDGET_RULES = (
+    "- Use ANALYTICAL ATTEMPTS REMAINING to prioritize the missing measurements "
+    "explicitly requested by the original question. Failed attempts also consume "
+    "the budget. Do not assume another query will be available. "
+    "If no budget is supplied, do not infer that it is zero.\n"
+    "- Do not spend a required measurement's only available attempt listing "
+    "category values already supplied by the question unless an actual ambiguity "
+    "must be resolved to execute that measurement.\n"
+    "- When no analytical attempts remain, choose finish and explain any missing "
+    "evidence in reasoning. Finishing permits synthesis; it does not establish "
+    "that the original question has been answered. Never invent an unmeasured "
+    "comparison group or period to complete an answer.\n"
+)
+
 
 class InvestigationPromptBuilder:
     """Build deterministic prompts for autonomous investigation."""
@@ -120,6 +134,7 @@ class InvestigationPromptBuilder:
             "are required for every dataset.\n\n"
             + ANALYTICAL_SCOPE_RULES
             + METRIC_SCALE_RULES
+            + INVESTIGATION_STEP_BUDGET_RULES
             + "- Before choosing finish, check that visible SQL evidence contains "
             "the final metric in the original question's requested scale. "
             "If only a differently scaled value is available, request the "

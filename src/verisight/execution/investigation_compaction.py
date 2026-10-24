@@ -6,7 +6,10 @@ from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
-from verisight.execution.investigation_prompting import INVESTIGATION_REPETITION_RULES
+from verisight.execution.investigation_prompting import (
+    INVESTIGATION_REPETITION_RULES,
+    INVESTIGATION_STEP_BUDGET_RULES,
+)
 from verisight.execution.prompt_budget import (
     PromptBudget,
     PromptBudgetExceededError,
@@ -53,6 +56,7 @@ class InvestigationCompaction:
             "prefer a focused investigation question.\n"
             + ANALYTICAL_SCOPE_RULES
             + METRIC_SCALE_RULES
+            + INVESTIGATION_STEP_BUDGET_RULES
             + "Before choosing finish, check that visible SQL evidence contains "
             "the final metric in the original question's requested scale. "
             "If only a differently scaled value is available, request the "
@@ -67,6 +71,7 @@ class InvestigationCompaction:
 
         base_state = InvestigationState(
             population=state.population,
+            remaining_steps=state.remaining_steps,
             question=state.question,
             analysis=state.analysis,
             observations=(),
