@@ -596,7 +596,9 @@ def test_generation_deadline_caps_retries_and_rejects_late_responses(
     assert client.generate("Independent request") == "fresh answer"
 
 
-def test_investigation_deadline_cancels_sdk_worker_and_closes_clients() -> None:
+def test_investigation_deadline_cancels_sdk_worker_and_closes_clients(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import asyncio
     from unittest.mock import AsyncMock, Mock, patch
 
@@ -606,6 +608,9 @@ def test_investigation_deadline_cancels_sdk_worker_and_closes_clients() -> None:
     )
     from verisight.execution.gemini import GeminiTextGenerationClient
 
+    # Force the outer clock to remain before expiry even when the event-loop
+    # timer fires. This reproduces an early timer wakeup deterministically.
+    monkeypatch.setattr("verisight.execution.deadline.monotonic", lambda: 0.0)
     cancelled = False
 
     async def slow_response(**kwargs: object) -> object:
@@ -625,16 +630,50 @@ def test_investigation_deadline_cancels_sdk_worker_and_closes_clients() -> None:
             model="test-model",
             request_timeout_seconds=30,
             max_retries=5,
+            sleep=Mock(),
         )
         with (
             investigation_deadline(0.1),
-            pytest.raises(InvestigationDeadlineExceeded),
+            pytest.raises(InvestigationDeadlineExceeded) as caught,
         ):
             client.generate("Synthetic request")
         assert cancelled
         assert factory.call_count == 1
+        assert caught.value.__context__ is None
         sdk.aio.__aexit__.assert_awaited_once()
         factory.return_value.__exit__.assert_called_once()
+
+
+def test_sdk_timeout_before_shared_timer_expiry_can_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock, Mock, patch
+
+    from verisight.execution.deadline import investigation_deadline
+    from verisight.execution.gemini import GeminiTextGenerationClient
+
+    monkeypatch.setattr("verisight.execution.deadline.monotonic", lambda: 0.0)
+    with patch("verisight.execution.gemini.genai.Client") as factory:
+        sdk = factory.return_value.__enter__.return_value
+        async_sdk = sdk.aio.__aenter__.return_value
+        async_sdk.models.generate_content = AsyncMock(
+            side_effect=[TimeoutError("synthetic provider detail"), Mock(text="ready")]
+        )
+        sleep = Mock()
+        client = GeminiTextGenerationClient(
+            api_key="synthetic-key",
+            model="test-model",
+            request_timeout_seconds=30,
+            max_retries=1,
+            sleep=sleep,
+        )
+        with investigation_deadline(10):
+            assert client.generate("Synthetic request") == "ready"
+        assert factory.call_count == 2
+        assert async_sdk.models.generate_content.await_count == 2
+        assert sdk.aio.__aexit__.await_count == 2
+        assert factory.return_value.__exit__.call_count == 2
+        sleep.assert_called_once_with(1.0)
 
 
 def test_sql_uses_shared_budget_and_does_not_start_after_registration_expiry(

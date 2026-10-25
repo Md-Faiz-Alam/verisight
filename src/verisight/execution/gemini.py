@@ -168,14 +168,29 @@ class GeminiTextGenerationClient:
             api_key=self._api_key, http_options=self._http_options
         ) as client:
             async with client.aio as async_client:
-                async with asyncio.timeout(
-                    remaining_seconds(self._request_timeout_seconds)
-                ):
-                    return await async_client.models.generate_content(
-                        model=self._model,
-                        contents=prompt,
-                        config=self._response_config,
-                    )
+                timeout_seconds = remaining_seconds(self._request_timeout_seconds)
+                shared_deadline_limited = (
+                    timeout_seconds < self._request_timeout_seconds
+                )
+                timeout = asyncio.timeout(timeout_seconds)
+                try:
+                    async with timeout:
+                        return await async_client.models.generate_content(
+                            model=self._model,
+                            contents=prompt,
+                            config=self._response_config,
+                        )
+                except TimeoutError:
+                    if not timeout.expired() or not shared_deadline_limited:
+                        raise
+
+                # Event-loop timers may fire before a subsequent monotonic
+                # check observes expiry. Preserve the budget that cancelled
+                # this request instead of treating it as a retryable timeout.
+                # Raise outside the handler to omit raw exception context.
+                raise InvestigationDeadlineExceeded(
+                    "Investigation time budget was exhausted."
+                )
 
     def _request(self, prompt: str) -> _GeminiResponse:
         """Keep the public API synchronous without abandoning timed-out work."""
