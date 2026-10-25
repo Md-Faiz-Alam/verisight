@@ -29,6 +29,7 @@ scripts run from the repository root and are not included by the current
 | `src/verisight/ingestion/` | Validation, loaders, and schema inference |
 | `src/verisight/execution/` | SQL, generation, investigation, and verification |
 | `src/verisight/service.py` | Public Python facade |
+| `src/verisight/cli.py` | Local profile, preview, investigation, and export workflow |
 | `src/verisight/error_reporting.py` | Fixed public error classification |
 | `src/verisight/public_api.py` | Operation boundary |
 | `tests/` | Offline regression and development benchmark tests |
@@ -41,10 +42,10 @@ scripts run from the repository root and are not included by the current
 Run from the repository root:
 
 ```powershell
-ruff format .
-ruff format --check .
-ruff check .
-mypy --strict src tests scripts
+python -m ruff format .
+python -m ruff format --check .
+python -m ruff check .
+python -m mypy --strict src tests scripts
 python -m pytest --cov=verisight --cov=scripts --cov-report=term-missing --cov-fail-under=100
 git diff --check
 ```
@@ -78,6 +79,7 @@ Keep these distinctions visible:
 
 - Evidence support versus analytical correctness.
 - Workflow completion versus verified correctness.
+- Optional claim output acceptance versus full task acceptance.
 - Missing claims versus justified abstention.
 - Unverifiable versus contradicted values.
 - Token linkage versus digit coverage versus narrative meaning.
@@ -93,6 +95,12 @@ errors must remain distinguishable. Results retain recorded failed attempts and
 available query repair history; they are not a complete provider-call trace.
 Reuse relevant existing test modules when adding regressions for concrete bugs.
 
+`ClaimOutputContract` is a caller-selected postcondition, not a semantic verifier.
+Test exact operation multiplicities, support, incomplete status, numeric audit
+failures, unchanged evidence, and CLI exit behavior. Without `--require-claim`,
+the CLI retains workflow-based exit status. Contract rejection must not silently
+drop claims or add provider calls. See [Output contracts](output-contracts.md).
+
 ## Deterministic and live evaluation
 
 Run the offline development benchmark:
@@ -105,9 +113,12 @@ Expected answers must be independent of generated SQL and claims. Adversarial
 cases demonstrate that an analytically wrong query can produce a supported
 claim.
 
-The live runner has five known fixtures: finance, retail, manufacturing,
-healthcare, and logistics. It creates temporary synthetic files, enables
-disclosure for those fixtures, and calls the real configured provider path.
+The live runner has five default fixtures: finance, retail, manufacturing,
+healthcare, and logistics. `--case challenge` selects three additional development
+fixtures: `energy_grain`, `research_weighted`, and `education_entities`.
+`--case all` selects only the five default cases. The runner creates temporary
+synthetic files, enables disclosure for those fixtures, and calls the real
+configured provider path.
 A key is required; calls may incur charges.
 
 ```powershell
@@ -125,6 +136,7 @@ python -m scripts.live_evaluation --live --case all --request-timeout-seconds 60
 | Additional provider retries per generation call | 0 |
 | SQL execution timeout | 5 seconds |
 | Maximum query result rows | 20 |
+| Shared investigation budget | Settings/environment value; 300 seconds by default |
 
 `--request-timeout-seconds` accepts a finite positive value.
 `--provider-retries` accepts integers from 0 through 5. These overrides apply
@@ -143,7 +155,10 @@ exist. Existing files are not overwritten.
 Reports retain revision, tracked-file change status, model, settings, timings,
 all case outcomes, token counts, digit coverage, and available failure metadata.
 Observed client calls include attempts, duration, and whether text returned.
-No raw conclusion is included by the scorer. Review reports before committing.
+`score_result()` returns a summary, but `run_case()` adds content-bearing
+`synthetic_evidence`: questions, conclusions, SQL, result cells, and claim details.
+The CLI exports broader investigation content, including available repair history.
+Neither format is content-free telemetry. Review reports before committing.
 
 `tracked_changes` excludes untracked files and is not a full dependency or
 fixture fingerprint. Older reports lack newer fields; absence is not zero.
@@ -155,6 +170,19 @@ and latency metrics. Report denominators and group comparable revisions and
 settings. Known fixtures are not held-out generalization evidence. A successful
 run with retries configured does not establish that a retry actually occurred;
 use generation telemetry when available.
+
+For a reproducible run, record the revision, fixture content or hashes, selected
+population and output contract, model, budgets, retry settings, Python version,
+OS, and relevant installed package versions. `python --version` and
+`python -m pip freeze` help capture the environment; review that output for
+machine-specific paths before publishing. The default live report records some
+of these fields, not a complete environment or fixture fingerprint.
+
+Loading, profiling, and preliminary CLI inspection are outside the shared
+orchestration deadline. Runner case wall time includes setup and any supplied
+SQL control. Per-attempt provider timeouts, retry delays, cleanup, and total
+wall time are separate
+measurements; a 60-second request limit is not a 60-second whole-case promise.
 
 ## Diagnostics and disclosure
 

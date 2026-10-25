@@ -12,15 +12,25 @@ quality rules, guarded DuckDB execution, planning and one-query repair,
 structured synthesis, numerical claim verification, narrative token and digit
 audits, expected-failure evidence recovery, query repair provenance, provider
 telemetry, shared investigation deadlines, and configurable result byte limits.
+It also includes a local CLI and optional caller-selected claim output contracts.
 CI is configured for Python 3.11 on Windows and Linux. A configured workflow is
 not evidence that a particular remote run passed.
 
-The latest supplied Windows quality record reports 2,119 passing tests,
-100% statement and branch coverage, clean Ruff checks, and strict mypy. Those
-checks establish tested behavior; they do not certify analytical meaning,
-security isolation, narrative truth, or production readiness.
+At the 2026-10-25 implementation checkpoint `da86f3a`, the supplied Windows
+terminal run for those changes reported 2,274 passing tests, 100% statement and
+branch coverage, clean Ruff checks, and strict mypy. This is a dated local
+record, not a claim about that revision's remote CI. Those checks establish
+tested behavior; they do not certify analytical meaning, security isolation,
+narrative truth, or production readiness.
 
 ## Evidence checkpoint
+
+The reviewed corrections now include finite platform-bounded SQL timeouts,
+unusable-column rejection before registration, stable float summary arithmetic
+with explicit deviation overflow, shared SDK cancellation classification, a
+caller-selected claim output gate, and the `current_schemas` metadata restriction.
+These are focused engineering corrections, not proof of general analytical
+reliability. No fresh live success is inferred from passing offline gates.
 
 Original-question propagation did not reliably correct autonomous population
 selection. A live education case still selected non-cancelled learners rather
@@ -55,6 +65,7 @@ Use independent indicators rather than one overall verified or correct badge.
 | Workflow status | `InvestigationResult.status` and failure metadata | Complete or incomplete workflow; no correctness claim |
 | Numerical support | Each `verified_claims` verdict and evidence reference | A claim matches its referenced numerical evidence under the stated policy |
 | Caller-selected population | Submitted `population` and built-in execution path | Specified filters were applied to the named query relations |
+| Optional output contract | `assess_output()` or CLI `--require-claim` assessment | Exact selected claim operations/count, support, completion, and limited numeric audits passed |
 | Narrative audit | Tokens, unlinked numbers, digit coverage, and `narrative_verified` | Limited numerical diagnostics; no semantic certification |
 | Analytical review | Not currently represented by a review record | Do not display an analytically reviewed label automatically |
 
@@ -93,21 +104,28 @@ caller-supplied constraints, and unverified interpretation without reading
 implementation documentation. No newly invented metadata or inferred review
 status substitutes for evidence.
 
-## 2. Deliver one local end-to-end workflow
+Implemented subset: the CLI separates workflow, population, numerical statements,
+unverified prose, and SQL evidence. With `--require-claim`, it rejects unmet typed
+claim output requirements without deleting evidence or retrying generation.
+The assessment is not inferred from the question and does not certify the whole
+task. Remaining acceptance work concerns interpretation, meaningful review of
+procedures, and unfamiliar-data evidence. See [Output contracts](output-contracts.md).
 
-The first delivery is a local command-line workflow over the existing Python
-facade. It should run without requiring users to edit Python source. Hosted
-accounts, multi-user services, dashboards, and extra providers are not required
-for this milestone.
+## 2. Validate the implemented local workflow
+
+The local command-line workflow over the existing Python facade is implemented.
+Known synthetic installed-CLI runs and JSON export checks are retained. Users
+can run it without editing Python source. Hosted accounts, multi-user services,
+dashboards, and extra providers are not required for this milestone.
 
 | Step | Existing foundation | Work still required |
 | --- | --- | --- |
-| Load supported files | Dataset loaders and schema validation | Accept paths and present actionable classified input errors |
-| Inspect data | `analyze()` and deterministic analysis results | Present relations, columns, types, quality issues, and original-data counts |
-| Define question and scope | Question input and `PopulationFilter` | Let users review analytical intent and supply supported filters without writing Python |
-| Investigate | `investigate()` with step, time, and execution limits | Present activity and terminal outcomes accurately; do not invent progress estimates |
-| Inspect the answer | Claims, observations, SQL, audits, failures, and repair history | Render the separate acceptance indicators and evidence navigation |
-| Export | `to_jsonable()` | Provide explicit local export with scope, evidence, limitations, and failure information |
+| Load supported files | CLI paths and classified input failures | Validate usability on unfamiliar supported files and fresh installations |
+| Inspect data | CLI profile with relations, types, findings, and original counts | Resolve demonstrated presentation gaps |
+| Define question and scope | Question, population JSON, and offline preview | Validate user interpretation of grain, denominator, time, and units |
+| Investigate | Step/time limits and terminal workflow reports | Measure availability, latency, cancellation, and partial recovery under realistic use |
+| Inspect the answer | Separate evidence, claims, audits, and optional output acceptance | Evaluate whether users can identify supported but analytically wrong answers |
+| Export | Explicit new-file JSON export | Assess portability, sensitive content, and consumer expectations |
 
 `execute()` and `ask()` currently return `QueryResult`, without investigation
 provenance. Do not imply those values contain SQL repair history or a review
@@ -124,6 +142,13 @@ ask a question, inspect supplied scope, run a bounded investigation, examine
 SQL-backed claims or useful partial evidence, and export a readable result.
 Provide one short synthetic demonstration. A passing synthetic demo does not
 establish unfamiliar-data accuracy.
+
+That synthetic demonstration exists in the retained posted-transaction CLI
+validation. The fixed CLI batch and later orchard/reservoir records show both
+successes and limitations. The latest reservoir procedure recheck used two
+ordered queries but still returned extra claims. Detecting that mismatch with
+the output gate does not establish autonomous compliance or a successful new
+live run. See [Evaluation](evaluation.md) for the reports.
 
 ## 3. Establish independent release evaluation
 

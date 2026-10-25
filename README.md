@@ -6,6 +6,10 @@ VeriSight loads and profiles data, executes analytical SQL, and supports
 Gemini-driven investigations. Its default synthesizer produces structured
 numerical claims that application code checks against collected query results.
 
+Processing is domain-independent within the supported tabular formats and
+types. This does not promise arbitrary-format ingestion or automatic knowledge
+of unfamiliar business definitions.
+
 A supported number does not establish that the SQL, interpretation, or narrative
 is correct. Narrative verification remains explicitly false.
 
@@ -22,7 +26,9 @@ is correct. Narrative verification remains explicitly false.
 | Limited narrative token audit and Unicode digit coverage | Implemented |
 | Evidence recovery for tested expected workflow failures | Implemented |
 | Safe failure metadata and generation telemetry | Implemented |
-| Deterministic tests and five synthetic live evaluation cases | Implemented |
+| Five default and three challenge synthetic live development cases | Implemented |
+| Caller-selected relation populations | Implemented |
+| Optional caller-selected claim output acceptance | Implemented |
 | Python 3.11 CI on Windows and Linux | Implemented |
 | Narrative meaning and analytical correctness on unfamiliar data | Not established |
 | Local CLI for profile, preview, investigation, and JSON export | Implemented |
@@ -114,6 +120,20 @@ model interpretation, SQL observations, failures, and repair history distinct.
 A complete workflow can contain contradicted claims. Numerical support does not
 certify analytical meaning, and the CLI assigns no analytically reviewed label.
 
+Optionally require an exact claim count and operations, with supported numerical
+evidence and the stricter numeric-token checks described in
+[Output contracts](docs/output-contracts.md):
+
+```powershell
+verisight investigate transactions.csv --question "Return the net posted amount as exactly one VALUE claim." --population population.json --require-claim value --allow-llm-data-disclosure
+```
+
+Repeat `--require-claim` once per required claim. The selected contract appears
+in previews and final reports. It is checked after generation without rewriting
+the question, removing extra claims, or making another model call. Put the
+desired output in the question too. A rejected contract preserves the original
+workflow status and evidence. Acceptance does not validate SQL meaning.
+
 Add `--output report.json` to profile, preview, or investigation commands to
 explicitly export JSON. The parent directory must exist; existing files are never
 overwritten. Exports can contain private questions, source evidence, and SQL
@@ -121,7 +141,8 @@ literals. No file export occurs without this option. Failed operations can expor
 classified errors; incomplete investigations retain available evidence.
 
 Exit codes are 0 for a completed workflow or successful offline inspection,
-1 for an incomplete investigation or operation failure, 2 for invalid command
+with a selected output contract also requiring its acceptance; 1 for a rejected
+contract, incomplete investigation, or operation failure; 2 for invalid command
 input or export failure, and 130 for a handled keyboard interruption. Exit code 0
 is not an answer-correctness verdict. Keyboard interruption does not promise
 recovery of an in-progress investigation or completed report.
@@ -180,12 +201,22 @@ uses saved values exposed by xlrd and rejects error cells; it does not recover
 formula definitions or independently identify missing or stale formula caches.
 Recalculate and save affected workbooks, or export corrected values before loading.
 
-The data boundary also rejects column names that collide under DuckDB's
-ASCII case-insensitive identifier rules and CSV inputs that pandas would turn
-into an implicit row index. Decimal fallback and explicit SQL binding protect
-supported mixed numerical columns from silent float conversion; exact decimal
+The data boundary rejects blank or NUL-containing column names and names that
+collide under DuckDB's ASCII case-insensitive identifier rules. Names are
+rechecked before SQL registration because loaded DataFrames remain mutable.
+Valid punctuation and distinct Unicode identifiers are preserved. CSV inputs
+that pandas would turn into an implicit row index are rejected. JSON duplicate
+keys are rejected before they can discard source fields. Decimal fallback and
+explicit SQL binding protect supported mixed numerical columns from silent
+float conversion; exact decimal
 binding has a 38-digit precision limit. Existing floating-point values do not
 recover digits already lost upstream.
+
+Numeric profiles use stable arithmetic on finite float-converted values for
+mean, median, and sample standard deviation. If the standard deviation itself
+exceeds float range, it is null with `standard_deviation_overflow=true`.
+`non_finite_count` counts source non-finite values, not computed overflow.
+These summaries retain float precision and are not exact decimal aggregates.
 
 Duplicate profiling supports nested JSON lists and objects. SQL results must
 contain supported scalar cells; maps, lists, structs, and binary values are
@@ -233,6 +264,18 @@ for statement in result.quantitative_statements:
 limit provider calls: decisions, planning, repair, and synthesis may each
 require generation. `StructuredInvestigationSynthesizer` is the default for
 configured Gemini investigations. Custom components can be injected.
+
+The shared `max_investigation_seconds` budget starts after loading and profiling.
+The Python API defaults to 300 seconds; the CLI defaults to 120. Provider request
+timeouts apply per attempt and are clamped by the shared budget. Expiry of a
+shared-budget cancellation stops further provider retries. Client setup, custom
+callbacks, cancellation, and cleanup can add overhead; these are cooperative
+deadlines, not hard process termination limits.
+
+DuckDB restrictions include relation authorization and blocked metadata calls,
+including `current_schemas`. Memory and temporary-storage settings apply to
+DuckDB, not all Python or ingestion allocations. The result byte limit applies
+after cells are materialized. These controls do not establish a complete sandbox.
 
 ## Verification and narrative audit
 
@@ -294,6 +337,13 @@ Unsupported formats such as `12k`, `3.5x`, Unicode minus, and ranges can produce
 A wrong join, filter, or denominator can produce a number that a claim correctly
 repeats. Numerical verification does not establish causation, source quality,
 or completeness of generated claims.
+
+Python consumers can call `result.assess_output(ClaimOutputContract(...))` and
+inspect `accepted` and `violations`. This separate assessment checks exact claim
+operations and count, support, workflow completion, and limited numeric audits.
+Its scope remains `claim_shape_and_numeric_evidence_only`, with
+`task_semantics_verified=false`. Without a selected contract, CLI exit status
+remains workflow-based. See [Output contracts](docs/output-contracts.md).
 
 ## Partial results and safe diagnostics
 
@@ -371,6 +421,13 @@ exist and an existing file is never overwritten. Reports retain revision,
 tracked-change status, settings, timings, outcomes, audits, and available failure
 and generation metadata. Older reports may lack newer fields.
 
+Current synthetic reports include questions, conclusions, SQL, result cells,
+and claim details. The historical record includes successful caller-scoped and
+CLI runs as well as supported wrong-population answers, provider failures, and
+unmet output contracts. These are separate observations across revisions;
+they cannot be pooled into a general reliability rate. See
+[Evaluation](docs/evaluation.md) for the evidence checkpoints and remaining protocol.
+
 `correct_numeric` scores the submitted metric; it does not certify prose or SQL
 semantics. `no_claims` is not automatically a justified abstention. Retain failed
 runs. These known fixtures are not a held-out generalization benchmark.
@@ -378,9 +435,9 @@ runs. These known fixtures are not a held-out generalization benchmark.
 ## Quality gates and CI
 
 ```powershell
-ruff format --check .
-ruff check .
-mypy --strict src tests scripts
+python -m ruff format --check .
+python -m ruff check .
+python -m mypy --strict src tests scripts
 python -m pytest --cov=verisight --cov=scripts --cov-report=term-missing --cov-fail-under=100
 git diff --check
 ```

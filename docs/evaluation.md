@@ -178,8 +178,9 @@ This content-bearing evidence is confined to the synthetic runner; the reusable
 `score_result()` stays a summary without questions, conclusion, SQL, or claim
 details. Full analysis, prompts, credentials, and raw provider errors are not
 added to the evidence field. Generated questions, conclusion, SQL, and result
-cells still require review before publication. Do not repurpose this reporting path for private datasets without
-an explicit disclosure policy. Older saved reports cannot recover omitted values.
+cells still require review before publication. Do not repurpose this reporting
+path for private datasets without an explicit disclosure policy. Older saved
+reports cannot recover omitted values.
 
 The live path uses default planning, investigation, and structured synthesis.
 It still allows one analytical attempt and asks for one final VALUE claim.
@@ -187,8 +188,9 @@ These cases test generated analytical SQL, not autonomous multi-step reasoning.
 No rounding tolerance is used; all three answers have finite decimal forms.
 
 After offline gates pass, commit the fixture definitions before live execution.
-Confirm no tracked changes with `git status --short`. Run one case at a time if
-provider limits make a combined run impractical:
+Confirm no tracked changes with `git status --porcelain --untracked-files=no`.
+Local untracked datasets are not part of the synthetic fixtures. Run one case
+at a time if provider limits make a combined run impractical:
 
 ```powershell
 New-Item -ItemType Directory -Force reports/evaluations | Out-Null
@@ -215,7 +217,82 @@ best retry per case and call that an overall success rate.
 
 These fixtures are public development cases. They are not held out once used
 to guide implementation, and three cases cannot establish cross-domain accuracy.
-No live outcome is claimed until reports from the implemented revision exist.
+Claims about a live outcome must identify the report and tested revision.
+
+## Retained live and CLI evidence checkpoints
+
+The repository retains both successful and unsuccessful development runs.
+The following records illustrate different outcomes; they are not a comparable
+single-revision benchmark and must not be pooled into a success rate.
+
+| Record | Tested revision | Observed result | Limit |
+| --- | --- | --- | --- |
+| [Education scope retry](../reports/evaluations/education-scope-retry-20261023-234139-577.json) | `c8bf4c0` | Supported `40.0` from non-cancelled learners; independent active-only answer `37.5` | Original-question propagation did not prevent population error |
+| [Caller-scoped education](../reports/evaluations/education-caller-scoped-20261024-085546-292.json) | `34c3f30` | Caller-filtered answer `37.5`; broad SQL boundary control also restricted | Tests supplied scope, not autonomous population selection |
+| [Posted CLI validation](../reports/evaluations/cli-posted-validation-20261024.json) | `939df6a` | Supported final sum `80` through the installed CLI | Generated SQL also supplied the filter; not an omitted-filter enforcement test |
+| [Fixed four-case CLI batch](../reports/evaluations/fixed-cli-batch-20261024.json) | `46da4c9` | Freight `200` and programme `37.5` correctly grounded; orchard final `2.75` unlinked; reservoir incomplete after HTTP 429 | Known frozen fixtures; all original outcomes retained |
+| [Orchard final metric recheck](../reports/evaluations/orchard-final-metric-recheck-20261024.json) | `78adc5e` | Final SQL cell and one supported VALUE claim `2.75` | Several implementation changes and model variation prevent causal attribution |
+| [Reservoir contract recheck](../reports/evaluations/reservoir-contract-recheck-20261024.json) | `cc90792` | Supported difference `50`, but one grouped query included another period and three claims | Requested procedure and output contract unmet |
+| [Reservoir procedure recheck](../reports/evaluations/reservoir-procedure-policy-recheck-20261024.json) | `5474cee` | Two ordered queries and supported after-minus-before `50`; still three claims | Requested single-claim output unmet; full task acceptance failed |
+
+The last reservoir record preserves an automatic-check defect alongside a
+separate reviewed correction. The runner only assessed difference support and
+reference order when exactly one claim existed. Its false flags therefore
+conflated claim count with independent arithmetic/reference checks. The reviewed
+assessment confirms supported arithmetic and correct reference order while still
+rejecting the output contract. Preserve both the original and the correction.
+
+These historical reports predate the caller-selected claim output gate. Offline
+replay can show that the gate rejects the recorded extra claims; it is not a
+new provider run or proof that generation now satisfies the contract. Do not
+retroactively rewrite report outcomes or assign new CLI exit codes to old runs.
+
+## Scorer, output acceptance, and semantic review
+
+`score_result()` requires a complete result with exactly one supported VALUE
+claim and compares its actual value to the independent fixture answer.
+It does not require clean narrative audits or independently inspect SQL meaning.
+A coincidentally correct answer can pass despite a wrong analytical method.
+
+The optional CLI `--require-claim` gate and Python `assess_output()` method check
+exact claim-operation multiplicities, numerical support, completion, linkage,
+and digit coverage. They have no fixture answer and do not establish correct
+populations, units, query procedures, or narrative semantics. The live evaluation
+runner does not invoke this gate. See [Output contracts](output-contracts.md).
+
+Keep separate fields or reviewed assessments for workflow completion, provider
+availability, numerical support, independent numeric correctness, output
+acceptance, and procedural/semantic requirements. Do not use a supported claim
+or an accepted output shape as a substitute for the independent oracle.
+
+## Repeatable evaluation protocol still required
+
+Before a release evaluation, freeze and record:
+
+1. One implementation revision, fixture definitions, questions, independent
+   numeric answers, and separate procedural acceptance rules. Distinguish
+   caller-selected populations from unscoped interpretation tasks.
+2. Model, request/retry/step/shared-time limits, execution limits, Python and
+   dependency versions, OS, and relevant configuration. There is no committed
+   dependency lock; current reports do not capture the complete environment.
+3. A fixed attempt policy, release targets, and a meaningful model/system
+   baseline before inspecting held-out results. Supplied SQL remains a control.
+4. All attempts, including provider errors, incomplete results, incorrect
+   supported answers, invalid output, and failed controls. Keep numerators and
+   denominators explicit; do not select the best retry.
+5. Independent review of populations, grain, duplicates, weights, null handling,
+   units, denominator, time period, requested procedure, and insufficient
+   evidence. A final scalar alone cannot prove these properties.
+
+Record raw fixture/manifest hashes with their encoding and newline convention.
+The fixed batch's original Windows manifest used CRLF: reserializing equivalent
+JSON with LF changes its byte hash. Preserve the original hash and record any
+normalization separately rather than replacing historical fingerprints.
+
+Use unfamiliar held-out tasks after development fixtures stop driving changes.
+Any case used to tune implementation becomes development evidence. The current
+manual batch records are useful diagnostics, not a reusable held-out harness.
+No general release accuracy or production-readiness claim follows from them.
 
 ## Limits and next evaluation work
 

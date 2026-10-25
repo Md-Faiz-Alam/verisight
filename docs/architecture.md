@@ -35,7 +35,11 @@ of mixed scalar types in SQL results.
 
 Loaded tables reject column identities that collide after string conversion
 and ASCII case normalization, matching DuckDB's identifier behavior even for
-quoted names. This is not Unicode case folding. CSV loading rejects implicit
+quoted names. Blank and NUL-containing column names are also rejected; valid
+names are not silently renamed. The executor rechecks column and relation
+identities before registration. Loaded DataFrames and table lists remain
+caller-owned mutable data: these checks do not lock against concurrent mutation.
+This is not Unicode case folding. CSV loading rejects implicit
 pandas row indexes that would otherwise hide extra source fields. Short records
 can still produce missing trailing cells; this guard is not a complete CSV
 record-width validator.
@@ -47,6 +51,24 @@ DECIMAL precision and scale. Non-finite values in that binding path or a require
 precision above 38 digits raise a query runtime error. Native float columns keep
 their existing floating-point semantics, and digits lost before ingestion cannot
 be recovered. These protections do not make every SQL operation exact.
+
+JSON parsing rejects duplicate keys and nonstandard NaN/infinity constants.
+Integers retain their source values; decimal tokens use a Decimal fallback when
+ordinary float conversion changes the decimal string value. Supported tabular
+JSON structures do not imply support for arbitrary nested documents or exact
+SQL processing of every nested value.
+
+Excel ingestion does not recalculate formulas. `.xlsx` formulas require saved
+results; missing caches and Excel error cells are rejected. Saved results may
+be stale. Legacy `.xls` validation rejects error cells exposed by xlrd but does
+not independently identify missing or stale formula caches.
+
+Numeric profiling excludes source non-finite values from summary calculations.
+Mean, median, and sample standard deviation use stable arithmetic on float
+inputs. If the deviation itself exceeds float range, it is None with
+`standard_deviation_overflow=True`; `non_finite_count` still describes source
+values. Minimum and maximum retain the finite source series' values. Numeric
+summaries are approximate float results, not exact decimal aggregates.
 
 Duplicate profiling falls back to structural snapshots for nested lists and
 objects when pandas cannot hash their cells. Mapping order is immaterial;
@@ -61,8 +83,23 @@ for deterministic tests and alternative behavior.
 The analytical service builds query context, plans SQL, validates it, and uses
 DuckDB to execute against loaded dataset relations. The executor disables
 external access and automatic extension loading/installation. Configured limits
-cover result rows, query execution time, memory, and temporary storage.
-These controls are not a complete deployment security assessment.
+cover result rows, compact UTF-8 JSON result bytes, query execution time,
+memory, and temporary storage. Relation validation checks nested scopes and
+blocks selected internal metadata functions, including `current_schemas` in
+both specialized and anonymous SQLGlot forms. Quoting, qualification, casting,
+or an unused CTE does not authorize a blocked call.
+
+Result bytes are counted after DuckDB materializes cells. DuckDB memory limits
+do not cover all Python/pandas allocations, and upload size does not bound
+expanded Excel content. Loading, profiling, and relation registration are not
+all covered by the per-query timer. These controls are not a complete sandbox
+or deployment security assessment.
+
+The query timeout must be finite, positive, and within `threading.TIMEOUT_MAX`.
+Execution uses repeated native interrupts until the owning thread unwinds,
+with monotonic checks around dispatch, fetch, and completion. Expired output
+is rejected even if an interrupt was missed. Timer cleanup completes before
+connection closure. Cancellation is cooperative, not hard process termination.
 
 With `max_steps=1`, an investigate decision plans the caller's original question,
 not the model's rewritten subquestion. A component-only query would exhaust the
@@ -174,9 +211,10 @@ contract, so their callers must retain the submitted population specification.
 The model cannot supply or replace the policy through its generated response.
 The application enforces supplied constraints but does not establish that they
 capture a natural-language question's business meaning, grain, denominator, or
-metric. Unscoped calls retain their existing behavior. Existing live evaluations
-remain unscoped: a caller-scoped run must be reported separately and must not be
-presented as evidence that autonomous population interpretation was corrected.
+metric. Unscoped calls retain their existing behavior. The default live runner
+does not submit population filters. Separate caller-scoped education and CLI
+reports are committed; keep them distinct from unscoped results. Their success
+does not establish that autonomous population interpretation was corrected.
 
 ## Structured synthesis
 
@@ -193,6 +231,13 @@ Plain JSON and supported JSON fences are accepted. One response-format repair
 is allowed. Feedback contains original bounded evidence and an approved error
 category, not the rejected response or raw validation details. Each prompt
 must pass the character budget before generation.
+
+The structured synthesizer also rejects parsed conclusion numbers that match
+neither a declared claim value nor a parsed number from the original question.
+Question numbers may be repeated as context. This limited format check can
+trigger the one format-repair attempt; it does not verify numerical support,
+semantic roles, unsupported numeric syntax, or number words. The result's token
+audit links only to claims, so allowed question context can remain unlinked.
 
 Provider failures bypass format repair; bounded provider retries apply
 independently to each generation call. Contradicted claims do not trigger
@@ -290,12 +335,37 @@ These derived fields are rebuilt during result construction, including
 `narrative_verified=False` and
 `verification_scope="referenced_numeric_values_only"`.
 
+## Optional claim output acceptance
+
+`ClaimOutputContract` specifies a nonempty tuple of required `ClaimOperation`
+values. Tuple length is the exact claim count, repetitions specify multiplicity,
+and operation order is ignored. `InvestigationResult.assess_output()` checks it
+after generation, without mutating the result or requesting more generation.
+
+Acceptance requires a complete workflow, an exact operation multiset, only
+`supported` claim verdicts, no unlinked numeric tokens, and no unparsed digit
+characters. The verifier's existing numerical policies remain unchanged.
+Question-context numbers allowed by synthesis can still fail this stricter check.
+
+The separate assessment retains the contract, actual operations, violations,
+`accepted`, scope `claim_shape_and_numeric_evidence_only`, and
+`task_semantics_verified=False`. It does not establish correct population,
+grain, units, denominator, query order, semantic linkage, or narrative meaning.
+It is not a guarantee that prose reports only the intended final metric.
+
+The CLI accepts repeated `--require-claim` options. With a contract, successful
+exit requires both completion and acceptance; without it, exit remains
+workflow-based. Preview and final reports retain the selected contract. The
+option does not rewrite the question or remove unwanted claims. Python callers
+explicitly inspect the assessment. See [Output contracts](output-contracts.md).
+
 ## Partial results and failure contracts
 
 Task acceptance is separate from workflow completion and numerical support.
-The built-in pipeline does not deterministically verify arbitrary natural-language
-requirements such as query count, query order, claim count, requested units, or
-business meaning. Treat task compliance as **not assessed automatically**.
+The optional typed output contract checks claim count and operations; it does
+not infer those constraints from question text. Arbitrary natural-language
+requirements such as query count, query order, requested units, or business
+meaning remain **not assessed automatically**.
 A caller or evaluator must compare the original requirements with the ordered
 observations, executed SQL, result populations, and submitted claims. A known
 fixture may have an independent acceptance check; that check is not a general
@@ -324,9 +394,10 @@ all claims are supported or the analytical answer is correct.
 | Provider failure before any successful observation | Can raise to the caller |
 | Unexpected programming error | Propagates |
 
-`synthesis_failure` distinguishes `provider_unavailable`, `provider_error`, and
-`synthesis_error`. `investigation_failure` records a stage (`investigator` or
-`query_execution`), a safe kind, and optional provider diagnostics.
+`synthesis_failure` distinguishes `provider_unavailable`, `provider_error`,
+`synthesis_error`, and `prompt_budget_exceeded`. `investigation_failure` records
+a stage (`investigator` or `query_execution`), a safe kind, and optional provider
+diagnostics.
 `query_execution` covers planning, execution, and repair; it is not a precise
 planner-versus-repair trace.
 
@@ -341,6 +412,20 @@ replace full failed-attempt and repair history.
 retries to typed transient failures. Timeouts and retry settings come from
 Settings. Provider diagnostics can include HTTP status, retryability, attempts,
 a coarse generation stage, and a per-client call number.
+
+The default request path runs a fresh asynchronous SDK client in a worker-owned
+event loop, copies the investigation context, cancels the request coroutine,
+and waits for client cleanup. Per-attempt time is clamped by the remaining
+shared budget. When the shared-budget timer expires, that budget source is
+preserved as `InvestigationDeadlineExceeded`, even if a later clock check still
+sees a small remainder. Ordinary provider/per-attempt timeouts can retry only
+within the remaining budget. Injected synchronous clients are caller-owned and
+must implement their own cancellable request behavior.
+
+The orchestration deadline starts after dataset loading and profiling. Setup,
+synchronous callbacks, and cleanup can overrun until they return. Retry limits,
+network-operation timeouts, per-attempt cancellation, and total wall time are
+different boundaries; none establishes an operating-system hard deadline.
 
 `generation_telemetry.py` uses context-local capture scopes. Each recorded call
 contains stage, call number, attempts, elapsed seconds, and `returned_text`.
@@ -372,11 +457,18 @@ Questions and source evidence can also be sensitive. Content-free diagnostic
 metadata does not make a whole investigation result safe to publish automatically;
 API and export consumers need an explicit disclosure policy.
 
-The live evaluator uses the default investigation path with five temporary
-synthetic fixtures. It scores one VALUE claim against an independent expected
+The live evaluator uses the default investigation path with five default and
+three additional challenge synthetic fixtures. `all` and `challenge` are separate
+selections. It scores one VALUE claim against an independent expected
 metric. `correct_numeric` does not require complete digit coverage or certify
 narrative or SQL semantics. Incomplete results retain available failure metadata;
 escaping exceptions follow a separate failure-report path.
+
+The runner does not invoke `ClaimOutputContract`; CLI output acceptance and
+`correct_numeric` remain distinct checks. `run_case()` adds synthetic questions,
+conclusions, SQL, cells, and claim details to its summary. These content-bearing
+reports need publication review. Historical CLI batches and manual rechecks
+have separate schemas and assessment notes; see [Evaluation](evaluation.md).
 
 Saved reports include revision, tracked-change status, settings, timings,
 audits, and observed generation calls when available. Older reports may lack
@@ -385,6 +477,8 @@ new fields. Missing telemetry is not evidence of zero provider calls.
 ## CI and remaining architecture work
 
 `.github/workflows/ci.yml` runs offline gates on Windows and Linux with Python
-3.11. Deployment isolation, cancellation, workload limits, richer provenance,
-per-metric rounding integration, semantic evaluation, and the end-user workflow remain
-separate acceptance work. See [Roadmap](roadmap.md).
+3.11. The local CLI and the tested cancellation paths are implemented; unfamiliar
+data accuracy, workload limits, fresh installation, operational recovery, and
+deployment isolation still need acceptance evidence. A complete supported
+version matrix and held-out evaluation are not established. See
+[Roadmap](roadmap.md).
