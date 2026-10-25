@@ -1,8 +1,12 @@
+from pathlib import Path
 from unittest.mock import patch
 
+import pandas as pd
 import pytest
 from sqlglot.errors import ParseError
 
+from verisight.error_reporting import ErrorCode
+from verisight.execution.engine import DuckDBExecutor
 from verisight.execution.exceptions import (
     QueryExecutionError,
     QueryValidationError,
@@ -12,6 +16,8 @@ from verisight.execution.validation import (
     _mask_sql_literals_and_comments,
     validate_dataset_relations,
 )
+from verisight.ingestion.models import LoadedDataset, LoadedTable, SourceMetadata
+from verisight.public_api import run_public_operation
 
 
 @pytest.mark.parametrize(
@@ -313,3 +319,70 @@ def test_dataset_relation_validation_rejects_unsupported_source() -> None:
             "SELECT * FROM orders",
             frozenset({"orders"}),
         )
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT CAST(current_schemas(true) AS VARCHAR)",
+        "SELECT CAST(CuRrEnT_ScHeMaS/* comment */(false) AS VARCHAR)",
+        'SELECT CAST("CURRENT_SCHEMAS"(true) AS VARCHAR)',
+        "SELECT CAST(main.current_schemas(true) AS VARCHAR)",
+        'SELECT CAST(main."CURRENT_SCHEMAS"(true) AS VARCHAR)',
+        "SELECT (SELECT CAST(current_schemas(true) AS VARCHAR))",
+        "WITH unused AS (SELECT current_schemas(true)) SELECT 1",
+        "SELECT name FROM UNNEST(current_schemas(true)) AS schemas(name)",
+        "SELECT CASE WHEN false THEN CAST(current_schemas(true) AS VARCHAR) "
+        "ELSE 'unused' END",
+    ],
+    ids=[
+        "cast-to-scalar",
+        "mixed-case-comment",
+        "quoted",
+        "qualified",
+        "qualified-quoted",
+        "nested-select",
+        "unused-cte",
+        "unnest",
+        "unreachable-expression",
+    ],
+)
+def test_schema_list_functions_are_rejected_before_connection(query: str) -> None:
+    dataset = LoadedDataset(tables=[])
+    executor = DuckDBExecutor(
+        memory_limit_mb=64, execution_timeout_seconds=1, max_result_rows=20
+    )
+    with patch("verisight.execution.engine.duckdb.connect") as connect:
+        with pytest.raises(QueryValidationError, match="internal metadata function"):
+            executor.execute(dataset, query)
+        outcome = run_public_operation(lambda: executor.execute(dataset, query))
+        connect.assert_not_called()
+    assert not outcome.succeeded
+    assert outcome.value is None
+    assert outcome.error is not None
+    assert outcome.error.code is ErrorCode.QUERY_VALIDATION_ERROR
+    assert query not in outcome.error.message
+
+
+def test_schema_function_names_in_data_literals_and_comments_remain_queryable() -> None:
+    data = pd.DataFrame({"current_schemas": [7]})
+    original = data.copy(deep=True)
+    dataset = LoadedDataset(
+        tables=[
+            LoadedTable(
+                name="orders",
+                data=data,
+                source=SourceMetadata(Path("orders.csv"), "orders.csv", ".csv", 1),
+            )
+        ]
+    )
+    result = DuckDBExecutor(
+        memory_limit_mb=64, execution_timeout_seconds=1, max_result_rows=20
+    ).execute(
+        dataset,
+        "SELECT \"current_schemas\", 'current_schemas(true)' AS note FROM orders "
+        "/* current_schemas(true) */",
+    )
+    assert result.columns == ("current_schemas", "note")
+    assert result.rows == ((7, "current_schemas(true)"),)
+    pd.testing.assert_frame_equal(data, original)

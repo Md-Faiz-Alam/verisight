@@ -212,6 +212,7 @@ class AnalyticalQueryValidator:
 _BLOCKED_SCALAR_METADATA_FUNCTIONS = frozenset(
     {
         "current_setting",
+        "current_schemas",
         "version",
     }
 )
@@ -249,6 +250,7 @@ def validate_dataset_relations(
                 exp.CurrentCatalog,
                 exp.CurrentDatabase,
                 exp.CurrentSchema,
+                exp.CurrentSchemas,
                 exp.CurrentUser,
                 exp.SessionUser,
             ),
