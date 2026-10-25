@@ -1,14 +1,30 @@
 """CLI boundary tests using real synthetic ingestion/SQL and offline providers."""
 
 import json
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, cast
 from unittest.mock import patch
 
 import pytest
 
+from verisight import VeriSight
 from verisight.cli import main
+from verisight.config import Settings
+from verisight.execution.claim_verification import (
+    ClaimOperation,
+    EvidenceReference,
+    NumericalClaim,
+)
 from verisight.execution.gemini import GeminiTransientError
+from verisight.execution.investigation_result import (
+    ClaimOutputContract,
+    InvestigationResult,
+    InvestigationStatus,
+)
+from verisight.execution.models import QueryResult
+from verisight.execution.observations import QueryObservation
+from verisight.serialization import to_jsonable
 
 
 @pytest.fixture(autouse=True)
@@ -419,3 +435,217 @@ def test_keyboard_interrupt_has_no_completed_report(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "interrupted" in captured.err
+
+
+@pytest.mark.parametrize(
+    "operations",
+    [[], (), ("value",), (ClaimOperation.VALUE, "difference")],
+    ids=["mutable-list", "empty", "raw-string", "mixed-types"],
+)
+def test_output_contract_requires_immutable_typed_operations(
+    operations: object,
+) -> None:
+    with pytest.raises(ValueError, match="nonempty tuple of ClaimOperation"):
+        ClaimOutputContract(cast(tuple[ClaimOperation, ...], operations))
+
+
+@pytest.mark.parametrize(
+    ("mode", "violations"),
+    [
+        ("met", set()),
+        ("extra-claims", {"claim_count_mismatch", "claim_operations_mismatch"}),
+        ("wrong-operation", {"claim_operations_mismatch"}),
+        ("contradicted", {"claims_not_supported"}),
+        ("unsupported-reference", {"claims_not_supported"}),
+        ("unlinked-number", {"unlinked_numeric_tokens"}),
+        ("unparsed-digits", {"unparsed_digits"}),
+        ("incomplete", {"incomplete_workflow"}),
+        ("no-claims", {"claim_count_mismatch", "claim_operations_mismatch"}),
+    ],
+    ids=[
+        "met",
+        "extra-claims",
+        "wrong-operation",
+        "contradicted",
+        "unsupported-reference",
+        "unlinked-number",
+        "unparsed-digits",
+        "incomplete",
+        "no-claims",
+    ],
+)
+def test_output_assessment_preserves_results_and_limits_its_verdict(
+    source: Path, mode: str, violations: set[str]
+) -> None:
+    app = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
+    )
+    before = EvidenceReference(observation_index=0, row_index=0, column="before")
+    after = EvidenceReference(observation_index=0, row_index=0, column="after")
+    difference = NumericalClaim(
+        operation=ClaimOperation.DIFFERENCE,
+        expected=20,
+        left=after,
+        right=before,
+    )
+    components = (
+        NumericalClaim(operation=ClaimOperation.VALUE, expected=10, left=before),
+        NumericalClaim(operation=ClaimOperation.VALUE, expected=30, left=after),
+    )
+    claims: tuple[NumericalClaim, ...] = (difference,)
+    conclusion = "The difference is 20."
+    if mode == "extra-claims":
+        claims = (*components, difference)
+        conclusion = "Before 10; after 30; difference 20."
+    elif mode == "wrong-operation":
+        claims = (components[1],)
+        conclusion = "The value is 30."
+    elif mode == "contradicted":
+        claims = (replace(difference, expected=21),)
+        conclusion = "The difference is 21."
+    elif mode == "unsupported-reference":
+        claims = (replace(difference, left=replace(after, row_index=99)),)
+    elif mode == "unlinked-number":
+        conclusion = "The difference is 20, with an extra assertion of 99."
+    elif mode == "unparsed-digits":
+        conclusion = "The difference is 20 for cohort ２０２６."
+    elif mode == "no-claims":
+        claims = ()
+        conclusion = "No final answer."
+    result = InvestigationResult(
+        question="Return only the difference as one DIFFERENCE claim.",
+        conclusion=conclusion,
+        analysis=app.analyze(source),
+        observations=(
+            QueryObservation(
+                question="Measure components",
+                sql="SELECT 10 AS before, 30 AS after",
+                result=QueryResult(columns=("before", "after"), rows=((10, 30),)),
+            ),
+        ),
+        generated_claims=claims,
+        status=(
+            InvestigationStatus.INCOMPLETE
+            if mode == "incomplete"
+            else InvestigationStatus.COMPLETE
+        ),
+    )
+    contract = ClaimOutputContract((ClaimOperation.DIFFERENCE,))
+    original = to_jsonable(result)
+    assessment = result.assess_output(contract)
+    assert set(assessment.violations) == violations
+    assert assessment.accepted is (not violations)
+    assert not assessment.task_semantics_verified
+    assert assessment.actual_operations == tuple(item.operation for item in claims)
+    assert to_jsonable(result) == original
+    assert result.generated_claims is claims
+    exported = json.loads(json.dumps(to_jsonable(assessment), allow_nan=False))
+    assert exported["accepted"] is (not violations)
+    assert exported["scope"] == "claim_shape_and_numeric_evidence_only"
+    assert exported["task_semantics_verified"] is False
+    with pytest.raises(FrozenInstanceError):
+        contract.operations = (ClaimOperation.VALUE,)  # type: ignore[misc]
+    if mode == "extra-claims":
+        # A different exact contract can accept the unchanged three claims.
+        reordered = ClaimOutputContract(
+            (ClaimOperation.DIFFERENCE, ClaimOperation.VALUE, ClaimOperation.VALUE)
+        )
+        assert result.assess_output(reordered).accepted
+
+
+def test_cli_previews_output_contract_without_generation(
+    source: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=AssertionError("Network forbidden"),
+    ) as generate:
+        assert (
+            main(
+                [
+                    "investigate",
+                    str(source),
+                    "--question",
+                    "Compare",
+                    "--preview",
+                    "--require-claim",
+                    "difference",
+                    "--require-claim",
+                    "value",
+                ]
+            )
+            == 0
+        )
+    generate.assert_not_called()
+    report = json.loads(capsys.readouterr().out)
+    assert report["request"]["claim_output_contract"] == {
+        "operations": ["difference", "value"]
+    }
+
+
+@pytest.mark.parametrize(
+    ("mode", "required", "expected_code"),
+    [
+        ("supported", ["value"], 0),
+        ("supported", ["difference"], 1),
+        ("supported", ["value", "value"], 1),
+        ("contradicted", ["value"], 1),
+        ("incomplete", ["value"], 1),
+    ],
+    ids=["accepted", "wrong-operation", "wrong-count", "contradicted", "incomplete"],
+)
+def test_cli_enforces_selected_output_contract_without_additional_calls(
+    source: Path,
+    population: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+    required: list[str],
+    expected_code: int,
+) -> None:
+    output = tmp_path / "contract.json"
+    arguments = [
+        "investigate",
+        str(source),
+        "--question",
+        "Sum active amounts",
+        "--population",
+        str(population),
+        "--allow-llm-data-disclosure",
+        "--output",
+        str(output),
+    ]
+    for operation in required:
+        arguments.extend(["--require-claim", operation])
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=responses(mode),
+    ) as generate:
+        assert main(arguments) == expected_code
+    assert generate.call_count == (3 if mode == "incomplete" else 4)
+    report = json.loads(capsys.readouterr().out)
+    assert report["request"]["claim_output_contract"]["operations"] == required
+    assert report["claim_output_assessment"]["accepted"] is (expected_code == 0)
+    assert report["claim_output_assessment"]["task_semantics_verified"] is False
+    assert report["workflow_status"] == (
+        "incomplete" if mode == "incomplete" else "complete"
+    )
+    assert report["investigation"]["observations"][0]["result"]["rows"] == [[30]]
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+
+
+def test_cli_rejects_unknown_claim_operations_before_work(source: Path) -> None:
+    with patch("verisight.cli.VeriSight") as app, pytest.raises(SystemExit) as caught:
+        main(
+            [
+                "investigate",
+                str(source),
+                "--question",
+                "Sum",
+                "--preview",
+                "--require-claim",
+                "ratio",
+            ]
+        )
+    assert caught.value.code == 2
+    app.assert_not_called()

@@ -1,5 +1,6 @@
 """Results produced by autonomous analytical investigations."""
 
+from collections import Counter
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal
@@ -12,6 +13,7 @@ from verisight.execution.claim_verification import (
     DecimalRoundingPolicy,
     NumericalClaim,
     NumericalClaimVerifier,
+    VerificationStatus,
 )
 from verisight.execution.context import PopulationFilter
 from verisight.execution.gemini import (
@@ -35,6 +37,45 @@ class InvestigationStatus(StrEnum):
 
     COMPLETE = "complete"
     INCOMPLETE = "incomplete"
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimOutputContract:
+    """Caller-selected exact claim operations, compared without ordering.
+
+    Repeated operations require multiple claims. This is a postcondition on
+    returned output, not an instruction inferred from natural-language text.
+    It does not define populations, units, query order, or business meaning.
+    """
+
+    operations: tuple[ClaimOperation, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.operations, tuple)
+            or not self.operations
+            or any(not isinstance(item, ClaimOperation) for item in self.operations)
+        ):
+            raise ValueError(
+                "Claim output operations must be a nonempty tuple "
+                "of ClaimOperation values."
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimOutputAssessment:
+    """A narrow output check alongside unchanged investigation evidence.
+
+    Numeric-token checks inherit the narrative audit's syntax limitations.
+    Acceptance does not establish that the answer satisfies the whole task.
+    """
+
+    contract: ClaimOutputContract
+    actual_operations: tuple[ClaimOperation, ...]
+    violations: tuple[str, ...]
+    accepted: bool
+    scope: str = field(default="claim_shape_and_numeric_evidence_only", init=False)
+    task_semantics_verified: bool = field(default=False, init=False)
 
 
 class SynthesisFailureKind(StrEnum):
@@ -194,6 +235,37 @@ class InvestigationResult:
     def failed_attempt_count(self) -> int:
         """Return unsuccessful analytical requests, never usable as evidence."""
         return len(self.failed_attempts)
+
+    def assess_output(self, contract: ClaimOutputContract) -> ClaimOutputAssessment:
+        """Check explicit output requirements without changing the investigation.
+
+        Require a complete workflow, the exact operation multiset, supported
+        claims, linked parsed numeric tokens, and no unparsed digit characters.
+        No claims are dropped, rewritten, rounded, or regenerated here.
+        """
+        operations = tuple(item.claim.operation for item in self.verified_claims)
+        violations: list[str] = []
+        if self.status is not InvestigationStatus.COMPLETE:
+            violations.append("incomplete_workflow")
+        if len(operations) != len(contract.operations):
+            violations.append("claim_count_mismatch")
+        if Counter(operations) != Counter(contract.operations):
+            violations.append("claim_operations_mismatch")
+        if any(
+            item.verification.status is not VerificationStatus.SUPPORTED
+            for item in self.verified_claims
+        ):
+            violations.append("claims_not_supported")
+        if self.unlinked_numbers:
+            violations.append("unlinked_numeric_tokens")
+        if self.narrative_digit_coverage.unparsed_digit_count:
+            violations.append("unparsed_digits")
+        return ClaimOutputAssessment(
+            contract=contract,
+            actual_operations=operations,
+            violations=tuple(violations),
+            accepted=not violations,
+        )
 
     def verify_claims(
         self,

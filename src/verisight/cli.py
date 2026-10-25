@@ -11,9 +11,11 @@ from typing import Any
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.config import Settings
 from verisight.exceptions import ConfigurationError
+from verisight.execution.claim_verification import ClaimOperation
 from verisight.execution.context import PopulationFilter, QueryContextBuilder
 from verisight.execution.exceptions import QueryValidationError
 from verisight.execution.investigation_result import (
+    ClaimOutputContract,
     InvestigationResult,
     InvestigationStatus,
 )
@@ -51,6 +53,15 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("--output", type=Path, help="Export JSON to a NEW file.")
         if name == "investigate":
             command.add_argument("--question", required=True)
+            command.add_argument(
+                "--require-claim",
+                action="append",
+                choices=[operation.value for operation in ClaimOperation],
+                help=(
+                    "Require exactly these claim operations; repeat for each claim. "
+                    "Checks output and numeric support, not task semantics."
+                ),
+            )
             command.add_argument(
                 "--population", type=Path, help="JSON population array."
             )
@@ -163,9 +174,17 @@ def _run(
         return {"kind": "profile", "profile": profile}, 0
 
     QueryContextBuilder().build(analysis.analysis.schema, population=population)
+    contract = (
+        ClaimOutputContract(
+            tuple(ClaimOperation(value) for value in args.require_claim)
+        )
+        if args.require_claim
+        else None
+    )
     request: dict[str, object] = {
         "paths": [str(path) for path in args.paths],
         "question": args.question,
+        "claim_output_contract": contract,
         "population": population,
         "population_mode": "caller_selected" if population else "unscoped",
         "model": settings.gemini_model,
@@ -200,21 +219,26 @@ def _run(
     result: InvestigationResult = app.investigate(
         args.paths, args.question, max_steps=args.max_steps, population=population
     )
-    report = {
+    assessment = None if contract is None else result.assess_output(contract)
+    report: dict[str, object] = {
         "kind": "investigation",
         "request": request,
         "workflow_status": result.status.value,
+        "claim_output_assessment": assessment,
         "population": result.population,
         "profile": _profile_view(result.analysis),
         "numerical_statements": result.quantitative_statements,
         "unverified_model_interpretation": result.conclusion,
         "investigation": result,
     }
-    return report, 0 if result.status is InvestigationStatus.COMPLETE else 1
+    succeeded = result.status is InvestigationStatus.COMPLETE and (
+        assessment is None or assessment.accepted
+    )
+    return report, 0 if succeeded else 1
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Return CLI status, never an analytical correctness verdict."""
+    """Return workflow and optional output-contract status, not semantic truth."""
     parser = _parser()
     args = parser.parse_args(argv)
     if args.command == "investigate":
