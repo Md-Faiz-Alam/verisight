@@ -10,7 +10,12 @@ from verisight.ingestion.schema import LogicalType
 
 @dataclass(frozen=True, slots=True)
 class NumericStatistics:
-    """Descriptive statistics for a numeric column."""
+    """Descriptive statistics for finite numeric values.
+
+    Means, medians, and sample standard deviations use float precision.
+    An overflowing sample standard deviation is None with its overflow flag
+    set; non_finite_count describes source values, not computed statistics.
+    """
 
     minimum: float | int | None
     maximum: float | int | None
@@ -19,6 +24,7 @@ class NumericStatistics:
     standard_deviation: float | None
     non_finite_count: int
     non_finite_ratio: float
+    standard_deviation_overflow: bool = False
 
 
 @dataclass(frozen=True, slots=True)

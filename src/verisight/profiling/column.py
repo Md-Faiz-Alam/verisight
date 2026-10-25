@@ -1,5 +1,7 @@
 """Column-level profiling for VeriSight."""
 
+from statistics import mean, stdev
+
 import numpy as np
 import pandas as pd
 
@@ -106,27 +108,36 @@ class ColumnProfiler:
         minimum = finite_series.min()
         maximum = finite_series.max()
 
-        mean = float(np.mean(finite_values))
-        median = float(np.median(finite_values))
+        # The statistics module accumulates exact ratios of the float inputs,
+        # avoiding overflowing sums and squared deviations. Sorting retains
+        # the original float values; average only the one or two middle values
+        # so an even-length median cannot overflow its intermediate sum.
+        values = sorted(float(value) for value in finite_values)
+        mean_value = mean(values)
+        middle = len(values) // 2
+        median = mean(values[(len(values) - 1) // 2 : middle + 1])
 
+        standard_deviation_overflow = False
         if finite_values.size <= 1:
             standard_deviation = None
         else:
-            standard_deviation = float(
-                np.std(
-                    finite_values,
-                    ddof=1,
-                )
-            )
+            try:
+                standard_deviation = stdev(values)
+            except OverflowError:
+                # The result itself exceeds float range, rather than an
+                # intermediate variance overflowing for a representable result.
+                standard_deviation = None
+                standard_deviation_overflow = True
 
         return NumericStatistics(
             minimum=minimum,
             maximum=maximum,
-            mean=mean,
+            mean=mean_value,
             median=median,
             standard_deviation=standard_deviation,
             non_finite_count=non_finite_count,
             non_finite_ratio=non_finite_ratio,
+            standard_deviation_overflow=standard_deviation_overflow,
         )
 
     @staticmethod
