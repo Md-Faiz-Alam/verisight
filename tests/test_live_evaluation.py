@@ -954,14 +954,25 @@ def test_compact_investigator_keeps_requested_metric_scale(
 
 
 @pytest.mark.parametrize(
-    "active_only,actual,outcome",
-    [(True, "37.5", "correct_numeric"), (False, "40", "incorrect_numeric")],
-    ids=["requested-active-population", "broader-not-cancelled-population"],
+    "active_only,distinct_numerator,actual,outcome",
+    [
+        (True, True, "37.5", "correct_numeric"),
+        (False, True, "40", "incorrect_numeric"),
+        (True, False, "62.5", "incorrect_numeric"),
+        (False, False, "60", "incorrect_numeric"),
+    ],
+    ids=[
+        "correct-population-and-grain",
+        "wrong-population",
+        "wrong-numerator-grain",
+        "wrong-population-and-numerator-grain",
+    ],
 )
 def test_education_fixture_distinguishes_inclusion_from_exclusion(
     tmp_path: Path,
     result: InvestigationResult,
     active_only: bool,
+    distinct_numerator: bool,
     actual: str,
     outcome: str,
 ) -> None:
@@ -975,6 +986,15 @@ def test_education_fixture_distinguishes_inclusion_from_exclusion(
             "\"enrolment state\" != 'cancelled'",
         )
         assert sql != case.control_sql
+    if not distinct_numerator:
+        distinct_count = (
+            "COUNT(DISTINCT CASE WHEN outcome = 'complete' THEN \"learner id\" END)"
+        )
+        assert distinct_count in sql
+        sql = sql.replace(
+            distinct_count,
+            "SUM(CASE WHEN outcome = 'complete' THEN 1 ELSE 0 END)",
+        )
     paths = []
     for filename, content in case.files:
         path = tmp_path / filename
@@ -984,7 +1004,11 @@ def test_education_fixture_distinguishes_inclusion_from_exclusion(
         settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
     )
     query_result = app.execute(paths, sql)
-    expected = Decimal(100) * 3 / 8 if active_only else Decimal(100) * 4 / 10
+    eligible_people = 8 if active_only else 10
+    completed_people = 3 if active_only else 4
+    completed_rows = 5 if active_only else 6
+    numerator = completed_people if distinct_numerator else completed_rows
+    expected = Decimal(100) * numerator / eligible_people
     assert Decimal(actual) == expected
     assert query_result.row_count == 1
     assert Decimal(str(query_result.rows[0][0])) == expected
