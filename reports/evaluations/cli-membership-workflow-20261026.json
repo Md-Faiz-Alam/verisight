@@ -1,0 +1,975 @@
+{
+  "record_type": "reviewed_synthetic_membership_cli_workflow",
+  "run_record": {
+    "revision": "39529905323e3fe015dec2236d9cc74ab2604bdf",
+    "started_utc": "2026-10-26T17:25:10.409198+00:00",
+    "fixture_sha256": {
+      "entries.csv": "308d4d6fac3286dcb0ef1b2c2b21976355eee52ede88979303115a6690569c98",
+      "flags.csv": "5d2139f5766a7d7c605120c5d89208ee1915b2dda42b672bc6d91bf0cf0180f0"
+    },
+    "whole_case_attempt": 1
+  },
+  "original_export_sha256": "bc2ff64afd20cbcdf552980a68b89ac1bb1c5899c8e11beb8adf3a1947b51423",
+  "fixture": {
+    "entries.csv": "entry_id,status,amount_cents\na,posted,10075\nb,posted,-2500\nc,posted,500\nd,posted,500\ne,pending,90000\nf,reversed,50000\ng,posted,3000\nh,posted,\n",
+    "flags.csv": "entry_id,decision\na,accepted\na,accepted\nb,accepted\nc,accepted\nd,accepted\ne,accepted\nf,accepted\ng,rejected\nh,accepted\n"
+  },
+  "population": [
+    {
+      "relation": "entries",
+      "column": "status",
+      "values": [
+        "posted"
+      ]
+    },
+    {
+      "relation": "flags",
+      "column": "decision",
+      "values": [
+        "accepted"
+      ]
+    }
+  ],
+  "independent_expected_answer": "85.75",
+  "expected_answer_derivation": "(10075 - 2500 + 500 + 500) / 100",
+  "observed_cli_exit_code": 0,
+  "observed_wall_seconds": 83.13,
+  "timing_and_exit_source": "Reviewed PowerShell terminal output.",
+  "reviewed_assessment": {
+    "task_acceptance": "passed_for_this_fixture",
+    "membership_without_flag_multiplication": true,
+    "equal_amount_entries_preserved": true,
+    "missing_amounts_excluded": true,
+    "currency_conversion_in_sql": true,
+    "one_supported_final_value_claim": true
+  },
+  "review_basis": "Manual review of the original SQL, result, claim reference, and conclusion. The validation script checks the recorded contracts and numerical consistency; it is not a general semantic verifier.",
+  "limitations": "One newly prepared synthetic development task with caller-selected populations. Generated SQL also supplied the correct filters, so this live run does not independently isolate population enforcement. It does not resolve the earlier autonomous population failure or establish general analytical reliability.",
+  "export_notes": "Only request.paths in the embedded CLI report was replaced with portable synthetic paths. Original report and temporary inputs remain unchanged.",
+  "cli_report": {
+    "schema_version": 1,
+    "report_type": "local_cli",
+    "timestamp_utc": "2026-10-26T17:26:33.297756+00:00",
+    "limitations": "Workflow completion is not analytical correctness. Numerical support checks referenced values only. Population filters do not verify business meaning or provide privacy isolation. Narrative meaning is unverified. Inspect population, grain, denominator, time period, units, and SQL.",
+    "kind": "investigation",
+    "request": {
+      "paths": [
+        "synthetic/membership_workflow/entries.csv",
+        "synthetic/membership_workflow/flags.csv"
+      ],
+      "question": "What is the net amount, in currency units, of posted entries having at least one accepted flag? Count each qualifying entry once even when its flag is repeated. Distinct entries with equal amounts both count. Exclude missing amounts. Convert amount_cents to currency units by dividing by 100 in SQL. Use one analytical query. Report only the final metric as exactly one numerical VALUE claim referencing its final result cell.",
+      "claim_output_contract": {
+        "operations": [
+          "value"
+        ]
+      },
+      "population": [
+        {
+          "relation": "entries",
+          "column": "status",
+          "values": [
+            "posted"
+          ]
+        },
+        {
+          "relation": "flags",
+          "column": "decision",
+          "values": [
+            "accepted"
+          ]
+        }
+      ],
+      "population_mode": "caller_selected",
+      "model": "gemini-3.1-flash-lite",
+      "max_steps": 1,
+      "max_investigation_seconds": 120.0,
+      "request_timeout_seconds": 30.0,
+      "provider_retries": 1,
+      "max_query_result_rows": 20,
+      "max_query_result_bytes": 1048576,
+      "max_query_execution_seconds": 30.0,
+      "max_query_memory_mb": 512,
+      "max_query_temp_storage_mb": 1024
+    },
+    "workflow_status": "complete",
+    "claim_output_assessment": {
+      "contract": {
+        "operations": [
+          "value"
+        ]
+      },
+      "actual_operations": [
+        "value"
+      ],
+      "violations": [],
+      "accepted": true,
+      "scope": "claim_shape_and_numeric_evidence_only",
+      "task_semantics_verified": false
+    },
+    "population": [
+      {
+        "relation": "entries",
+        "column": "status",
+        "values": [
+          "posted"
+        ]
+      },
+      {
+        "relation": "flags",
+        "column": "decision",
+        "values": [
+          "accepted"
+        ]
+      }
+    ],
+    "profile": {
+      "information_scope": "original_loaded_dataset",
+      "summary": {
+        "table_count": 2,
+        "total_row_count": 17,
+        "total_column_count": 5,
+        "issue_count": 2,
+        "info_issue_count": 0,
+        "warning_issue_count": 2,
+        "error_issue_count": 0,
+        "table_issue_count": 1,
+        "column_issue_count": 1,
+        "affected_relation_names": [
+          "entries",
+          "flags"
+        ]
+      },
+      "schema": {
+        "tables": [
+          {
+            "name": "entries",
+            "relation_name": "entries",
+            "row_count": 8,
+            "column_count": 3,
+            "columns": [
+              {
+                "name": "entry_id",
+                "physical_dtype": "object",
+                "logical_type": "string",
+                "nullable": false,
+                "missing_count": 0
+              },
+              {
+                "name": "status",
+                "physical_dtype": "object",
+                "logical_type": "string",
+                "nullable": false,
+                "missing_count": 0
+              },
+              {
+                "name": "amount_cents",
+                "physical_dtype": "Int64",
+                "logical_type": "integer",
+                "nullable": true,
+                "missing_count": 1
+              }
+            ]
+          },
+          {
+            "name": "flags",
+            "relation_name": "flags",
+            "row_count": 9,
+            "column_count": 2,
+            "columns": [
+              {
+                "name": "entry_id",
+                "physical_dtype": "object",
+                "logical_type": "string",
+                "nullable": false,
+                "missing_count": 0
+              },
+              {
+                "name": "decision",
+                "physical_dtype": "object",
+                "logical_type": "string",
+                "nullable": false,
+                "missing_count": 0
+              }
+            ]
+          }
+        ]
+      },
+      "profiles": {
+        "tables": [
+          {
+            "name": "entries",
+            "relation_name": "entries",
+            "row_count": 8,
+            "column_count": 3,
+            "columns": [
+              {
+                "name": "entry_id",
+                "logical_type": "string",
+                "row_count": 8,
+                "non_missing_count": 8,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 8,
+                "distinct_ratio": 1.0,
+                "minimum": null,
+                "maximum": null,
+                "numeric_statistics": null,
+                "text_statistics": {
+                  "minimum_length": 1,
+                  "maximum_length": 1,
+                  "mean_length": 1.0,
+                  "empty_count": 0,
+                  "empty_ratio": 0.0,
+                  "most_frequent_value": "a",
+                  "most_frequent_count": 1,
+                  "most_frequent_ratio": 0.125
+                },
+                "datetime_statistics": null
+              },
+              {
+                "name": "status",
+                "logical_type": "string",
+                "row_count": 8,
+                "non_missing_count": 8,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 3,
+                "distinct_ratio": 0.375,
+                "minimum": null,
+                "maximum": null,
+                "numeric_statistics": null,
+                "text_statistics": {
+                  "minimum_length": 6,
+                  "maximum_length": 8,
+                  "mean_length": 6.375,
+                  "empty_count": 0,
+                  "empty_ratio": 0.0,
+                  "most_frequent_value": "posted",
+                  "most_frequent_count": 6,
+                  "most_frequent_ratio": 0.75
+                },
+                "datetime_statistics": null
+              },
+              {
+                "name": "amount_cents",
+                "logical_type": "integer",
+                "row_count": 8,
+                "non_missing_count": 7,
+                "missing_count": 1,
+                "missing_ratio": 0.125,
+                "distinct_count": 6,
+                "distinct_ratio": 0.8571428571428571,
+                "minimum": -2500,
+                "maximum": 90000,
+                "numeric_statistics": {
+                  "minimum": -2500,
+                  "maximum": 90000,
+                  "mean": 21653.571428571428,
+                  "median": 3000.0,
+                  "standard_deviation": 35202.07270345097,
+                  "non_finite_count": 0,
+                  "non_finite_ratio": 0.0,
+                  "standard_deviation_overflow": false
+                },
+                "text_statistics": null,
+                "datetime_statistics": null
+              }
+            ],
+            "missing_value_statistics": {
+              "total_cell_count": 24,
+              "missing_cell_count": 1,
+              "missing_cell_ratio": 0.041666666666666664,
+              "rows_with_missing_count": 1,
+              "rows_with_missing_ratio": 0.125,
+              "fully_missing_row_count": 0,
+              "fully_missing_row_ratio": 0.0,
+              "columns_with_missing_count": 1,
+              "columns_with_missing_ratio": 0.3333333333333333
+            },
+            "duplicate_statistics": {
+              "duplicate_row_count": 0,
+              "duplicate_row_ratio": 0.0,
+              "duplicate_group_row_count": 0,
+              "duplicate_group_row_ratio": 0.0
+            }
+          },
+          {
+            "name": "flags",
+            "relation_name": "flags",
+            "row_count": 9,
+            "column_count": 2,
+            "columns": [
+              {
+                "name": "entry_id",
+                "logical_type": "string",
+                "row_count": 9,
+                "non_missing_count": 9,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 8,
+                "distinct_ratio": 0.8888888888888888,
+                "minimum": null,
+                "maximum": null,
+                "numeric_statistics": null,
+                "text_statistics": {
+                  "minimum_length": 1,
+                  "maximum_length": 1,
+                  "mean_length": 1.0,
+                  "empty_count": 0,
+                  "empty_ratio": 0.0,
+                  "most_frequent_value": "a",
+                  "most_frequent_count": 2,
+                  "most_frequent_ratio": 0.2222222222222222
+                },
+                "datetime_statistics": null
+              },
+              {
+                "name": "decision",
+                "logical_type": "string",
+                "row_count": 9,
+                "non_missing_count": 9,
+                "missing_count": 0,
+                "missing_ratio": 0.0,
+                "distinct_count": 2,
+                "distinct_ratio": 0.2222222222222222,
+                "minimum": null,
+                "maximum": null,
+                "numeric_statistics": null,
+                "text_statistics": {
+                  "minimum_length": 8,
+                  "maximum_length": 8,
+                  "mean_length": 8.0,
+                  "empty_count": 0,
+                  "empty_ratio": 0.0,
+                  "most_frequent_value": "accepted",
+                  "most_frequent_count": 8,
+                  "most_frequent_ratio": 0.8888888888888888
+                },
+                "datetime_statistics": null
+              }
+            ],
+            "missing_value_statistics": {
+              "total_cell_count": 18,
+              "missing_cell_count": 0,
+              "missing_cell_ratio": 0.0,
+              "rows_with_missing_count": 0,
+              "rows_with_missing_ratio": 0.0,
+              "fully_missing_row_count": 0,
+              "fully_missing_row_ratio": 0.0,
+              "columns_with_missing_count": 0,
+              "columns_with_missing_ratio": 0.0
+            },
+            "duplicate_statistics": {
+              "duplicate_row_count": 1,
+              "duplicate_row_ratio": 0.1111111111111111,
+              "duplicate_group_row_count": 2,
+              "duplicate_group_row_ratio": 0.2222222222222222
+            }
+          }
+        ]
+      },
+      "quality_findings": [
+        {
+          "issue_type": "missing_values",
+          "severity": "warning",
+          "scope": "column",
+          "table_name": "entries",
+          "relation_name": "entries",
+          "message": "Column contains missing values.",
+          "column_name": "amount_cents",
+          "affected_count": 1,
+          "affected_ratio": 0.125,
+          "evidence": {
+            "missing_count": 1,
+            "non_missing_count": 7,
+            "row_count": 8
+          }
+        },
+        {
+          "issue_type": "duplicate_rows",
+          "severity": "warning",
+          "scope": "table",
+          "table_name": "flags",
+          "relation_name": "flags",
+          "message": "Table contains duplicate rows.",
+          "column_name": null,
+          "affected_count": 1,
+          "affected_ratio": 0.1111111111111111,
+          "evidence": {
+            "duplicate_row_count": 1,
+            "duplicate_group_row_count": 2,
+            "row_count": 9
+          }
+        }
+      ],
+      "insights": [
+        {
+          "insight_type": "dataset_structure",
+          "scope": "dataset",
+          "message": "Dataset contains 2 table(s).",
+          "table_name": null,
+          "relation_name": null,
+          "column_name": null,
+          "evidence": {
+            "table_count": 2,
+            "total_row_count": 17,
+            "total_column_count": 5
+          }
+        },
+        {
+          "insight_type": "table_structure",
+          "scope": "table",
+          "message": "Table 'entries' contains 8 row(s) and 3 column(s).",
+          "table_name": "entries",
+          "relation_name": "entries",
+          "column_name": null,
+          "evidence": {
+            "row_count": 8,
+            "column_count": 3
+          }
+        },
+        {
+          "insight_type": "table_structure",
+          "scope": "table",
+          "message": "Table 'flags' contains 9 row(s) and 2 column(s).",
+          "table_name": "flags",
+          "relation_name": "flags",
+          "column_name": null,
+          "evidence": {
+            "row_count": 9,
+            "column_count": 2
+          }
+        },
+        {
+          "insight_type": "data_quality",
+          "scope": "column",
+          "message": "Column contains missing values.",
+          "table_name": "entries",
+          "relation_name": "entries",
+          "column_name": "amount_cents",
+          "evidence": {
+            "missing_count": 1,
+            "non_missing_count": 7,
+            "row_count": 8
+          }
+        },
+        {
+          "insight_type": "data_quality",
+          "scope": "table",
+          "message": "Table contains duplicate rows.",
+          "table_name": "flags",
+          "relation_name": "flags",
+          "column_name": null,
+          "evidence": {
+            "duplicate_row_count": 1,
+            "duplicate_group_row_count": 2,
+            "row_count": 9
+          }
+        }
+      ]
+    },
+    "numerical_statements": [
+      {
+        "claim_index": 0,
+        "verified_claim": {
+          "claim": {
+            "operation": "value",
+            "expected": "85.75",
+            "left": {
+              "observation_index": 0,
+              "row_index": 0,
+              "column": "net_amount"
+            },
+            "right": null,
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "85.75",
+            "expected": "85.75",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        },
+        "text": "Claim 1 (value): expected 85.75; evidence 85.75; absolute tolerance 0; status supported."
+      }
+    ],
+    "unverified_model_interpretation": "The net amount of posted entries with at least one accepted flag is 85.75 currency units.",
+    "investigation": {
+      "population": [
+        {
+          "relation": "entries",
+          "column": "status",
+          "values": [
+            "posted"
+          ]
+        },
+        {
+          "relation": "flags",
+          "column": "decision",
+          "values": [
+            "accepted"
+          ]
+        }
+      ],
+      "question": "What is the net amount, in currency units, of posted entries having at least one accepted flag? Count each qualifying entry once even when its flag is repeated. Distinct entries with equal amounts both count. Exclude missing amounts. Convert amount_cents to currency units by dividing by 100 in SQL. Use one analytical query. Report only the final metric as exactly one numerical VALUE claim referencing its final result cell.",
+      "conclusion": "The net amount of posted entries with at least one accepted flag is 85.75 currency units.",
+      "analysis": {
+        "analysis": {
+          "schema": {
+            "tables": [
+              {
+                "name": "entries",
+                "relation_name": "entries",
+                "row_count": 8,
+                "column_count": 3,
+                "columns": [
+                  {
+                    "name": "entry_id",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "status",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "amount_cents",
+                    "physical_dtype": "Int64",
+                    "logical_type": "integer",
+                    "nullable": true,
+                    "missing_count": 1
+                  }
+                ]
+              },
+              {
+                "name": "flags",
+                "relation_name": "flags",
+                "row_count": 9,
+                "column_count": 2,
+                "columns": [
+                  {
+                    "name": "entry_id",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "decision",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "profile": {
+            "tables": [
+              {
+                "name": "entries",
+                "relation_name": "entries",
+                "row_count": 8,
+                "column_count": 3,
+                "columns": [
+                  {
+                    "name": "entry_id",
+                    "logical_type": "string",
+                    "row_count": 8,
+                    "non_missing_count": 8,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 8,
+                    "distinct_ratio": 1.0,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 1,
+                      "maximum_length": 1,
+                      "mean_length": 1.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "a",
+                      "most_frequent_count": 1,
+                      "most_frequent_ratio": 0.125
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "status",
+                    "logical_type": "string",
+                    "row_count": 8,
+                    "non_missing_count": 8,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 3,
+                    "distinct_ratio": 0.375,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 6,
+                      "maximum_length": 8,
+                      "mean_length": 6.375,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "posted",
+                      "most_frequent_count": 6,
+                      "most_frequent_ratio": 0.75
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "amount_cents",
+                    "logical_type": "integer",
+                    "row_count": 8,
+                    "non_missing_count": 7,
+                    "missing_count": 1,
+                    "missing_ratio": 0.125,
+                    "distinct_count": 6,
+                    "distinct_ratio": 0.8571428571428571,
+                    "minimum": -2500,
+                    "maximum": 90000,
+                    "numeric_statistics": {
+                      "minimum": -2500,
+                      "maximum": 90000,
+                      "mean": 21653.571428571428,
+                      "median": 3000.0,
+                      "standard_deviation": 35202.07270345097,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0,
+                      "standard_deviation_overflow": false
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 24,
+                  "missing_cell_count": 1,
+                  "missing_cell_ratio": 0.041666666666666664,
+                  "rows_with_missing_count": 1,
+                  "rows_with_missing_ratio": 0.125,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 1,
+                  "columns_with_missing_ratio": 0.3333333333333333
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 0,
+                  "duplicate_row_ratio": 0.0,
+                  "duplicate_group_row_count": 0,
+                  "duplicate_group_row_ratio": 0.0
+                }
+              },
+              {
+                "name": "flags",
+                "relation_name": "flags",
+                "row_count": 9,
+                "column_count": 2,
+                "columns": [
+                  {
+                    "name": "entry_id",
+                    "logical_type": "string",
+                    "row_count": 9,
+                    "non_missing_count": 9,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 8,
+                    "distinct_ratio": 0.8888888888888888,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 1,
+                      "maximum_length": 1,
+                      "mean_length": 1.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "a",
+                      "most_frequent_count": 2,
+                      "most_frequent_ratio": 0.2222222222222222
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "decision",
+                    "logical_type": "string",
+                    "row_count": 9,
+                    "non_missing_count": 9,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.2222222222222222,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 8,
+                      "maximum_length": 8,
+                      "mean_length": 8.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "accepted",
+                      "most_frequent_count": 8,
+                      "most_frequent_ratio": 0.8888888888888888
+                    },
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 18,
+                  "missing_cell_count": 0,
+                  "missing_cell_ratio": 0.0,
+                  "rows_with_missing_count": 0,
+                  "rows_with_missing_ratio": 0.0,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 0,
+                  "columns_with_missing_ratio": 0.0
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 1,
+                  "duplicate_row_ratio": 0.1111111111111111,
+                  "duplicate_group_row_count": 2,
+                  "duplicate_group_row_ratio": 0.2222222222222222
+                }
+              }
+            ]
+          },
+          "issues": [
+            {
+              "issue_type": "missing_values",
+              "severity": "warning",
+              "scope": "column",
+              "table_name": "entries",
+              "relation_name": "entries",
+              "message": "Column contains missing values.",
+              "column_name": "amount_cents",
+              "affected_count": 1,
+              "affected_ratio": 0.125,
+              "evidence": {
+                "missing_count": 1,
+                "non_missing_count": 7,
+                "row_count": 8
+              }
+            },
+            {
+              "issue_type": "duplicate_rows",
+              "severity": "warning",
+              "scope": "table",
+              "table_name": "flags",
+              "relation_name": "flags",
+              "message": "Table contains duplicate rows.",
+              "column_name": null,
+              "affected_count": 1,
+              "affected_ratio": 0.1111111111111111,
+              "evidence": {
+                "duplicate_row_count": 1,
+                "duplicate_group_row_count": 2,
+                "row_count": 9
+              }
+            }
+          ]
+        },
+        "summary": {
+          "table_count": 2,
+          "total_row_count": 17,
+          "total_column_count": 5,
+          "issue_count": 2,
+          "info_issue_count": 0,
+          "warning_issue_count": 2,
+          "error_issue_count": 0,
+          "table_issue_count": 1,
+          "column_issue_count": 1,
+          "affected_relation_names": [
+            "entries",
+            "flags"
+          ]
+        },
+        "insights": [
+          {
+            "insight_type": "dataset_structure",
+            "scope": "dataset",
+            "message": "Dataset contains 2 table(s).",
+            "table_name": null,
+            "relation_name": null,
+            "column_name": null,
+            "evidence": {
+              "table_count": 2,
+              "total_row_count": 17,
+              "total_column_count": 5
+            }
+          },
+          {
+            "insight_type": "table_structure",
+            "scope": "table",
+            "message": "Table 'entries' contains 8 row(s) and 3 column(s).",
+            "table_name": "entries",
+            "relation_name": "entries",
+            "column_name": null,
+            "evidence": {
+              "row_count": 8,
+              "column_count": 3
+            }
+          },
+          {
+            "insight_type": "table_structure",
+            "scope": "table",
+            "message": "Table 'flags' contains 9 row(s) and 2 column(s).",
+            "table_name": "flags",
+            "relation_name": "flags",
+            "column_name": null,
+            "evidence": {
+              "row_count": 9,
+              "column_count": 2
+            }
+          },
+          {
+            "insight_type": "data_quality",
+            "scope": "column",
+            "message": "Column contains missing values.",
+            "table_name": "entries",
+            "relation_name": "entries",
+            "column_name": "amount_cents",
+            "evidence": {
+              "missing_count": 1,
+              "non_missing_count": 7,
+              "row_count": 8
+            }
+          },
+          {
+            "insight_type": "data_quality",
+            "scope": "table",
+            "message": "Table contains duplicate rows.",
+            "table_name": "flags",
+            "relation_name": "flags",
+            "column_name": null,
+            "evidence": {
+              "duplicate_row_count": 1,
+              "duplicate_group_row_count": 2,
+              "row_count": 9
+            }
+          }
+        ]
+      },
+      "observations": [
+        {
+          "question": "What is the net amount, in currency units, of posted entries having at least one accepted flag? Count each qualifying entry once even when its flag is repeated. Distinct entries with equal amounts both count. Exclude missing amounts. Convert amount_cents to currency units by dividing by 100 in SQL. Use one analytical query. Report only the final metric as exactly one numerical VALUE claim referencing its final result cell.",
+          "sql": "SELECT SUM(\"e\".\"amount_cents\") / 100.0 AS \"net_amount\" FROM \"entries\" AS \"e\" WHERE \"e\".\"status\" = 'posted' AND \"e\".\"amount_cents\" IS NOT NULL AND EXISTS (SELECT 1 FROM \"flags\" AS \"f\" WHERE \"f\".\"entry_id\" = \"e\".\"entry_id\" AND \"f\".\"decision\" = 'accepted')",
+          "result": {
+            "columns": [
+              "net_amount"
+            ],
+            "rows": [
+              [
+                85.75
+              ]
+            ]
+          },
+          "repair_history": []
+        }
+      ],
+      "status": "complete",
+      "generated_claims": [
+        {
+          "operation": "value",
+          "expected": "85.75",
+          "left": {
+            "observation_index": 0,
+            "row_index": 0,
+            "column": "net_amount"
+          },
+          "right": null,
+          "absolute_tolerance": 0
+        }
+      ],
+      "synthesis_failure": null,
+      "investigation_failure": null,
+      "failed_attempts": [],
+      "narrative_verified": false,
+      "verified_claims": [
+        {
+          "claim": {
+            "operation": "value",
+            "expected": "85.75",
+            "left": {
+              "observation_index": 0,
+              "row_index": 0,
+              "column": "net_amount"
+            },
+            "right": null,
+            "absolute_tolerance": 0
+          },
+          "verification": {
+            "status": "supported",
+            "actual": "85.75",
+            "expected": "85.75",
+            "absolute_tolerance": "0",
+            "reason": "The numerical evidence supports the claimed value.",
+            "rounding_policy": null,
+            "rounded_actual": null
+          }
+        }
+      ],
+      "quantitative_statements": [
+        {
+          "claim_index": 0,
+          "verified_claim": {
+            "claim": {
+              "operation": "value",
+              "expected": "85.75",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "net_amount"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "85.75",
+              "expected": "85.75",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          },
+          "text": "Claim 1 (value): expected 85.75; evidence 85.75; absolute tolerance 0; status supported."
+        }
+      ],
+      "narrative_numbers": [
+        {
+          "text": "85.75",
+          "start": 68,
+          "end": 73,
+          "value": "85.75",
+          "claim_indexes": [
+            0
+          ]
+        }
+      ],
+      "narrative_digit_coverage": {
+        "total_digit_count": 4,
+        "parsed_digit_count": 4,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "unlinked_numbers": [],
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "verification_scope": "referenced_numeric_values_only"
+    }
+  }
+}
