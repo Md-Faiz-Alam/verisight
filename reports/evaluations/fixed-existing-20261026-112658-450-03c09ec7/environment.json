@@ -1,0 +1,42 @@
+{
+  "record_type": "existing_development_batch_environment",
+  "timestamp_utc": "2026-10-26T05:57:00.630203+00:00",
+  "revision": "62e72c29312ec06dd689e7af05e089efdf1c9625",
+  "python": "3.11.9",
+  "os": "Windows-10-10.0.26300-SP0",
+  "architecture": "AMD64",
+  "dependencies": {
+    "duckdb": "1.5.6",
+    "sqlglot": "28.10.1",
+    "pandas": "2.3.3",
+    "numpy": "2.3.5",
+    "google-genai": "2.27.0",
+    "httpx": "0.28.1",
+    "pydantic": "2.13.5",
+    "pydantic-settings": "2.15.0",
+    "openpyxl": "3.1.5",
+    "xlrd": "2.0.2"
+  },
+  "case_definition_sha256": "1d4c1fc6483dfc6b4e53b925733f7e1a8fd39b0fe0cb89fd1a674a0448119a0d",
+  "hash_scope": "Canonical JSON of imported fixture definitions and request suffix; not the platform-specific bytes of materialized temporary CSV files.",
+  "selections": {
+    "all": [
+      "finance",
+      "retail",
+      "manufacturing",
+      "healthcare",
+      "logistics"
+    ],
+    "challenge": [
+      "energy_grain",
+      "research_weighted",
+      "education_entities"
+    ]
+  },
+  "requested_model": "gemini-3.1-flash-lite",
+  "request_timeout_seconds": 30,
+  "provider_retries": 1,
+  "max_investigation_seconds": 120,
+  "whole_case_attempts": 1,
+  "limitations": "Known development fixtures. Single analytical attempt per case. Numerical scoring does not establish full task acceptance."
+}

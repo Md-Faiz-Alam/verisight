@@ -1,0 +1,343 @@
+{
+  "schema_version": 2,
+  "timestamp_utc": "2026-10-26T05:54:00.807922+00:00",
+  "elapsed_seconds": 42.96,
+  "revision": {
+    "commit": "62e72c29312ec06dd689e7af05e089efdf1c9625",
+    "tracked_changes": false,
+    "status_scope": "tracked_files_only"
+  },
+  "python_version": "3.11.9",
+  "model": "gemini-3.1-flash-lite",
+  "max_steps_per_case": 1,
+  "provider_retries": 1,
+  "run_settings": {
+    "allow_llm_data_disclosure": true,
+    "request_timeout_seconds": 30.0,
+    "max_investigation_seconds": 120.0,
+    "retry_base_delay_seconds": 1.0,
+    "max_upload_size_mb": 100,
+    "max_query_execution_seconds": 5.0,
+    "max_query_result_rows": 20,
+    "max_query_result_bytes": 1048576,
+    "max_query_memory_mb": 512,
+    "max_query_temp_storage_mb": 1024
+  },
+  "generation_telemetry_scope": "client_calls_observed_during_case",
+  "scoring_scope": "single_claim_numeric_answer_only",
+  "limitations": "No narrative or general semantic certification. No-claims responses are not automatically proven abstentions. These are known development fixtures, not a held-out generalization benchmark.",
+  "case_count": 3,
+  "outcome_counts": {
+    "correct_numeric": 2,
+    "incorrect_numeric": 1
+  },
+  "number_audit_summary": {
+    "audited_case_count": 3,
+    "unaudited_case_count": 0,
+    "detected_token_count": 4,
+    "unlinked_token_count": 1,
+    "cases_with_unlinked_tokens": 1
+  },
+  "results": {
+    "energy_grain": {
+      "expected": "30",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 1,
+      "unlinked_number_count": 0,
+      "narrative_digit_coverage": {
+        "total_digit_count": 3,
+        "parsed_digit_count": 3,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "supported",
+      "actual": "30.0",
+      "outcome": "correct_numeric",
+      "synthetic_evidence": {
+        "question": "What is the total production output in kWh for readings with at least one approved review? Count each reading id once, even if it has multiple approved reviews. Distinct readings with equal output both count. Exclude test records. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+        "conclusion": "The total production output for readings with at least one approved review, excluding test records, is 30.0 kWh.",
+        "observations": [
+          {
+            "question": "What is the total production output in kWh for readings with at least one approved review? Count each reading id once, even if it has multiple approved reviews. Distinct readings with equal output both count. Exclude test records. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+            "sql": "SELECT SUM(\"output kWh\") AS \"total production output in kWh\"\nFROM \"generation\"\nWHERE \"record type\" != 'test'\nAND \"reading id\" IN (\n    SELECT \"reading id\"\n    FROM \"reviews\"\n    WHERE \"decision\" = 'approved'\n)",
+            "result": {
+              "columns": [
+                "total production output in kWh"
+              ],
+              "rows": [
+                [
+                  30.0
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "30.0",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "total production output in kWh"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "30.0",
+              "expected": "30.0",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "control_baseline": {
+        "kind": "supplied_sql_control",
+        "expected": "30",
+        "actual": "30.0",
+        "outcome": "correct_numeric",
+        "elapsed_seconds": 0.071
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 6.928,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.031,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 2.353,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.372,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 13.87
+    },
+    "research_weighted": {
+      "expected": "2.5",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 1,
+      "unlinked_number_count": 0,
+      "narrative_digit_coverage": {
+        "total_digit_count": 2,
+        "parsed_digit_count": 2,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "supported",
+      "actual": "2.5",
+      "outcome": "correct_numeric",
+      "synthetic_evidence": {
+        "question": "What is the mass-weighted mean assay percentage for accepted samples? Include only rows with a recorded assay percentage and recorded positive mass. Return the result in percentage units, not a fraction. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+        "conclusion": "The mass-weighted mean assay percentage for accepted samples, calculated by summing the products of mass and assay percentage and dividing by the total mass for samples with positive mass and recorded assay values, is 2.5%.",
+        "observations": [
+          {
+            "question": "What is the mass-weighted mean assay percentage for accepted samples? Include only rows with a recorded assay percentage and recorded positive mass. Return the result in percentage units, not a fraction. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+            "sql": "SELECT SUM(\"mass g\" * \"assay pct\") / SUM(\"mass g\") AS \"mass-weighted mean assay percentage\" FROM \"assays\" WHERE \"review state\" = 'accepted' AND \"assay pct\" IS NOT NULL AND \"mass g\" > 0",
+            "result": {
+              "columns": [
+                "mass-weighted mean assay percentage"
+              ],
+              "rows": [
+                [
+                  2.5
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "2.5",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "mass-weighted mean assay percentage"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "2.5",
+              "expected": "2.5",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "control_baseline": {
+        "kind": "supplied_sql_control",
+        "expected": "2.5",
+        "actual": "2.5",
+        "outcome": "correct_numeric",
+        "elapsed_seconds": 0.049
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 7.756,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.604,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 2.061,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.556,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 15.096
+    },
+    "education_entities": {
+      "expected": "37.5",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 2,
+      "unlinked_number_count": 1,
+      "narrative_digit_coverage": {
+        "total_digit_count": 7,
+        "parsed_digit_count": 7,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "supported",
+      "actual": "60.0",
+      "outcome": "incorrect_numeric",
+      "synthetic_evidence": {
+        "question": "Among distinct active learners in cohort 2026 with a known outcome, what percentage completed? Outcomes are complete or incomplete. Count learner identities, not enrolment rows. Exclude cancelled enrolments, missing outcomes, and other cohorts. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+        "conclusion": "Among distinct active learners in cohort 2026 with a known outcome (complete or incomplete), excluding cancelled enrolments, 60.0% of learners successfully completed the program.",
+        "observations": [
+          {
+            "question": "Among distinct active learners in cohort 2026 with a known outcome, what percentage completed? Outcomes are complete or incomplete. Count learner identities, not enrolment rows. Exclude cancelled enrolments, missing outcomes, and other cohorts. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+            "sql": "SELECT 100.0 * SUM(CASE WHEN \"outcome\" = 'complete' THEN 1 ELSE 0 END) / NULLIF(COUNT(DISTINCT \"learner id\"), 0) AS \"completion_percentage\" FROM \"enrolments\" WHERE \"cohort\" = 2026 AND \"enrolment state\" != 'cancelled' AND \"outcome\" IN ('complete', 'incomplete')",
+            "result": {
+              "columns": [
+                "completion_percentage"
+              ],
+              "rows": [
+                [
+                  60.0
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "60.0",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "completion_percentage"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "60.0",
+              "expected": "60.0",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "control_baseline": {
+        "kind": "supplied_sql_control",
+        "expected": "37.5",
+        "actual": "37.5",
+        "outcome": "correct_numeric",
+        "elapsed_seconds": 0.028
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 6.305,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.629,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 2.068,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.862,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 13.994
+    }
+  }
+}

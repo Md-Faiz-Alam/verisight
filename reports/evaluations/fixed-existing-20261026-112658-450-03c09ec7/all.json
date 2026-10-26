@@ -1,0 +1,514 @@
+{
+  "schema_version": 2,
+  "timestamp_utc": "2026-10-26T05:57:03.200364+00:00",
+  "elapsed_seconds": 67.99,
+  "revision": {
+    "commit": "62e72c29312ec06dd689e7af05e089efdf1c9625",
+    "tracked_changes": false,
+    "status_scope": "tracked_files_only"
+  },
+  "python_version": "3.11.9",
+  "model": "gemini-3.1-flash-lite",
+  "max_steps_per_case": 1,
+  "provider_retries": 1,
+  "run_settings": {
+    "allow_llm_data_disclosure": true,
+    "request_timeout_seconds": 30.0,
+    "max_investigation_seconds": 120.0,
+    "retry_base_delay_seconds": 1.0,
+    "max_upload_size_mb": 100,
+    "max_query_execution_seconds": 5.0,
+    "max_query_result_rows": 20,
+    "max_query_result_bytes": 1048576,
+    "max_query_memory_mb": 512,
+    "max_query_temp_storage_mb": 1024
+  },
+  "generation_telemetry_scope": "client_calls_observed_during_case",
+  "scoring_scope": "single_claim_numeric_answer_only",
+  "limitations": "No narrative or general semantic certification. No-claims responses are not automatically proven abstentions. These are known development fixtures, not a held-out generalization benchmark.",
+  "case_count": 5,
+  "outcome_counts": {
+    "correct_numeric": 5
+  },
+  "number_audit_summary": {
+    "audited_case_count": 5,
+    "unaudited_case_count": 0,
+    "detected_token_count": 6,
+    "unlinked_token_count": 1,
+    "cases_with_unlinked_tokens": 1
+  },
+  "results": {
+    "finance": {
+      "expected": "10050",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 1,
+      "unlinked_number_count": 0,
+      "narrative_digit_coverage": {
+        "total_digit_count": 5,
+        "parsed_digit_count": 5,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "supported",
+      "actual": "10050",
+      "outcome": "correct_numeric",
+      "synthetic_evidence": {
+        "question": "What is the net posted amount in cents? Exclude pending transactions. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+        "conclusion": "The net posted amount, excluding pending transactions, was calculated by summing the cents column for all rows where the state is not 'pending'. The resulting net posted amount is 10050 cents.",
+        "observations": [
+          {
+            "question": "What is the net posted amount in cents? Exclude pending transactions. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+            "sql": "SELECT SUM(\"cents\") AS \"net posted amount in cents\" FROM \"ledger\" WHERE \"state\" != 'pending'",
+            "result": {
+              "columns": [
+                "net posted amount in cents"
+              ],
+              "rows": [
+                [
+                  10050
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "10050",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "net posted amount in cents"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "10050",
+              "expected": "10050",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 3.112,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.154,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 2.282,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.429,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 10.076
+    },
+    "retail": {
+      "expected": "90",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 1,
+      "unlinked_number_count": 0,
+      "narrative_digit_coverage": {
+        "total_digit_count": 2,
+        "parsed_digit_count": 2,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "supported",
+      "actual": "90",
+      "outcome": "correct_numeric",
+      "synthetic_evidence": {
+        "question": "What is the total line value? Match each line to its SKU's unit price. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+        "conclusion": "The total line value, calculated as the sum of the product of quantity and unit price for each SKU across all lines, is 90.",
+        "observations": [
+          {
+            "question": "What is the total line value? Match each line to its SKU's unit price. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+            "sql": "SELECT SUM(CAST(\"lines\".\"quantity\" AS BIGINT) * \"prices\".\"unit_price\") AS \"total_line_value\" FROM \"lines\" JOIN \"prices\" ON \"lines\".\"sku\" = \"prices\".\"sku\"",
+            "result": {
+              "columns": [
+                "total_line_value"
+              ],
+              "rows": [
+                [
+                  90
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "90",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "total_line_value"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "90",
+              "expected": "90",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.532,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 6.921,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 6.238,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.284,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 18.051
+    },
+    "manufacturing": {
+      "expected": "25",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 2,
+      "unlinked_number_count": 1,
+      "narrative_digit_coverage": {
+        "total_digit_count": 4,
+        "parsed_digit_count": 4,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "supported",
+      "actual": "25.0",
+      "outcome": "correct_numeric",
+      "synthetic_evidence": {
+        "question": "What percentage of known inspection outcomes are defective? Defective is 1 for defective and 0 otherwise. Exclude unknown outcomes. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+        "conclusion": "The percentage of known inspection outcomes that are defective is 25.0%. This was calculated by identifying non-null values in the 'defective' column and computing the ratio of outcomes equal to 1 to the total number of known outcomes.",
+        "observations": [
+          {
+            "question": "What percentage of known inspection outcomes are defective? Defective is 1 for defective and 0 otherwise. Exclude unknown outcomes. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+            "sql": "SELECT 100.0 * SUM(CASE WHEN \"defective\" = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(\"defective\"), 0) AS \"percentage_defective\" FROM \"inspections\" WHERE \"defective\" IS NOT NULL",
+            "result": {
+              "columns": [
+                "percentage_defective"
+              ],
+              "rows": [
+                [
+                  25.0
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "25.0",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "percentage_defective"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "25.0",
+              "expected": "25.0",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 4.773,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.308,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 3.529,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.249,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 2.3,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 15.213
+    },
+    "healthcare": {
+      "expected": "20",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 1,
+      "unlinked_number_count": 0,
+      "narrative_digit_coverage": {
+        "total_digit_count": 3,
+        "parsed_digit_count": 3,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "supported",
+      "actual": "20.0",
+      "outcome": "correct_numeric",
+      "synthetic_evidence": {
+        "question": "What is the mean recorded wait in minutes for completed visits? Exclude missing waits and cancelled visits. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+        "conclusion": "The mean recorded wait for completed visits, excluding missing data and cancelled visits, is 20.0 minutes.",
+        "observations": [
+          {
+            "question": "What is the mean recorded wait in minutes for completed visits? Exclude missing waits and cancelled visits. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+            "sql": "SELECT AVG(\"minutes\") AS \"mean_wait_minutes\" FROM \"visits\" WHERE \"state\" = 'completed' AND \"minutes\" IS NOT NULL",
+            "result": {
+              "columns": [
+                "mean_wait_minutes"
+              ],
+              "rows": [
+                [
+                  20.0
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "20.0",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "mean_wait_minutes"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "20.0",
+              "expected": "20.0",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.598,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 6.297,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 2.412,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.674,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 14.069
+    },
+    "logistics": {
+      "expected": "50",
+      "observation_count": 1,
+      "claim_count": 1,
+      "narrative_verified": false,
+      "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+      "narrative_number_count": 1,
+      "unlinked_number_count": 0,
+      "narrative_digit_coverage": {
+        "total_digit_count": 3,
+        "parsed_digit_count": 3,
+        "unparsed_digit_count": 0,
+        "status": "all_digits_parsed"
+      },
+      "verification_status": "supported",
+      "actual": "50.0",
+      "outcome": "correct_numeric",
+      "synthetic_evidence": {
+        "question": "What percentage of delivered shipments with a known late indicator were late? Late is 1 for late and 0 otherwise. Exclude missing indicators and cancelled shipments. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+        "conclusion": "The percentage of delivered shipments with a known late indicator (excluding cancelled shipments) that were late is 50.0%.",
+        "observations": [
+          {
+            "question": "What percentage of delivered shipments with a known late indicator were late? Late is 1 for late and 0 otherwise. Exclude missing indicators and cancelled shipments. Answer only this metric. Use one analytical query and then finish. Return exactly one numerical VALUE claim referring to the final metric cell. Do not add numerical claims for intermediate values. If the evidence is insufficient, explain that and return no claims.",
+            "sql": "SELECT 100.0 * SUM(CASE WHEN \"late\" = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) AS \"percentage_late\" FROM \"deliveries\" WHERE \"late\" IS NOT NULL AND \"state\" != 'cancelled'",
+            "result": {
+              "columns": [
+                "percentage_late"
+              ],
+              "rows": [
+                [
+                  50.0
+                ]
+              ]
+            }
+          }
+        ],
+        "verified_claims": [
+          {
+            "claim": {
+              "operation": "value",
+              "expected": "50.0",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "percentage_late"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            },
+            "verification": {
+              "status": "supported",
+              "actual": "50.0",
+              "expected": "50.0",
+              "absolute_tolerance": "0",
+              "reason": "The numerical evidence supports the claimed value.",
+              "rounding_policy": null,
+              "rounded_actual": null
+            }
+          }
+        ]
+      },
+      "generation_calls": [
+        {
+          "stage": "investigator",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 3.37,
+          "returned_text": true
+        },
+        {
+          "stage": "text_generation",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.004,
+          "returned_text": true
+        },
+        {
+          "stage": "investigator",
+          "call_number": 2,
+          "attempts": 1,
+          "elapsed_seconds": 2.784,
+          "returned_text": true
+        },
+        {
+          "stage": "structured_synthesis",
+          "call_number": 1,
+          "attempts": 1,
+          "elapsed_seconds": 2.337,
+          "returned_text": true
+        }
+      ],
+      "elapsed_seconds": 10.582
+    }
+  }
+}
