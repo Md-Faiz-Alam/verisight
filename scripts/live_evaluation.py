@@ -416,6 +416,12 @@ def main() -> int:
     args = parser.parse_args()
     if not args.live:
         parser.error("Pass --live to authorize provider calls; API charges may apply.")
+    if args.output is not None and (
+        args.output.exists()
+        or args.output.is_symlink()
+        or not args.output.parent.is_dir()
+    ):
+        parser.error("Output must be a new file in an existing directory.")
 
     try:
         settings = Settings(

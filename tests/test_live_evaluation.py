@@ -506,16 +506,41 @@ def test_saved_report_retains_failures_settings_revision_and_timings(
 
 
 @pytest.mark.parametrize(
-    "existing", [False, True], ids=["missing-parent", "existing-file"]
+    "kind", ["missing-parent", "existing-file", "existing-directory", "symlink"]
 )
-def test_report_save_failure_preserves_stdout_and_existing_files(
-    tmp_path: Path, existing: bool, capsys: pytest.CaptureFixture[str]
+def test_invalid_output_is_rejected_before_configuration_or_provider_calls(
+    tmp_path: Path, kind: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    path = (
-        tmp_path / "existing.json" if existing else tmp_path / "missing" / "report.json"
-    )
-    if existing:
+    path = tmp_path / "report.json"
+    if kind == "missing-parent":
+        path = tmp_path / "missing" / "report.json"
+    elif kind == "existing-file":
         path.write_text("original", encoding="utf-8")
+    elif kind == "existing-directory":
+        path.mkdir()
+    with (
+        patch("sys.argv", ["live_evaluation", "--live", "--output", str(path)]),
+        patch("scripts.live_evaluation.Settings") as settings,
+        patch("scripts.live_evaluation.run_case") as run,
+        patch("pathlib.Path.is_symlink", return_value=kind == "symlink"),
+        pytest.raises(SystemExit) as error,
+    ):
+        main()
+    assert error.value.code == 2
+    settings.assert_not_called()
+    run.assert_not_called()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert "Output must be a new file in an existing directory." in output.err
+    assert str(path) not in output.err
+    if kind == "existing-file":
+        assert path.read_text(encoding="utf-8") == "original"
+
+
+def test_report_save_failure_after_preflight_preserves_stdout(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "report.json"
     with (
         patch("sys.argv", ["live_evaluation", "--live", "--output", str(path)]),
         patch(
@@ -526,6 +551,7 @@ def test_report_save_failure_preserves_stdout_and_existing_files(
             "scripts.live_evaluation.run_case",
             return_value={"outcome": "provider_error"},
         ),
+        patch("pathlib.Path.open", side_effect=OSError("private-error")),
     ):
         assert main() == 2
 
@@ -533,10 +559,8 @@ def test_report_save_failure_preserves_stdout_and_existing_files(
     assert json.loads(output.out)["results"]["finance"]["outcome"] == "provider_error"
     assert output.err == "Could not save evaluation report to a new file.\n"
     assert str(path) not in output.err
-    if existing:
-        assert path.read_text(encoding="utf-8") == "original"
-    else:
-        assert not path.exists()
+    assert "private-error" not in output.err
+    assert not path.exists()
 
 
 @pytest.mark.parametrize(
