@@ -37,8 +37,9 @@ class InvestigationOrchestrator:
 
     A one-attempt investigation plans the caller's original task. With more
     attempts, investigator subquestions remain the planning tasks. The
-    investigator still controls whether to query and when to finish; neither
-    policy establishes that the collected evidence answers the original task.
+    investigator controls whether to query. After a successful one-attempt
+    query, synthesis runs directly; multi-step investigations still require
+    a finish decision. Neither path establishes full task acceptance.
     """
 
     def __init__(
@@ -104,6 +105,9 @@ class InvestigationOrchestrator:
         try:
             while True:
                 check_deadline()
+                if self._max_steps == 1 and state.observation_count == 1:
+                    return self._synthesize(state)
+
                 try:
                     decision = self._investigator.decide(state)
                     check_deadline()
@@ -132,45 +136,7 @@ class InvestigationOrchestrator:
                         )
                         return self._incomplete(state, reason=reason)
 
-                    try:
-                        synthesis = self._synthesizer.synthesize(state)
-                        check_deadline()
-                    except PromptBudgetExceededError as exc:
-                        return self._incomplete(
-                            state,
-                            reason=(
-                                "final synthesis exceeded the configured prompt budget"
-                            ),
-                            synthesis_failure=SynthesisFailure.from_exception(exc),
-                        )
-                    except IncompleteEvidenceError:
-                        return self._incomplete(state)
-                    except InvestigationDeadlineExceeded:
-                        raise
-                    except (InvestigationError, GeminiGenerationError) as exc:
-                        return self._incomplete(
-                            state,
-                            reason="final synthesis could not be completed",
-                            synthesis_failure=SynthesisFailure.from_exception(exc),
-                        )
-
-                    return InvestigationResult(
-                        population=state.population,
-                        question=state.question,
-                        conclusion=(
-                            synthesis.conclusion
-                            if isinstance(synthesis, StructuredSynthesis)
-                            else synthesis
-                        ),
-                        generated_claims=(
-                            synthesis.claims
-                            if isinstance(synthesis, StructuredSynthesis)
-                            else ()
-                        ),
-                        analysis=state.analysis,
-                        observations=state.observations,
-                        failed_attempts=state.failed_attempts,
-                    )
+                    return self._synthesize(state)
 
                 if attempt_count >= self._max_steps:
                     return self._incomplete(
@@ -282,6 +248,45 @@ class InvestigationOrchestrator:
                 state,
                 reason="the investigation time budget was exhausted",
             )
+
+    def _synthesize(self, state: InvestigationState) -> InvestigationResult:
+        """Evaluate collected evidence through the existing synthesis boundary."""
+
+        try:
+            synthesis = self._synthesizer.synthesize(state)
+            check_deadline()
+        except PromptBudgetExceededError as exc:
+            return self._incomplete(
+                state,
+                reason=("final synthesis exceeded the configured prompt budget"),
+                synthesis_failure=SynthesisFailure.from_exception(exc),
+            )
+        except IncompleteEvidenceError:
+            return self._incomplete(state)
+        except InvestigationDeadlineExceeded:
+            raise
+        except (InvestigationError, GeminiGenerationError) as exc:
+            return self._incomplete(
+                state,
+                reason="final synthesis could not be completed",
+                synthesis_failure=SynthesisFailure.from_exception(exc),
+            )
+
+        return InvestigationResult(
+            population=state.population,
+            question=state.question,
+            conclusion=(
+                synthesis.conclusion
+                if isinstance(synthesis, StructuredSynthesis)
+                else synthesis
+            ),
+            generated_claims=(
+                synthesis.claims if isinstance(synthesis, StructuredSynthesis) else ()
+            ),
+            analysis=state.analysis,
+            observations=state.observations,
+            failed_attempts=state.failed_attempts,
+        )
 
     @staticmethod
     def _incomplete(

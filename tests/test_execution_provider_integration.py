@@ -529,7 +529,7 @@ def test_shared_deadline_preserves_state_and_stops_later_stages(
         execution_service=execution_service,
         investigator=decisions,
         synthesizer=synthesis,
-        max_steps=1,
+        max_steps=2 if stage == "finish" else 1,
         timeout_seconds=10,
     ).investigate(question="Count records", analysis=_analysis(dataset))
 
@@ -538,7 +538,7 @@ def test_shared_deadline_preserves_state_and_stops_later_stages(
     assert result.observation_count == (0 if stage in {"decision", "repair"} else 1)
     assert result.generated_claims == ()
     assert len(synthesizer.states) == (1 if stage == "synthesis" else 0)
-    assert decisions.decide.call_count == (2 if stage in {"finish", "synthesis"} else 1)
+    assert decisions.decide.call_count == (2 if stage == "finish" else 1)
     if stage == "repair":
         assert len(result.failed_attempts) == 1
         assert len(result.failed_attempts[0].repair_history) == 1
@@ -875,7 +875,6 @@ def test_scoped_investigation_enforces_population_and_preserves_provenance(
         responses.append(sql)
     responses.extend(
         [
-            json.dumps({"action": "finish", "reasoning": "Done", "question": None}),
             json.dumps(
                 {
                     "conclusion": "The completion percentage is 37.5.",
@@ -905,6 +904,7 @@ def test_scoped_investigation_enforces_population_and_preserves_provenance(
         result = app.investigate(
             paths, case.question, max_steps=1, population=population
         )
+    assert generate.call_count == 3 + int(repair)
     assert result.status is InvestigationStatus.COMPLETE
     assert result.population == population
     assert result.observations[0].result.rows == ((37.5,),)

@@ -105,10 +105,14 @@ With `max_steps=1`, an investigate decision plans the caller's original question
 not the model's rewritten subquestion. A component-only query would exhaust the
 sole attempt before another query could collect the requested final metric.
 With larger budgets, the investigator's subquestion remains the planning task.
-The investigator still decides whether to request a query and when to finish.
-This policy removes a task-narrowing step; it does not guarantee correct SQL,
-sufficient evidence, or successful completion. Observation and failure questions
-identify the task actually sent to planning, including in custom runners.
+The investigator decides whether to request the initial query. After a successful
+one-attempt query, the orchestrator checks the shared deadline and proceeds
+directly to the configured synthesizer without another investigator decision.
+Multi-step investigations still require a finish decision before synthesis.
+This policy removes a task-narrowing step and a post-query provider dependency
+from successful one-attempt runs; it does not guarantee correct SQL, sufficient
+evidence, provider availability, or successful synthesis. Observation and failure
+questions identify the task actually sent to planning, including in custom runners.
 
 The orchestrator also passes the original question as context for every task.
 `QueryRequest.original_question` and `QueryRepairRequest.original_question` are
@@ -142,8 +146,10 @@ of provider requests or synthesis-format repair. `ask()` returns only `QueryResu
 
 The orchestrator tracks successful observations and recorded failed attempts.
 `max_steps` limits analytical attempts, including failures. It does not cap
-provider requests. Repeated normalized questions and exhausted step budgets
-produce incomplete results.
+provider requests. Repeated normalized questions and requests for another query
+beyond the step budget produce incomplete results. A successful one-attempt
+query instead proceeds directly to synthesis; exhausting that attempt alone
+does not mark its result incomplete.
 
 The orchestrator initializes `InvestigationState.remaining_steps` from the
 configured limit. Each successful or recorded failed attempt reduces that
@@ -154,17 +160,22 @@ measurements over unnecessary exploration. Compaction does not replenish the
 budget when observation details are omitted.
 
 The runtime limit remains authoritative even if the model requests another
-query at zero. A decision after the last permitted attempt can still choose
-finish and allow synthesis from existing evidence. That decision can fail, and
-finishing does not establish that all requested measurements were collected.
-Budget visibility does not guarantee that the model allocates attempts correctly
-or that the provider remains available.
+query at zero. For multi-step investigations, a decision after the last permitted
+attempt can still choose finish and allow synthesis from existing evidence.
+That decision can fail. Successful one-attempt runs bypass this additional
+decision, but synthesis remains subject to the shared deadline and existing
+validation and failure handling. Neither a finish decision nor direct synthesis
+establishes that all requested measurements were collected. Budget visibility
+does not guarantee that the model allocates attempts correctly or that the
+provider remains available.
 
 Ordinary query validation, execution, and nonprovider planning failures can be
 recorded so the investigator can choose another bounded attempt.
 `InvestigationResult.failed_attempts` exposes the recorded question, exception
-type, fixed public message, and available repair history. Exhausting the budget
-returns incomplete results with prior observations and recorded failures.
+type, fixed public message, and available repair history. A failed one-attempt
+query produces no observation and does not take the direct synthesis path.
+Its existing decision and failure handling remains in place. Other incomplete
+paths retain prior observations and recorded failures.
 
 ## Optional caller-selected populations
 
@@ -387,7 +398,7 @@ all claims are supported or the analytical answer is correct.
 | Failure path | Behavior |
 | --- | --- |
 | Expected synthesis error or provider failure | Incomplete result with observations and `synthesis_failure` |
-| Expected investigator error after a successful observation | Incomplete result with `investigation_failure` |
+| Expected investigator error after a successful observation in a multi-step run | Incomplete result with `investigation_failure` |
 | Provider failure during later planning or repair | Incomplete result with `investigation_failure` |
 | Prompt-budget failure during a later query attempt | Incomplete result with `investigation_failure` |
 | Investigator/synthesis budget or incomplete-evidence failure | Incomplete result; failure metadata may be absent |

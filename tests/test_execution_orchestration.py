@@ -1017,13 +1017,12 @@ def test_finishes_after_final_permitted_failed_query() -> None:
     assert synthesizer.states == []
 
 
-def test_single_step_budget_rejects_second_query() -> None:
-    """A final decision cannot execute a query beyond the budget."""
+def test_single_step_success_synthesizes_without_a_second_decision() -> None:
+    """Successful one-attempt evidence reaches synthesis without another decision."""
 
     investigator = StubInvestigator(
         [
             _investigate("First question."),
-            _investigate("Second question."),
         ]
     )
     execution_service = StubExecutionService()
@@ -1039,11 +1038,13 @@ def test_single_step_budget_rejects_second_query() -> None:
         analysis=_build_analysis_result(),
     )
 
-    assert result.status is InvestigationStatus.INCOMPLETE
+    assert result.status is InvestigationStatus.COMPLETE
     assert result.observation_count == 1
     assert execution_service.run_questions == ["Investigate the dataset."]
-    assert len(investigator.states) == 2
-    assert synthesizer.states == []
+    assert len(investigator.states) == 1
+    assert len(synthesizer.states) == 1
+    assert synthesizer.states[0].remaining_steps == 0
+    assert synthesizer.states[0].observations == result.observations
 
 
 def test_single_step_budget_can_finish_without_querying() -> None:

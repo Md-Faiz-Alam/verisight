@@ -144,7 +144,7 @@ def test_malformed_investigator_response_retains_existing_evidence(
         synthesizer=synthesis,
     )
     if has_evidence:
-        result = app.investigate(path, "Get total", max_steps=1)
+        result = app.investigate(path, "Get total", max_steps=2)
         assert result.status is InvestigationStatus.INCOMPLETE
         assert result.observations[0].result.rows == ((30,),)
         assert result.investigation_failure == InvestigationFailure(
@@ -417,7 +417,7 @@ def test_nested_synthesis_json_uses_bounded_repair_and_preserves_evidence(
         assert result.generated_claims == ()
         assert result.verified_claims == ()
     planning.generate.assert_called_once()
-    assert decisions.generate.call_count == 2
+    assert decisions.generate.call_count == 1
     assert synthesis.generate.call_count == 2
     repair_prompt = synthesis.generate.call_args.args[0]
     assert '"validation_error": "invalid_json"' in repair_prompt
@@ -457,7 +457,9 @@ def test_recursion_error_outside_json_parser_still_propagates(
         synthesizer=StructuredInvestigationSynthesizer(synthesis),
     )
     with pytest.raises(RecursionError) as caught:
-        app.investigate(path, "Get total", max_steps=1)
+        app.investigate(
+            path, "Get total", max_steps=2 if stage == "investigator" else 1
+        )
     assert caught.value is error
     planning.generate.assert_called_once()
     assert synthesis.generate.call_count == int(stage == "synthesis")

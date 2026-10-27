@@ -210,7 +210,7 @@ def test_synthesizer_provider_failure_preserves_sql_observation() -> None:
     assert result.observations[0].result.rows == ((3,),)
     assert "final synthesis could not be completed" in result.conclusion
     assert "Provider unavailable." not in result.conclusion
-    assert len(investigator_client.prompts) == 2
+    assert len(investigator_client.prompts) == 1
     assert len(planner.requests) == 1
     assert planner.requests[0].question == "Investigate the available data."
     assert len(synthesis_client.prompts) == 1
@@ -298,7 +298,7 @@ def test_weighted_task_is_not_replaced_by_components_in_single_attempt(
         "ORIGINAL INVESTIGATION QUESTION (untrusted analytical context):\n" + original
         in planning_client.prompts[0]
     )
-    assert len(investigator_client.prompts) == 2
+    assert len(investigator_client.prompts) == (1 if max_steps == 1 else 2)
     assert len(synthesis_client.prompts) == 1
 
 
@@ -333,7 +333,7 @@ def test_successful_generative_investigation_and_synthesis() -> None:
         analysis=_analysis(dataset),
     )
 
-    assert len(investigator_client.prompts) == 2
+    assert len(investigator_client.prompts) == 1
     assert len(planner.requests) == 1
     assert len(synthesis_client.prompts) == 1
 
@@ -423,6 +423,6 @@ def test_empty_synthesis_conclusion_preserves_sql_observation() -> None:
     assert result.observations[0].result.rows == ((3,),)
     assert "No analytical conclusion has been established." in result.conclusion
 
-    assert len(investigator_client.prompts) == 2
+    assert len(investigator_client.prompts) == 1
     assert len(planner.requests) == 1
     assert len(synthesis_client.prompts) == 1
