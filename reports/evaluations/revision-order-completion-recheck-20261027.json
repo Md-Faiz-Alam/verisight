@@ -1,0 +1,1311 @@
+{
+  "record_type": "reviewed_revision_order_completion_recheck",
+  "manifest_sha256": "99c8626c7c7b524b785377ec66316182c47e9c9fa29ebc9f3b181a91efc9b91b",
+  "manifest": {
+    "prepared_at_revision": "2e0ce5e397bdd899ac2b5be6f9abe49e08479093",
+    "fixture": "entity_id,revision,state,amount_minor\na,1,approved,2000\na,2,approved,10075\nb,1,approved,5000\nb,2,rejected,90000\nc,1,approved,500\nd,1,approved,500\ne,1,approved,\nf,1,pending,80000\ng,1,approved,-1250\n",
+    "fixture_sha256": "c692acbb008d2cf4270199b291f2e6213dc737689d3b5266e6bf5f299c2d7d3a",
+    "question": "Calculate the net amount in currency units represented by the latest revision of each entity. First select the row with the greatest revision for each entity across all states. Only then include entities whose selected row has state approved and a non-missing amount_minor. Do not fall back to an older approved revision. Count distinct entities with equal amounts separately, and preserve negative amounts. Convert minor units to currency units by dividing by 100 in SQL. Use one analytical query and return only the final metric as exactly one numerical VALUE claim referencing its final result cell.",
+    "independent_expected_answer": "98.25",
+    "expected_derivation": "(10075 + 500 + 500 - 1250) / 100",
+    "control_results": {
+      "correct": "98.25",
+      "premature_state_filter": "148.25",
+      "all_approved_revisions": "168.25"
+    },
+    "population": [],
+    "max_steps": 1,
+    "max_investigation_seconds": 120,
+    "request_timeout_seconds": 30,
+    "required_claim": "value",
+    "limitations": "New synthetic development task, not a held-out benchmark. The preview does not establish generated-query correctness."
+  },
+  "independent_expected_answer": "98.25",
+  "runs": {
+    "original": {
+      "run_record": {
+        "revision": "2e0ce5e397bdd899ac2b5be6f9abe49e08479093",
+        "timestamp_utc": "2026-10-26T19:03:59.098925+00:00",
+        "manifest_sha256": "99c8626c7c7b524b785377ec66316182c47e9c9fa29ebc9f3b181a91efc9b91b",
+        "model": "gemini-3.1-flash-lite",
+        "whole_case_attempts": 1,
+        "status": "finished",
+        "cli_exit_code": 1,
+        "elapsed_seconds": 47.93
+      },
+      "original_export_sha256": "ea4d0d3ee904ece96f304d0592a898918355707ccdb8dd1aee7d1fb0493685dd",
+      "cli_report": {
+        "schema_version": 1,
+        "report_type": "local_cli",
+        "timestamp_utc": "2026-10-26T19:04:46.832221+00:00",
+        "limitations": "Workflow completion is not analytical correctness. Numerical support checks referenced values only. Population filters do not verify business meaning or provide privacy isolation. Narrative meaning is unverified. Inspect population, grain, denominator, time period, units, and SQL.",
+        "kind": "investigation",
+        "request": {
+          "paths": [
+            "synthetic/revision_order/revisions.csv"
+          ],
+          "question": "Calculate the net amount in currency units represented by the latest revision of each entity. First select the row with the greatest revision for each entity across all states. Only then include entities whose selected row has state approved and a non-missing amount_minor. Do not fall back to an older approved revision. Count distinct entities with equal amounts separately, and preserve negative amounts. Convert minor units to currency units by dividing by 100 in SQL. Use one analytical query and return only the final metric as exactly one numerical VALUE claim referencing its final result cell.",
+          "claim_output_contract": {
+            "operations": [
+              "value"
+            ]
+          },
+          "population": [],
+          "population_mode": "unscoped",
+          "model": "gemini-3.1-flash-lite",
+          "max_steps": 1,
+          "max_investigation_seconds": 120.0,
+          "request_timeout_seconds": 30.0,
+          "provider_retries": 1,
+          "max_query_result_rows": 20,
+          "max_query_result_bytes": 1048576,
+          "max_query_execution_seconds": 30.0,
+          "max_query_memory_mb": 512,
+          "max_query_temp_storage_mb": 1024
+        },
+        "workflow_status": "incomplete",
+        "claim_output_assessment": {
+          "contract": {
+            "operations": [
+              "value"
+            ]
+          },
+          "actual_operations": [],
+          "violations": [
+            "incomplete_workflow",
+            "claim_count_mismatch",
+            "claim_operations_mismatch"
+          ],
+          "accepted": false,
+          "scope": "claim_shape_and_numeric_evidence_only",
+          "task_semantics_verified": false
+        },
+        "population": [],
+        "profile": {
+          "information_scope": "original_loaded_dataset",
+          "summary": {
+            "table_count": 1,
+            "total_row_count": 9,
+            "total_column_count": 4,
+            "issue_count": 1,
+            "info_issue_count": 0,
+            "warning_issue_count": 1,
+            "error_issue_count": 0,
+            "table_issue_count": 0,
+            "column_issue_count": 1,
+            "affected_relation_names": [
+              "revisions"
+            ]
+          },
+          "schema": {
+            "tables": [
+              {
+                "name": "revisions",
+                "relation_name": "revisions",
+                "row_count": 9,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "entity_id",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "revision",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "state",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "amount_minor",
+                    "physical_dtype": "Int64",
+                    "logical_type": "integer",
+                    "nullable": true,
+                    "missing_count": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "profiles": {
+            "tables": [
+              {
+                "name": "revisions",
+                "relation_name": "revisions",
+                "row_count": 9,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "entity_id",
+                    "logical_type": "string",
+                    "row_count": 9,
+                    "non_missing_count": 9,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 7,
+                    "distinct_ratio": 0.7777777777777778,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 1,
+                      "maximum_length": 1,
+                      "mean_length": 1.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "a",
+                      "most_frequent_count": 2,
+                      "most_frequent_ratio": 0.2222222222222222
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "revision",
+                    "logical_type": "integer",
+                    "row_count": 9,
+                    "non_missing_count": 9,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.2222222222222222,
+                    "minimum": 1,
+                    "maximum": 2,
+                    "numeric_statistics": {
+                      "minimum": 1,
+                      "maximum": 2,
+                      "mean": 1.2222222222222223,
+                      "median": 1.0,
+                      "standard_deviation": 0.44095855184409843,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0,
+                      "standard_deviation_overflow": false
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "state",
+                    "logical_type": "string",
+                    "row_count": 9,
+                    "non_missing_count": 9,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 3,
+                    "distinct_ratio": 0.3333333333333333,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 7,
+                      "maximum_length": 8,
+                      "mean_length": 7.888888888888889,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "approved",
+                      "most_frequent_count": 7,
+                      "most_frequent_ratio": 0.7777777777777778
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "amount_minor",
+                    "logical_type": "integer",
+                    "row_count": 9,
+                    "non_missing_count": 8,
+                    "missing_count": 1,
+                    "missing_ratio": 0.1111111111111111,
+                    "distinct_count": 7,
+                    "distinct_ratio": 0.875,
+                    "minimum": -1250,
+                    "maximum": 90000,
+                    "numeric_statistics": {
+                      "minimum": -1250,
+                      "maximum": 90000,
+                      "mean": 23353.125,
+                      "median": 3500.0,
+                      "standard_deviation": 38302.593248415586,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0,
+                      "standard_deviation_overflow": false
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 36,
+                  "missing_cell_count": 1,
+                  "missing_cell_ratio": 0.027777777777777776,
+                  "rows_with_missing_count": 1,
+                  "rows_with_missing_ratio": 0.1111111111111111,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 1,
+                  "columns_with_missing_ratio": 0.25
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 0,
+                  "duplicate_row_ratio": 0.0,
+                  "duplicate_group_row_count": 0,
+                  "duplicate_group_row_ratio": 0.0
+                }
+              }
+            ]
+          },
+          "quality_findings": [
+            {
+              "issue_type": "missing_values",
+              "severity": "warning",
+              "scope": "column",
+              "table_name": "revisions",
+              "relation_name": "revisions",
+              "message": "Column contains missing values.",
+              "column_name": "amount_minor",
+              "affected_count": 1,
+              "affected_ratio": 0.1111111111111111,
+              "evidence": {
+                "missing_count": 1,
+                "non_missing_count": 8,
+                "row_count": 9
+              }
+            }
+          ],
+          "insights": [
+            {
+              "insight_type": "dataset_structure",
+              "scope": "dataset",
+              "message": "Dataset contains 1 table(s).",
+              "table_name": null,
+              "relation_name": null,
+              "column_name": null,
+              "evidence": {
+                "table_count": 1,
+                "total_row_count": 9,
+                "total_column_count": 4
+              }
+            },
+            {
+              "insight_type": "table_structure",
+              "scope": "table",
+              "message": "Table 'revisions' contains 9 row(s) and 4 column(s).",
+              "table_name": "revisions",
+              "relation_name": "revisions",
+              "column_name": null,
+              "evidence": {
+                "row_count": 9,
+                "column_count": 4
+              }
+            },
+            {
+              "insight_type": "data_quality",
+              "scope": "column",
+              "message": "Column contains missing values.",
+              "table_name": "revisions",
+              "relation_name": "revisions",
+              "column_name": "amount_minor",
+              "evidence": {
+                "missing_count": 1,
+                "non_missing_count": 8,
+                "row_count": 9
+              }
+            }
+          ]
+        },
+        "numerical_statements": [],
+        "unverified_model_interpretation": "Investigation incomplete: the next investigation decision could not be completed. No analytical conclusion has been established.",
+        "investigation": {
+          "population": [],
+          "question": "Calculate the net amount in currency units represented by the latest revision of each entity. First select the row with the greatest revision for each entity across all states. Only then include entities whose selected row has state approved and a non-missing amount_minor. Do not fall back to an older approved revision. Count distinct entities with equal amounts separately, and preserve negative amounts. Convert minor units to currency units by dividing by 100 in SQL. Use one analytical query and return only the final metric as exactly one numerical VALUE claim referencing its final result cell.",
+          "conclusion": "Investigation incomplete: the next investigation decision could not be completed. No analytical conclusion has been established.",
+          "analysis": {
+            "analysis": {
+              "schema": {
+                "tables": [
+                  {
+                    "name": "revisions",
+                    "relation_name": "revisions",
+                    "row_count": 9,
+                    "column_count": 4,
+                    "columns": [
+                      {
+                        "name": "entity_id",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "revision",
+                        "physical_dtype": "int64",
+                        "logical_type": "integer",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "state",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "amount_minor",
+                        "physical_dtype": "Int64",
+                        "logical_type": "integer",
+                        "nullable": true,
+                        "missing_count": 1
+                      }
+                    ]
+                  }
+                ]
+              },
+              "profile": {
+                "tables": [
+                  {
+                    "name": "revisions",
+                    "relation_name": "revisions",
+                    "row_count": 9,
+                    "column_count": 4,
+                    "columns": [
+                      {
+                        "name": "entity_id",
+                        "logical_type": "string",
+                        "row_count": 9,
+                        "non_missing_count": 9,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 7,
+                        "distinct_ratio": 0.7777777777777778,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 1,
+                          "maximum_length": 1,
+                          "mean_length": 1.0,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "a",
+                          "most_frequent_count": 2,
+                          "most_frequent_ratio": 0.2222222222222222
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "revision",
+                        "logical_type": "integer",
+                        "row_count": 9,
+                        "non_missing_count": 9,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 2,
+                        "distinct_ratio": 0.2222222222222222,
+                        "minimum": 1,
+                        "maximum": 2,
+                        "numeric_statistics": {
+                          "minimum": 1,
+                          "maximum": 2,
+                          "mean": 1.2222222222222223,
+                          "median": 1.0,
+                          "standard_deviation": 0.44095855184409843,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0,
+                          "standard_deviation_overflow": false
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "state",
+                        "logical_type": "string",
+                        "row_count": 9,
+                        "non_missing_count": 9,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 3,
+                        "distinct_ratio": 0.3333333333333333,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 7,
+                          "maximum_length": 8,
+                          "mean_length": 7.888888888888889,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "approved",
+                          "most_frequent_count": 7,
+                          "most_frequent_ratio": 0.7777777777777778
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "amount_minor",
+                        "logical_type": "integer",
+                        "row_count": 9,
+                        "non_missing_count": 8,
+                        "missing_count": 1,
+                        "missing_ratio": 0.1111111111111111,
+                        "distinct_count": 7,
+                        "distinct_ratio": 0.875,
+                        "minimum": -1250,
+                        "maximum": 90000,
+                        "numeric_statistics": {
+                          "minimum": -1250,
+                          "maximum": 90000,
+                          "mean": 23353.125,
+                          "median": 3500.0,
+                          "standard_deviation": 38302.593248415586,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0,
+                          "standard_deviation_overflow": false
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      }
+                    ],
+                    "missing_value_statistics": {
+                      "total_cell_count": 36,
+                      "missing_cell_count": 1,
+                      "missing_cell_ratio": 0.027777777777777776,
+                      "rows_with_missing_count": 1,
+                      "rows_with_missing_ratio": 0.1111111111111111,
+                      "fully_missing_row_count": 0,
+                      "fully_missing_row_ratio": 0.0,
+                      "columns_with_missing_count": 1,
+                      "columns_with_missing_ratio": 0.25
+                    },
+                    "duplicate_statistics": {
+                      "duplicate_row_count": 0,
+                      "duplicate_row_ratio": 0.0,
+                      "duplicate_group_row_count": 0,
+                      "duplicate_group_row_ratio": 0.0
+                    }
+                  }
+                ]
+              },
+              "issues": [
+                {
+                  "issue_type": "missing_values",
+                  "severity": "warning",
+                  "scope": "column",
+                  "table_name": "revisions",
+                  "relation_name": "revisions",
+                  "message": "Column contains missing values.",
+                  "column_name": "amount_minor",
+                  "affected_count": 1,
+                  "affected_ratio": 0.1111111111111111,
+                  "evidence": {
+                    "missing_count": 1,
+                    "non_missing_count": 8,
+                    "row_count": 9
+                  }
+                }
+              ]
+            },
+            "summary": {
+              "table_count": 1,
+              "total_row_count": 9,
+              "total_column_count": 4,
+              "issue_count": 1,
+              "info_issue_count": 0,
+              "warning_issue_count": 1,
+              "error_issue_count": 0,
+              "table_issue_count": 0,
+              "column_issue_count": 1,
+              "affected_relation_names": [
+                "revisions"
+              ]
+            },
+            "insights": [
+              {
+                "insight_type": "dataset_structure",
+                "scope": "dataset",
+                "message": "Dataset contains 1 table(s).",
+                "table_name": null,
+                "relation_name": null,
+                "column_name": null,
+                "evidence": {
+                  "table_count": 1,
+                  "total_row_count": 9,
+                  "total_column_count": 4
+                }
+              },
+              {
+                "insight_type": "table_structure",
+                "scope": "table",
+                "message": "Table 'revisions' contains 9 row(s) and 4 column(s).",
+                "table_name": "revisions",
+                "relation_name": "revisions",
+                "column_name": null,
+                "evidence": {
+                  "row_count": 9,
+                  "column_count": 4
+                }
+              },
+              {
+                "insight_type": "data_quality",
+                "scope": "column",
+                "message": "Column contains missing values.",
+                "table_name": "revisions",
+                "relation_name": "revisions",
+                "column_name": "amount_minor",
+                "evidence": {
+                  "missing_count": 1,
+                  "non_missing_count": 8,
+                  "row_count": 9
+                }
+              }
+            ]
+          },
+          "observations": [
+            {
+              "question": "Calculate the net amount in currency units represented by the latest revision of each entity. First select the row with the greatest revision for each entity across all states. Only then include entities whose selected row has state approved and a non-missing amount_minor. Do not fall back to an older approved revision. Count distinct entities with equal amounts separately, and preserve negative amounts. Convert minor units to currency units by dividing by 100 in SQL. Use one analytical query and return only the final metric as exactly one numerical VALUE claim referencing its final result cell.",
+              "sql": "WITH \"latest_revisions\" AS (\n    SELECT\n        \"entity_id\",\n        MAX(\"revision\") AS \"max_revision\"\n    FROM \"revisions\"\n    GROUP BY \"entity_id\"\n),\n\"filtered_data\" AS (\n    SELECT\n        \"r\".\"amount_minor\"\n    FROM \"revisions\" \"r\"\n    INNER JOIN \"latest_revisions\" \"lr\"\n        ON \"r\".\"entity_id\" = \"lr\".\"entity_id\"\n        AND \"r\".\"revision\" = \"lr\".\"max_revision\"\n    WHERE \"r\".\"state\" = 'approved'\n      AND \"r\".\"amount_minor\" IS NOT NULL\n)\nSELECT SUM(\"amount_minor\") / 100.0 AS \"net_amount\"\nFROM \"filtered_data\"",
+              "result": {
+                "columns": [
+                  "net_amount"
+                ],
+                "rows": [
+                  [
+                    98.25
+                  ]
+                ]
+              },
+              "repair_history": []
+            }
+          ],
+          "status": "incomplete",
+          "generated_claims": [],
+          "synthesis_failure": null,
+          "investigation_failure": {
+            "stage": "investigator",
+            "kind": "provider_unavailable",
+            "diagnostics": {
+              "http_status": 503,
+              "retryable": true,
+              "attempts": 2,
+              "stage": "investigator",
+              "call_number": 2
+            }
+          },
+          "failed_attempts": [],
+          "narrative_verified": false,
+          "verified_claims": [],
+          "quantitative_statements": [],
+          "narrative_numbers": [],
+          "narrative_digit_coverage": {
+            "total_digit_count": 0,
+            "parsed_digit_count": 0,
+            "unparsed_digit_count": 0,
+            "status": "no_digits"
+          },
+          "unlinked_numbers": [],
+          "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+          "verification_scope": "referenced_numeric_values_only"
+        }
+      }
+    },
+    "recheck": {
+      "run_record": {
+        "revision": "a03d340b09f7b3b3fa2cee2d4cac386a61d3a307",
+        "timestamp_utc": "2026-10-27T04:51:48.465196+00:00",
+        "original_revision": "2e0ce5e397bdd899ac2b5be6f9abe49e08479093",
+        "manifest_sha256": "99c8626c7c7b524b785377ec66316182c47e9c9fa29ebc9f3b181a91efc9b91b",
+        "fixture_sha256": "c692acbb008d2cf4270199b291f2e6213dc737689d3b5266e6bf5f299c2d7d3a",
+        "model": "gemini-3.1-flash-lite",
+        "whole_case_attempts": 1,
+        "status": "finished",
+        "limitations": "One known synthetic development-case recheck. Model variation and provider availability are not controlled.",
+        "cli_exit_code": 0,
+        "elapsed_seconds": 11.248
+      },
+      "original_export_sha256": "3464417df8dc20b8867da419487e287318d1e667a71c434a5db17b5261891195",
+      "cli_report": {
+        "schema_version": 1,
+        "report_type": "local_cli",
+        "timestamp_utc": "2026-10-27T04:51:59.502553+00:00",
+        "limitations": "Workflow completion is not analytical correctness. Numerical support checks referenced values only. Population filters do not verify business meaning or provide privacy isolation. Narrative meaning is unverified. Inspect population, grain, denominator, time period, units, and SQL.",
+        "kind": "investigation",
+        "request": {
+          "paths": [
+            "synthetic/revision_order/revisions.csv"
+          ],
+          "question": "Calculate the net amount in currency units represented by the latest revision of each entity. First select the row with the greatest revision for each entity across all states. Only then include entities whose selected row has state approved and a non-missing amount_minor. Do not fall back to an older approved revision. Count distinct entities with equal amounts separately, and preserve negative amounts. Convert minor units to currency units by dividing by 100 in SQL. Use one analytical query and return only the final metric as exactly one numerical VALUE claim referencing its final result cell.",
+          "claim_output_contract": {
+            "operations": [
+              "value"
+            ]
+          },
+          "population": [],
+          "population_mode": "unscoped",
+          "model": "gemini-3.1-flash-lite",
+          "max_steps": 1,
+          "max_investigation_seconds": 120.0,
+          "request_timeout_seconds": 30.0,
+          "provider_retries": 1,
+          "max_query_result_rows": 20,
+          "max_query_result_bytes": 1048576,
+          "max_query_execution_seconds": 30.0,
+          "max_query_memory_mb": 512,
+          "max_query_temp_storage_mb": 1024
+        },
+        "workflow_status": "complete",
+        "claim_output_assessment": {
+          "contract": {
+            "operations": [
+              "value"
+            ]
+          },
+          "actual_operations": [
+            "value"
+          ],
+          "violations": [],
+          "accepted": true,
+          "scope": "claim_shape_and_numeric_evidence_only",
+          "task_semantics_verified": false
+        },
+        "population": [],
+        "profile": {
+          "information_scope": "original_loaded_dataset",
+          "summary": {
+            "table_count": 1,
+            "total_row_count": 9,
+            "total_column_count": 4,
+            "issue_count": 1,
+            "info_issue_count": 0,
+            "warning_issue_count": 1,
+            "error_issue_count": 0,
+            "table_issue_count": 0,
+            "column_issue_count": 1,
+            "affected_relation_names": [
+              "revisions"
+            ]
+          },
+          "schema": {
+            "tables": [
+              {
+                "name": "revisions",
+                "relation_name": "revisions",
+                "row_count": 9,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "entity_id",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "revision",
+                    "physical_dtype": "int64",
+                    "logical_type": "integer",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "state",
+                    "physical_dtype": "object",
+                    "logical_type": "string",
+                    "nullable": false,
+                    "missing_count": 0
+                  },
+                  {
+                    "name": "amount_minor",
+                    "physical_dtype": "Int64",
+                    "logical_type": "integer",
+                    "nullable": true,
+                    "missing_count": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "profiles": {
+            "tables": [
+              {
+                "name": "revisions",
+                "relation_name": "revisions",
+                "row_count": 9,
+                "column_count": 4,
+                "columns": [
+                  {
+                    "name": "entity_id",
+                    "logical_type": "string",
+                    "row_count": 9,
+                    "non_missing_count": 9,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 7,
+                    "distinct_ratio": 0.7777777777777778,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 1,
+                      "maximum_length": 1,
+                      "mean_length": 1.0,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "a",
+                      "most_frequent_count": 2,
+                      "most_frequent_ratio": 0.2222222222222222
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "revision",
+                    "logical_type": "integer",
+                    "row_count": 9,
+                    "non_missing_count": 9,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 2,
+                    "distinct_ratio": 0.2222222222222222,
+                    "minimum": 1,
+                    "maximum": 2,
+                    "numeric_statistics": {
+                      "minimum": 1,
+                      "maximum": 2,
+                      "mean": 1.2222222222222223,
+                      "median": 1.0,
+                      "standard_deviation": 0.44095855184409843,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0,
+                      "standard_deviation_overflow": false
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "state",
+                    "logical_type": "string",
+                    "row_count": 9,
+                    "non_missing_count": 9,
+                    "missing_count": 0,
+                    "missing_ratio": 0.0,
+                    "distinct_count": 3,
+                    "distinct_ratio": 0.3333333333333333,
+                    "minimum": null,
+                    "maximum": null,
+                    "numeric_statistics": null,
+                    "text_statistics": {
+                      "minimum_length": 7,
+                      "maximum_length": 8,
+                      "mean_length": 7.888888888888889,
+                      "empty_count": 0,
+                      "empty_ratio": 0.0,
+                      "most_frequent_value": "approved",
+                      "most_frequent_count": 7,
+                      "most_frequent_ratio": 0.7777777777777778
+                    },
+                    "datetime_statistics": null
+                  },
+                  {
+                    "name": "amount_minor",
+                    "logical_type": "integer",
+                    "row_count": 9,
+                    "non_missing_count": 8,
+                    "missing_count": 1,
+                    "missing_ratio": 0.1111111111111111,
+                    "distinct_count": 7,
+                    "distinct_ratio": 0.875,
+                    "minimum": -1250,
+                    "maximum": 90000,
+                    "numeric_statistics": {
+                      "minimum": -1250,
+                      "maximum": 90000,
+                      "mean": 23353.125,
+                      "median": 3500.0,
+                      "standard_deviation": 38302.593248415586,
+                      "non_finite_count": 0,
+                      "non_finite_ratio": 0.0,
+                      "standard_deviation_overflow": false
+                    },
+                    "text_statistics": null,
+                    "datetime_statistics": null
+                  }
+                ],
+                "missing_value_statistics": {
+                  "total_cell_count": 36,
+                  "missing_cell_count": 1,
+                  "missing_cell_ratio": 0.027777777777777776,
+                  "rows_with_missing_count": 1,
+                  "rows_with_missing_ratio": 0.1111111111111111,
+                  "fully_missing_row_count": 0,
+                  "fully_missing_row_ratio": 0.0,
+                  "columns_with_missing_count": 1,
+                  "columns_with_missing_ratio": 0.25
+                },
+                "duplicate_statistics": {
+                  "duplicate_row_count": 0,
+                  "duplicate_row_ratio": 0.0,
+                  "duplicate_group_row_count": 0,
+                  "duplicate_group_row_ratio": 0.0
+                }
+              }
+            ]
+          },
+          "quality_findings": [
+            {
+              "issue_type": "missing_values",
+              "severity": "warning",
+              "scope": "column",
+              "table_name": "revisions",
+              "relation_name": "revisions",
+              "message": "Column contains missing values.",
+              "column_name": "amount_minor",
+              "affected_count": 1,
+              "affected_ratio": 0.1111111111111111,
+              "evidence": {
+                "missing_count": 1,
+                "non_missing_count": 8,
+                "row_count": 9
+              }
+            }
+          ],
+          "insights": [
+            {
+              "insight_type": "dataset_structure",
+              "scope": "dataset",
+              "message": "Dataset contains 1 table(s).",
+              "table_name": null,
+              "relation_name": null,
+              "column_name": null,
+              "evidence": {
+                "table_count": 1,
+                "total_row_count": 9,
+                "total_column_count": 4
+              }
+            },
+            {
+              "insight_type": "table_structure",
+              "scope": "table",
+              "message": "Table 'revisions' contains 9 row(s) and 4 column(s).",
+              "table_name": "revisions",
+              "relation_name": "revisions",
+              "column_name": null,
+              "evidence": {
+                "row_count": 9,
+                "column_count": 4
+              }
+            },
+            {
+              "insight_type": "data_quality",
+              "scope": "column",
+              "message": "Column contains missing values.",
+              "table_name": "revisions",
+              "relation_name": "revisions",
+              "column_name": "amount_minor",
+              "evidence": {
+                "missing_count": 1,
+                "non_missing_count": 8,
+                "row_count": 9
+              }
+            }
+          ]
+        },
+        "numerical_statements": [
+          {
+            "claim_index": 0,
+            "verified_claim": {
+              "claim": {
+                "operation": "value",
+                "expected": "98.25",
+                "left": {
+                  "observation_index": 0,
+                  "row_index": 0,
+                  "column": "net_amount"
+                },
+                "right": null,
+                "absolute_tolerance": 0
+              },
+              "verification": {
+                "status": "supported",
+                "actual": "98.25",
+                "expected": "98.25",
+                "absolute_tolerance": "0",
+                "reason": "The numerical evidence supports the claimed value.",
+                "rounding_policy": null,
+                "rounded_actual": null
+              }
+            },
+            "text": "Claim 1 (value): expected 98.25; evidence 98.25; absolute tolerance 0; status supported."
+          }
+        ],
+        "unverified_model_interpretation": "The net amount in currency units for the latest revisions of entities with an 'approved' state and a non-missing amount_minor is 98.25.",
+        "investigation": {
+          "population": [],
+          "question": "Calculate the net amount in currency units represented by the latest revision of each entity. First select the row with the greatest revision for each entity across all states. Only then include entities whose selected row has state approved and a non-missing amount_minor. Do not fall back to an older approved revision. Count distinct entities with equal amounts separately, and preserve negative amounts. Convert minor units to currency units by dividing by 100 in SQL. Use one analytical query and return only the final metric as exactly one numerical VALUE claim referencing its final result cell.",
+          "conclusion": "The net amount in currency units for the latest revisions of entities with an 'approved' state and a non-missing amount_minor is 98.25.",
+          "analysis": {
+            "analysis": {
+              "schema": {
+                "tables": [
+                  {
+                    "name": "revisions",
+                    "relation_name": "revisions",
+                    "row_count": 9,
+                    "column_count": 4,
+                    "columns": [
+                      {
+                        "name": "entity_id",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "revision",
+                        "physical_dtype": "int64",
+                        "logical_type": "integer",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "state",
+                        "physical_dtype": "object",
+                        "logical_type": "string",
+                        "nullable": false,
+                        "missing_count": 0
+                      },
+                      {
+                        "name": "amount_minor",
+                        "physical_dtype": "Int64",
+                        "logical_type": "integer",
+                        "nullable": true,
+                        "missing_count": 1
+                      }
+                    ]
+                  }
+                ]
+              },
+              "profile": {
+                "tables": [
+                  {
+                    "name": "revisions",
+                    "relation_name": "revisions",
+                    "row_count": 9,
+                    "column_count": 4,
+                    "columns": [
+                      {
+                        "name": "entity_id",
+                        "logical_type": "string",
+                        "row_count": 9,
+                        "non_missing_count": 9,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 7,
+                        "distinct_ratio": 0.7777777777777778,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 1,
+                          "maximum_length": 1,
+                          "mean_length": 1.0,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "a",
+                          "most_frequent_count": 2,
+                          "most_frequent_ratio": 0.2222222222222222
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "revision",
+                        "logical_type": "integer",
+                        "row_count": 9,
+                        "non_missing_count": 9,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 2,
+                        "distinct_ratio": 0.2222222222222222,
+                        "minimum": 1,
+                        "maximum": 2,
+                        "numeric_statistics": {
+                          "minimum": 1,
+                          "maximum": 2,
+                          "mean": 1.2222222222222223,
+                          "median": 1.0,
+                          "standard_deviation": 0.44095855184409843,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0,
+                          "standard_deviation_overflow": false
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "state",
+                        "logical_type": "string",
+                        "row_count": 9,
+                        "non_missing_count": 9,
+                        "missing_count": 0,
+                        "missing_ratio": 0.0,
+                        "distinct_count": 3,
+                        "distinct_ratio": 0.3333333333333333,
+                        "minimum": null,
+                        "maximum": null,
+                        "numeric_statistics": null,
+                        "text_statistics": {
+                          "minimum_length": 7,
+                          "maximum_length": 8,
+                          "mean_length": 7.888888888888889,
+                          "empty_count": 0,
+                          "empty_ratio": 0.0,
+                          "most_frequent_value": "approved",
+                          "most_frequent_count": 7,
+                          "most_frequent_ratio": 0.7777777777777778
+                        },
+                        "datetime_statistics": null
+                      },
+                      {
+                        "name": "amount_minor",
+                        "logical_type": "integer",
+                        "row_count": 9,
+                        "non_missing_count": 8,
+                        "missing_count": 1,
+                        "missing_ratio": 0.1111111111111111,
+                        "distinct_count": 7,
+                        "distinct_ratio": 0.875,
+                        "minimum": -1250,
+                        "maximum": 90000,
+                        "numeric_statistics": {
+                          "minimum": -1250,
+                          "maximum": 90000,
+                          "mean": 23353.125,
+                          "median": 3500.0,
+                          "standard_deviation": 38302.593248415586,
+                          "non_finite_count": 0,
+                          "non_finite_ratio": 0.0,
+                          "standard_deviation_overflow": false
+                        },
+                        "text_statistics": null,
+                        "datetime_statistics": null
+                      }
+                    ],
+                    "missing_value_statistics": {
+                      "total_cell_count": 36,
+                      "missing_cell_count": 1,
+                      "missing_cell_ratio": 0.027777777777777776,
+                      "rows_with_missing_count": 1,
+                      "rows_with_missing_ratio": 0.1111111111111111,
+                      "fully_missing_row_count": 0,
+                      "fully_missing_row_ratio": 0.0,
+                      "columns_with_missing_count": 1,
+                      "columns_with_missing_ratio": 0.25
+                    },
+                    "duplicate_statistics": {
+                      "duplicate_row_count": 0,
+                      "duplicate_row_ratio": 0.0,
+                      "duplicate_group_row_count": 0,
+                      "duplicate_group_row_ratio": 0.0
+                    }
+                  }
+                ]
+              },
+              "issues": [
+                {
+                  "issue_type": "missing_values",
+                  "severity": "warning",
+                  "scope": "column",
+                  "table_name": "revisions",
+                  "relation_name": "revisions",
+                  "message": "Column contains missing values.",
+                  "column_name": "amount_minor",
+                  "affected_count": 1,
+                  "affected_ratio": 0.1111111111111111,
+                  "evidence": {
+                    "missing_count": 1,
+                    "non_missing_count": 8,
+                    "row_count": 9
+                  }
+                }
+              ]
+            },
+            "summary": {
+              "table_count": 1,
+              "total_row_count": 9,
+              "total_column_count": 4,
+              "issue_count": 1,
+              "info_issue_count": 0,
+              "warning_issue_count": 1,
+              "error_issue_count": 0,
+              "table_issue_count": 0,
+              "column_issue_count": 1,
+              "affected_relation_names": [
+                "revisions"
+              ]
+            },
+            "insights": [
+              {
+                "insight_type": "dataset_structure",
+                "scope": "dataset",
+                "message": "Dataset contains 1 table(s).",
+                "table_name": null,
+                "relation_name": null,
+                "column_name": null,
+                "evidence": {
+                  "table_count": 1,
+                  "total_row_count": 9,
+                  "total_column_count": 4
+                }
+              },
+              {
+                "insight_type": "table_structure",
+                "scope": "table",
+                "message": "Table 'revisions' contains 9 row(s) and 4 column(s).",
+                "table_name": "revisions",
+                "relation_name": "revisions",
+                "column_name": null,
+                "evidence": {
+                  "row_count": 9,
+                  "column_count": 4
+                }
+              },
+              {
+                "insight_type": "data_quality",
+                "scope": "column",
+                "message": "Column contains missing values.",
+                "table_name": "revisions",
+                "relation_name": "revisions",
+                "column_name": "amount_minor",
+                "evidence": {
+                  "missing_count": 1,
+                  "non_missing_count": 8,
+                  "row_count": 9
+                }
+              }
+            ]
+          },
+          "observations": [
+            {
+              "question": "Calculate the net amount in currency units represented by the latest revision of each entity. First select the row with the greatest revision for each entity across all states. Only then include entities whose selected row has state approved and a non-missing amount_minor. Do not fall back to an older approved revision. Count distinct entities with equal amounts separately, and preserve negative amounts. Convert minor units to currency units by dividing by 100 in SQL. Use one analytical query and return only the final metric as exactly one numerical VALUE claim referencing its final result cell.",
+              "sql": "WITH \"latest_revisions\" AS (\n    SELECT\n        \"entity_id\",\n        \"revision\",\n        \"state\",\n        \"amount_minor\"\n    FROM (\n        SELECT\n            *,\n            ROW_NUMBER() OVER (PARTITION BY \"entity_id\" ORDER BY \"revision\" DESC) as \"rn\"\n        FROM \"revisions\"\n    ) WHERE \"rn\" = 1\n)\nSELECT SUM(\"amount_minor\") / 100.0 AS \"net_amount\"\nFROM \"latest_revisions\"\nWHERE \"state\" = 'approved' AND \"amount_minor\" IS NOT NULL",
+              "result": {
+                "columns": [
+                  "net_amount"
+                ],
+                "rows": [
+                  [
+                    98.25
+                  ]
+                ]
+              },
+              "repair_history": []
+            }
+          ],
+          "status": "complete",
+          "generated_claims": [
+            {
+              "operation": "value",
+              "expected": "98.25",
+              "left": {
+                "observation_index": 0,
+                "row_index": 0,
+                "column": "net_amount"
+              },
+              "right": null,
+              "absolute_tolerance": 0
+            }
+          ],
+          "synthesis_failure": null,
+          "investigation_failure": null,
+          "failed_attempts": [],
+          "narrative_verified": false,
+          "verified_claims": [
+            {
+              "claim": {
+                "operation": "value",
+                "expected": "98.25",
+                "left": {
+                  "observation_index": 0,
+                  "row_index": 0,
+                  "column": "net_amount"
+                },
+                "right": null,
+                "absolute_tolerance": 0
+              },
+              "verification": {
+                "status": "supported",
+                "actual": "98.25",
+                "expected": "98.25",
+                "absolute_tolerance": "0",
+                "reason": "The numerical evidence supports the claimed value.",
+                "rounding_policy": null,
+                "rounded_actual": null
+              }
+            }
+          ],
+          "quantitative_statements": [
+            {
+              "claim_index": 0,
+              "verified_claim": {
+                "claim": {
+                  "operation": "value",
+                  "expected": "98.25",
+                  "left": {
+                    "observation_index": 0,
+                    "row_index": 0,
+                    "column": "net_amount"
+                  },
+                  "right": null,
+                  "absolute_tolerance": 0
+                },
+                "verification": {
+                  "status": "supported",
+                  "actual": "98.25",
+                  "expected": "98.25",
+                  "absolute_tolerance": "0",
+                  "reason": "The numerical evidence supports the claimed value.",
+                  "rounding_policy": null,
+                  "rounded_actual": null
+                }
+              },
+              "text": "Claim 1 (value): expected 98.25; evidence 98.25; absolute tolerance 0; status supported."
+            }
+          ],
+          "narrative_numbers": [
+            {
+              "text": "98.25",
+              "start": 129,
+              "end": 134,
+              "value": "98.25",
+              "claim_indexes": [
+                0
+              ]
+            }
+          ],
+          "narrative_digit_coverage": {
+            "total_digit_count": 4,
+            "parsed_digit_count": 4,
+            "unparsed_digit_count": 0,
+            "status": "all_digits_parsed"
+          },
+          "unlinked_numbers": [],
+          "narrative_number_audit_scope": "ascii_numeric_tokens_only",
+          "verification_scope": "referenced_numeric_values_only"
+        }
+      }
+    }
+  },
+  "reviewed_assessment": {
+    "original": "correct_sql_evidence_but_incomplete_after_investigator_503",
+    "recheck": "task_accepted_for_this_fixture"
+  },
+  "review_basis": "Manual review of both generated SQL queries and the recheck conclusion. Both queries select the latest revision across all states before eligibility filtering. The recheck preserves equal-valued entities and negative amounts, converts units in SQL, and supplies one supported final VALUE claim.",
+  "limitations": "One known synthetic development task. The validation script checks fixture integrity, recorded contracts, and numerical consistency; it is not a general semantic verifier. Provider conditions and model variation were not controlled. The elapsed-time difference cannot be attributed entirely to the implementation change.",
+  "export_notes": "Only request.paths in the embedded reports was replaced with a portable synthetic path. Original reports and logs remain unchanged in the local temporary directory. Logs are not embedded."
+}
