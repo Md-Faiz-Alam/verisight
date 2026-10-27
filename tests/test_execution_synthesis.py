@@ -388,6 +388,8 @@ def test_structured_budget_failure_preserves_incomplete_investigation(
     assert serialized["synthesis_failure"] == {
         "kind": "prompt_budget_exceeded",
         "diagnostics": None,
+        "validation_reason": None,
+        "repair_attempted": None,
     }
     from scripts.live_evaluation import score_result
 

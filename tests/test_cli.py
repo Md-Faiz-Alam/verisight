@@ -801,4 +801,8 @@ def test_cli_repairs_extra_claims_using_the_selected_difference_contract(
         assert report["workflow_status"] == "incomplete"
         assert investigation["verified_claims"] == []
         assert investigation["synthesis_failure"]["kind"] == "synthesis_error"
+        assert investigation["synthesis_failure"]["validation_reason"] == (
+            "claim_output_contract_mismatch"
+        )
+        assert investigation["synthesis_failure"]["repair_attempted"] is True
         assert investigation["investigation_failure"] is None

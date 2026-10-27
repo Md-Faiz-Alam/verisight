@@ -429,6 +429,17 @@ diagnostics.
 `query_execution` covers planning, execution, and repair; it is not a precise
 planner-versus-repair trace.
 
+For terminal local structured-synthesis validation failures, `synthesis_failure`
+also retains `validation_reason` and `repair_attempted`. Approved reasons are
+`response_too_large`, `invalid_json`, `invalid_schema_or_claim`,
+`unlinked_narrative_number`, and `claim_output_contract_mismatch`. The reason
+identifies the terminal local check, not every failure earlier in the run.
+`repair_attempted=True` records that the repair response reached local validation
+and failed; it does not imply repair succeeded. For other failure types these
+fields are null, which does not establish that no repair was attempted. Older
+reports may omit them. No rejected response, raw validation message, or exception
+object is included. This metadata improves diagnosis, not generation accuracy.
+
 Classification follows explicit exception causes with cycle protection.
 Metadata does not retain exceptions or copy raw messages. Both failure fields
 require incomplete status. They do not describe every incomplete path or

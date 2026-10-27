@@ -3,6 +3,7 @@
 import json
 from dataclasses import asdict, replace
 from pathlib import Path
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -12,7 +13,11 @@ from scripts.live_evaluation import failure_report, score_result
 from verisight import VeriSight
 from verisight.config import Settings
 from verisight.execution.decisions import InvestigationAction, InvestigationDecision
-from verisight.execution.exceptions import InvestigationError
+from verisight.execution.exceptions import (
+    InvestigationError,
+    SynthesisValidationError,
+    SynthesisValidationReason,
+)
 from verisight.execution.gemini import (
     GeminiGenerationError,
     GeminiTextGenerationClient,
@@ -223,6 +228,12 @@ def test_synthesis_failure_metadata_survives_investigation_and_evaluation(
     payload = json.loads(json.dumps(to_jsonable(result)))
     expected_failure = {
         "kind": kind.value,
+        "validation_reason": (
+            "invalid_json" if kind is SynthesisFailureKind.SYNTHESIS_ERROR else None
+        ),
+        "repair_attempted": (
+            True if kind is SynthesisFailureKind.SYNTHESIS_ERROR else None
+        ),
         "diagnostics": (
             asdict(expected_diagnostics) if expected_diagnostics is not None else None
         ),
@@ -262,3 +273,50 @@ def test_synthesis_failure_handles_cyclic_nonprovider_causes() -> None:
 
     assert failure == SynthesisFailure(SynthesisFailureKind.SYNTHESIS_ERROR)
     assert "private" not in json.dumps(to_jsonable(failure))
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "response_too_large",
+        "invalid_json",
+        "invalid_schema_or_claim",
+        "unlinked_narrative_number",
+        "claim_output_contract_mismatch",
+    ],
+)
+@pytest.mark.parametrize("repair_attempted", [False, True])
+def test_synthesis_validation_metadata_exposes_only_approved_categories(
+    reason: SynthesisValidationReason, repair_attempted: bool
+) -> None:
+    error = SynthesisValidationError(reason, repair_attempted=repair_attempted)
+    error.__cause__ = ValueError("synthetic-private-rejected-response")
+    wrapper = InvestigationError("synthetic-private-wrapper")
+    wrapper.__cause__ = error
+
+    failure = SynthesisFailure.from_exception(wrapper)
+
+    assert failure.kind is SynthesisFailureKind.SYNTHESIS_ERROR
+    assert failure.validation_reason == reason
+    assert failure.repair_attempted is repair_attempted
+    payload = json.loads(json.dumps(to_jsonable(failure)))
+    assert payload == {
+        "kind": "synthesis_error",
+        "diagnostics": None,
+        "validation_reason": reason,
+        "repair_attempted": repair_attempted,
+    }
+    assert "synthetic-private" not in json.dumps(payload)
+    assert "synthetic-private" not in repr(failure)
+
+
+@pytest.mark.parametrize("invalid", ["category", "repair-flag"])
+def test_synthesis_validation_rejects_unapproved_metadata(invalid: str) -> None:
+    with pytest.raises(ValueError) as caught:
+        if invalid == "category":
+            SynthesisValidationError(
+                cast(SynthesisValidationReason, "synthetic-private-category")
+            )
+        else:
+            SynthesisValidationError("invalid_json", repair_attempted=cast(bool, 1))
+    assert "synthetic-private" not in str(caught.value)

@@ -16,6 +16,10 @@ from verisight.execution.claim_verification import (
     VerificationStatus,
 )
 from verisight.execution.context import PopulationFilter
+from verisight.execution.exceptions import (
+    SynthesisValidationError,
+    SynthesisValidationReason,
+)
 from verisight.execution.gemini import (
     GeminiGenerationError,
     GeminiTransientError,
@@ -93,6 +97,8 @@ class SynthesisFailure:
 
     kind: SynthesisFailureKind
     diagnostics: ProviderFailureDiagnostics | None = None
+    validation_reason: SynthesisValidationReason | None = None
+    repair_attempted: bool | None = None
 
     @classmethod
     def from_exception(cls, error: Exception) -> "SynthesisFailure":
@@ -111,6 +117,12 @@ class SynthesisFailure:
                         else SynthesisFailureKind.PROVIDER_ERROR
                     ),
                     diagnostics=current.diagnostics,
+                )
+            if isinstance(current, SynthesisValidationError):
+                return cls(
+                    kind=SynthesisFailureKind.SYNTHESIS_ERROR,
+                    validation_reason=current.reason,
+                    repair_attempted=current.repair_attempted,
                 )
             current = current.__cause__
         return cls(kind=SynthesisFailureKind.SYNTHESIS_ERROR)

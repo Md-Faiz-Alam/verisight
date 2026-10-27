@@ -16,6 +16,9 @@ from verisight.execution.claim_verification import (
     NumericalClaim,
 )
 from verisight.execution.exceptions import InvestigationError
+from verisight.execution.exceptions import (
+    SynthesisValidationError as _SynthesisFormatError,
+)
 from verisight.execution.gemini import (
     GeminiGenerationError,
     GeminiTextGenerationClient,
@@ -107,28 +110,6 @@ def _unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 def _reject_constant(value: str) -> None:
     raise ValueError("Nonstandard JSON constant.")
-
-
-class _SynthesisFormatError(InvestigationError):
-    """An application-defined format category suitable for repair feedback."""
-
-    def __init__(
-        self,
-        reason: Literal[
-            "response_too_large",
-            "invalid_json",
-            "invalid_schema_or_claim",
-            "unlinked_narrative_number",
-            "claim_output_contract_mismatch",
-        ],
-    ) -> None:
-        self.reason = reason
-        message = (
-            "Structured synthesis response is too large."
-            if reason == "response_too_large"
-            else "Structured synthesis response is invalid."
-        )
-        super().__init__(message)
 
 
 class StructuredInvestigationSynthesizer:
@@ -287,9 +268,11 @@ class StructuredInvestigationSynthesizer:
             "numerical assertion and explain the missing evidence. "
             "The rejected response is intentionally omitted.\n"
         )
-        return self._check_response(
-            self._parse_response(self._generate(repair_prompt)), state
-        )
+        repaired_response = self._generate(repair_prompt)
+        try:
+            return self._check_response(self._parse_response(repaired_response), state)
+        except _SynthesisFormatError as exc:
+            raise _SynthesisFormatError(exc.reason, repair_attempted=True) from exc
 
     @staticmethod
     def _check_response(
