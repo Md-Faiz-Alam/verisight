@@ -243,12 +243,27 @@ is allowed. Feedback contains original bounded evidence and an approved error
 category, not the rejected response or raw validation details. Each prompt
 must pass the character budget before generation.
 
-The structured synthesizer also rejects parsed conclusion numbers that match
-neither a declared claim value nor a parsed number from the original question.
-Question numbers may be repeated as context. This limited format check can
-trigger the one format-repair attempt; it does not verify numerical support,
-semantic roles, unsupported numeric syntax, or number words. The result's token
-audit links only to claims, so allowed question context can remain unlinked.
+Without an output contract, the structured synthesizer rejects parsed conclusion
+numbers that match neither a declared claim expected value nor a parsed number
+from the original question. Question numbers may be repeated as context in this
+mode, and unsupported token syntax retains the existing audit limitations.
+
+With a caller-selected output contract, synthesis uses the same narrative
+predicates as final assessment: every detected token must link to a returned
+claim expected value, and no digit characters may remain unparsed. Question
+numbers have no exemption. Invalid token syntax and uncovered digits use the
+existing `unlinked_narrative_number` category and the single bounded repair.
+A second failure leaves the investigation incomplete with observations retained.
+These checks do not establish numerical support, semantic roles, or number-word
+meaning. Final assessment still independently checks completion, shape, support,
+and narrative predicates, including for custom injected synthesizers.
+
+Repair guidance requires updating the conclusion when claims are removed and
+citing components only through claim references in final-only answers. Operand
+values can exist in evidence while being outside the permitted prose scope;
+unlinked numbers do not by themselves establish missing evidence. The changed
+instructions do not guarantee provider compliance or fix the content of any
+unavailable historical response.
 
 Provider failures bypass format repair; bounded provider retries apply
 independently to each generation call. Contradicted claims do not trigger
@@ -356,7 +371,9 @@ after generation, without mutating the result or requesting more generation.
 Acceptance requires a complete workflow, an exact operation multiset, only
 `supported` claim verdicts, no unlinked numeric tokens, and no unparsed digit
 characters. The verifier's existing numerical policies remain unchanged.
-Question-context numbers allowed by synthesis can still fail this stricter check.
+The built-in contract-mode synthesizer applies these same narrative predicates
+before returning, so narrative failures can use its one bounded repair attempt.
+This does not guarantee acceptance: numerical verification remains separate.
 
 The separate assessment retains the contract, actual operations, violations,
 `accepted`, scope `claim_shape_and_numeric_evidence_only`, and

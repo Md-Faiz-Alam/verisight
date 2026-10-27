@@ -64,6 +64,17 @@ contains the safe `claim_output_contract_mismatch` category and the original
 evidence, not the rejected response. There is no additional repair loop, query
 retry, or silent removal of claims.
 
+In contract mode, structured synthesis also checks the same narrative predicates
+as final assessment: every detected numeric token must link to a returned claim
+expected value, and all digit characters must be covered by parsed tokens.
+Question-context numbers are not exempt. These failures use the existing
+`unlinked_narrative_number` category and share the single repair attempt with
+schema and shape failures; they do not receive an additional attempt.
+Repair instructions require removing prose numbers when their claims are removed,
+unless another retained claim links them. Component cells remain referenced by
+claims without repeating their values in final-only prose. Evidence can exist
+without its numbers being permitted in the conclusion.
+
 If evidence is insufficient, empty claims remain allowed; they cannot pass a
 nonempty output contract. The system does not force a numerical assertion to
 fill the required count. Repeated shape failure produces an incomplete result
@@ -92,9 +103,11 @@ A plausible number from the wrong SQL can still pass.
 
 Numeric-token checks inherit the existing audit's syntax limits. Number words,
 repeated values, and semantic roles are not certified. Contextual numbers such
-as years may cause rejection when they are not linked to claims. Do not add
-irrelevant claims merely to pass; keep final-only conclusions within the
-requested output scope. A contract does not prove that prose reports only the
-requested metric or that an absence of detected tokens means no assertion.
+as years are rejected when they are detected and not linked to claims. The
+built-in contract-mode synthesizer offers its bounded repair before returning
+such a response. Calls without a contract retain their question-context allowance.
+Do not add irrelevant claims merely to pass; keep final-only conclusions within
+the requested output scope. A contract does not prove that prose reports only
+the requested metric or that an absence of detected tokens means no assertion.
 
 This mechanism is domain-independent and introduces no dataset-specific rules.

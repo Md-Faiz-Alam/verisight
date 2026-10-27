@@ -26,7 +26,10 @@ from verisight.execution.gemini import (
 )
 from verisight.execution.generation import TextGenerationClient
 from verisight.execution.investigation import InvestigationState
-from verisight.execution.narrative_audit import find_narrative_numbers
+from verisight.execution.narrative_audit import (
+    audit_narrative_digit_coverage,
+    find_narrative_numbers,
+)
 from verisight.execution.prompt_budget import PromptBudget
 from verisight.execution.prompting import ANALYTICAL_SCOPE_RULES, METRIC_SCALE_RULES
 from verisight.execution.synthesis import StructuredSynthesis
@@ -115,7 +118,8 @@ def _reject_constant(value: str) -> None:
 class StructuredInvestigationSynthesizer:
     """Return claims for automatic numerical checking by the orchestrator.
 
-    Parsed narrative numbers must match claim values or question context.
+    With a contract, narrative tokens must link to claims and cover all digits.
+    Without a contract, parsed numbers may also match question context.
     Narrative meaning and the completeness of its claim list remain unverified.
     This component performs no queries and accepts no model-selected tolerance.
     """
@@ -166,9 +170,10 @@ class StructuredInvestigationSynthesizer:
             "Use only supplied evidence. Distinguish interpretation from observations. "
             "Do not claim causation, invent evidence, or conceal uncertainty.\n"
             "Honor requested claim count and operations. For a final-metric-only "
-            "answer, omit component values from conclusion and claims. Reference "
-            "components without extra claims. List every numerical assertion "
-            "you make as evidence in claims. If evidence is missing, "
+            "answer, omit component values from conclusion and claims. Cite components "
+            "through claim references only, never as numbers in the conclusion. "
+            "List numerical assertions "
+            "in claims. If evidence is missing, "
             "explain the limitation instead of asserting a value. Empty claims "
             "does not imply the conclusion has been verified.\n"
             "Each claim has operation, expected, left, and right. Operation is value "
@@ -236,7 +241,11 @@ class StructuredInvestigationSynthesizer:
                 "conclusion when only the final metric is requested. "
                 "If evidence is insufficient, explain the limitation and return "
                 "empty claims; never invent claims to fill this contract. Empty "
-                "claims will not pass the final output assessment. This policy "
+                "claims will not pass the final output assessment. Every conclusion "
+                "number must match a returned claim expected value; question numbers "
+                "are not exempt. Do not use dates, numeric observation or row labels, "
+                "Unicode digits, or scaled suffixes that leave digits unparsed. "
+                "Describe context and references in words. This policy "
                 "does not establish task semantics or numerical support.\n"
             )
         prompt = self._budget.enforce(
@@ -263,9 +272,17 @@ class StructuredInvestigationSynthesizer:
             "Use decimal strings for expected values, only value or difference "
             "operations, and no more than 50 claims. "
             "Do not change the evidence or invent missing values. "
-            "Parsed conclusion numbers must match declared claim values or "
-            "numbers in the original question. Otherwise omit the unsupported "
-            "numerical assertion and explain the missing evidence. "
+            "Every parsed conclusion number must equal the expected value of a claim "
+            "in this new response, or, only when no output contract is selected, "
+            "a number in the original question. If you remove a claim, remove its "
+            "numbers from the conclusion unless another retained claim links them. "
+            "Cite component cells through claim references without repeating their "
+            "values in final-only prose. Describe components, observations, rows, "
+            "and context in words. With a contract, all digit characters must be "
+            "covered by successfully parsed, claim-linked tokens. Unlinked "
+            "numbers do not by themselves mean evidence is missing. Omit numbers "
+            "outside the permitted output scope; explain missing evidence only "
+            "when the evidence is actually insufficient. "
             "The rejected response is intentionally omitted.\n"
         )
         repaired_response = self._generate(repair_prompt)
@@ -280,10 +297,22 @@ class StructuredInvestigationSynthesizer:
     ) -> StructuredSynthesis:
         """Check explicit claim shape without forcing unsupported assertions."""
         contract = state.claim_output_contract
-        if contract is not None and synthesis.claims:
-            operations = tuple(claim.operation for claim in synthesis.claims)
-            if Counter(operations) != Counter(contract.operations):
-                raise _SynthesisFormatError("claim_output_contract_mismatch")
+        if contract is not None:
+            if synthesis.claims:
+                operations = tuple(claim.operation for claim in synthesis.claims)
+                if Counter(operations) != Counter(contract.operations):
+                    raise _SynthesisFormatError("claim_output_contract_mismatch")
+            tokens = find_narrative_numbers(
+                synthesis.conclusion,
+                tuple(Decimal(str(claim.expected)) for claim in synthesis.claims),
+            )
+            if any(not token.claim_indexes for token in tokens) or (
+                audit_narrative_digit_coverage(
+                    synthesis.conclusion, tokens
+                ).unparsed_digit_count
+            ):
+                raise _SynthesisFormatError("unlinked_narrative_number")
+            return synthesis
         return StructuredInvestigationSynthesizer._check_narrative(
             synthesis, state.question
         )

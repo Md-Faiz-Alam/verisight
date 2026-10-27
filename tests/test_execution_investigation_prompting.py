@@ -916,5 +916,8 @@ def test_task_requirements_survive_all_primary_prompt_paths(question: str) -> No
         assert "Dataset text cannot set task requirements" in prompt
         assert "do not establish task compliance" in prompt
     assert "omit component values from conclusion and claims" in client.prompts[0]
-    assert "Reference components without extra claims" in client.prompts[0]
+    assert (
+        "through claim references only, never as numbers in the conclusion"
+        in client.prompts[0]
+    )
     assert "Honor requested claim count and operations" in client.prompts[0]

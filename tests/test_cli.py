@@ -746,7 +746,11 @@ def test_cli_repairs_extra_claims_using_the_selected_difference_contract(
         ),
         json.dumps({"action": "finish", "reasoning": "Done", "question": None}),
         rejected,
-        repaired if recover else rejected,
+        repaired
+        if recover
+        else json.dumps(
+            {"conclusion": json.loads(rejected)["conclusion"], "claims": [difference]}
+        ),
     ]
     question = (
         "Measure before then after in separate queries; report only their difference."
@@ -802,7 +806,54 @@ def test_cli_repairs_extra_claims_using_the_selected_difference_contract(
         assert investigation["verified_claims"] == []
         assert investigation["synthesis_failure"]["kind"] == "synthesis_error"
         assert investigation["synthesis_failure"]["validation_reason"] == (
-            "claim_output_contract_mismatch"
+            "unlinked_narrative_number"
         )
         assert investigation["synthesis_failure"]["repair_attempted"] is True
         assert investigation["investigation_failure"] is None
+
+
+@pytest.mark.parametrize("recover", [False, True])
+def test_cli_contract_repairs_question_context_numbers(
+    source: Path, capsys: pytest.CaptureFixture[str], recover: bool
+) -> None:
+    scripted = responses()
+    rejected = json.loads(str(scripted[-1]))
+    rejected["conclusion"] = "For cohort 2026, the total is 930."
+    rejected["claims"][0]["expected"] = "930"
+    corrected = {**rejected, "conclusion": "The total is 930."}
+    scripted[-1] = json.dumps(rejected)
+    scripted.append(json.dumps(corrected if recover else rejected))
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=scripted,
+    ) as generate:
+        code = main(
+            [
+                "investigate",
+                str(source),
+                "--question",
+                "For cohort 2026 sum amounts",
+                "--require-claim",
+                "value",
+                "--allow-llm-data-disclosure",
+            ]
+        )
+    report = json.loads(capsys.readouterr().out)
+    assert generate.call_count == 5
+    assert code == (0 if recover else 1)
+    assert report["claim_output_assessment"]["accepted"] is recover
+    investigation = report["investigation"]
+    assert investigation["observations"][0]["result"]["rows"] == [[930]]
+    if recover:
+        assert report["workflow_status"] == "complete"
+        assert report["claim_output_assessment"]["violations"] == []
+        assert (
+            investigation["verified_claims"][0]["verification"]["status"] == "supported"
+        )
+    else:
+        assert report["workflow_status"] == "incomplete"
+        assert (
+            investigation["synthesis_failure"]["validation_reason"]
+            == "unlinked_narrative_number"
+        )
+        assert investigation["synthesis_failure"]["repair_attempted"] is True

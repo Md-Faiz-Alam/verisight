@@ -16,7 +16,7 @@ from verisight.execution.claim_verification import (
     VerificationStatus,
 )
 from verisight.execution.decisions import InvestigationAction, InvestigationDecision
-from verisight.execution.exceptions import InvestigationError
+from verisight.execution.exceptions import InvestigationError, SynthesisValidationError
 from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import (
@@ -25,6 +25,10 @@ from verisight.execution.investigation_result import (
     SynthesisFailureKind,
 )
 from verisight.execution.models import QueryResult
+from verisight.execution.narrative_audit import (
+    audit_narrative_digit_coverage,
+    find_narrative_numbers,
+)
 from verisight.execution.observations import QueryObservation
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.execution.prompt_budget import PromptBudgetExceededError
@@ -1030,3 +1034,73 @@ def test_synthesis_enforces_the_exact_selected_operation_multiset(
             '"validation_error": "claim_output_contract_mismatch"' in client.prompts[1]
         )
     assert "CALLER-SELECTED CLAIM OUTPUT CONTRACT" in client.prompts[0]
+
+
+@pytest.mark.parametrize(
+    "context",
+    [
+        "For cohort 2026",
+        "For period 2026-01",
+        "For label 1,00",
+        "For scale 0.05k",
+        "For cohort ２０２６",
+    ],
+    ids=[
+        "question-number",
+        "date",
+        "invalid-grouping",
+        "scaled-suffix",
+        "unicode-digits",
+    ],
+)
+@pytest.mark.parametrize("recover", [False, True])
+def test_contract_narrative_failures_use_the_single_repair(
+    context: str, recover: bool
+) -> None:
+    state = replace(
+        _build_state(),
+        question="For cohort 2026 measure the total.",
+        claim_output_contract=ClaimOutputContract((ClaimOperation.VALUE,)),
+    ).add_observation(
+        QueryObservation(
+            question="Measure the total.",
+            sql="SELECT 30 AS total",
+            result=QueryResult(columns=("total",), rows=((30,),)),
+        )
+    )
+    rejected = json.dumps(
+        {"conclusion": f"{context}, the total is 30.", "claims": [_claim()]}
+    )
+    corrected = json.dumps({"conclusion": "The total is 30.", "claims": [_claim()]})
+    client = _SequenceClient([rejected, corrected if recover else rejected])
+    synthesizer = StructuredInvestigationSynthesizer(client)
+    if recover:
+        synthesis = synthesizer.synthesize(state)
+        verification = NumericalClaimVerifier().verify(
+            synthesis.claims[0], state.observations
+        )
+        assert verification.status is VerificationStatus.SUPPORTED
+        tokens = find_narrative_numbers(synthesis.conclusion, (verification.expected,))
+        assert all(token.claim_indexes for token in tokens)
+        assert (
+            audit_narrative_digit_coverage(
+                synthesis.conclusion, tokens
+            ).unparsed_digit_count
+            == 0
+        )
+    else:
+        with pytest.raises(SynthesisValidationError) as caught:
+            synthesizer.synthesize(state)
+        assert caught.value.reason == "unlinked_narrative_number"
+        assert caught.value.repair_attempted is True
+    assert len(client.prompts) == 2
+    assert '"validation_error": "unlinked_narrative_number"' in client.prompts[1]
+    assert (
+        "If you remove a claim, remove its numbers from the conclusion"
+        in client.prompts[1]
+    )
+    assert "only when no output contract is selected" in client.prompts[1]
+    assert (
+        "through claim references only, never as numbers in the conclusion"
+        in client.prompts[0]
+    )
