@@ -2,6 +2,7 @@ import pytest
 
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder, DatasetAnalysisResult
+from verisight.execution.claim_verification import ClaimOperation
 from verisight.execution.decisions import InvestigationAction, InvestigationDecision
 from verisight.execution.exceptions import QueryRuntimeError
 from verisight.execution.execution import QueryExecution
@@ -11,7 +12,10 @@ from verisight.execution.investigation import (
 )
 from verisight.execution.investigation_compaction import InvestigationCompaction
 from verisight.execution.investigation_prompting import InvestigationPromptBuilder
-from verisight.execution.investigation_result import InvestigationStatus
+from verisight.execution.investigation_result import (
+    ClaimOutputContract,
+    InvestigationStatus,
+)
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
 from verisight.execution.orchestration import InvestigationOrchestrator
@@ -220,10 +224,12 @@ def test_remaining_steps_reject_invalid_budgets(remaining: int) -> None:
 
 
 def test_remaining_steps_consume_successes_and_failures_without_mutation() -> None:
+    contract = ClaimOutputContract((ClaimOperation.DIFFERENCE,))
     initial = InvestigationState(
         question="Compare before and after.",
         analysis=_build_analysis_result(),
         remaining_steps=2,
+        claim_output_contract=contract,
     )
     observation = QueryObservation(
         question="Measure before.",
@@ -244,6 +250,10 @@ def test_remaining_steps_consume_successes_and_failures_without_mutation() -> No
     assert exhausted.failed_attempts == (failure,)
     assert exhausted.add_observation(observation).remaining_steps == 0
     assert exhausted.add_failed_attempt(failure).remaining_steps == 0
+
+    assert initial.claim_output_contract is contract
+    assert observed.claim_output_contract is contract
+    assert exhausted.claim_output_contract is contract
 
 
 @pytest.mark.parametrize("remaining", [2, 1, 0])

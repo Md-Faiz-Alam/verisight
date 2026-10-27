@@ -23,7 +23,10 @@ from verisight.execution.generative_repair import GenerativeQueryRepairer
 from verisight.execution.investigation_parsing import (
     INVESTIGATION_DECISION_JSON_SCHEMA,
 )
-from verisight.execution.investigation_result import InvestigationResult
+from verisight.execution.investigation_result import (
+    ClaimOutputContract,
+    InvestigationResult,
+)
 from verisight.execution.investigator import Investigator
 from verisight.execution.models import QueryResult
 from verisight.execution.orchestration import InvestigationOrchestrator
@@ -268,6 +271,7 @@ class VeriSight:
         *,
         max_steps: int = 5,
         population: tuple[PopulationFilter, ...] = (),
+        claim_output_contract: ClaimOutputContract | None = None,
     ) -> InvestigationResult:
         """Run a bounded autonomous investigation against dataset files."""
 
@@ -316,6 +320,7 @@ class VeriSight:
             max_steps=max_steps,
             timeout_seconds=self._settings.max_investigation_seconds,
             population=population,
+            claim_output_contract=claim_output_contract,
         )
 
         return orchestrator.investigate(

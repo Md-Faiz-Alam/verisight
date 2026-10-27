@@ -217,7 +217,11 @@ def _run(
         file=sys.stderr,
     )
     result: InvestigationResult = app.investigate(
-        args.paths, args.question, max_steps=args.max_steps, population=population
+        args.paths,
+        args.question,
+        max_steps=args.max_steps,
+        population=population,
+        claim_output_contract=contract,
     )
     assessment = None if contract is None else result.assess_output(contract)
     report: dict[str, object] = {

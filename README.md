@@ -129,10 +129,13 @@ verisight investigate transactions.csv --question "Return the net posted amount 
 ```
 
 Repeat `--require-claim` once per required claim. The selected contract appears
-in previews and final reports. It is checked after generation without rewriting
-the question, removing extra claims, or making another model call. Put the
-desired output in the question too. A rejected contract preserves the original
-workflow status and evidence. Acceptance does not validate SQL meaning.
+in previews and final reports and is passed to structured synthesis. A nonempty
+response with the wrong claim count or operations uses the existing single
+format-repair attempt. Claims are never silently removed. Empty claims remain
+allowed when evidence is insufficient, but cannot pass a nonempty contract.
+The final assessment makes no model calls and does not rewrite the result.
+State the intended output in the question too. Acceptance does not validate
+SQL meaning, and successful repair is not guaranteed.
 
 Add `--output report.json` to profile, preview, or investigation commands to
 explicitly export JSON. The parent directory must exist; existing files are never

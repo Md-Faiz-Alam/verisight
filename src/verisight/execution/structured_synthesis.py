@@ -2,6 +2,7 @@
 
 import json
 import re
+from collections import Counter
 from decimal import Decimal, DecimalException
 from typing import Any, Literal
 
@@ -118,6 +119,7 @@ class _SynthesisFormatError(InvestigationError):
             "invalid_json",
             "invalid_schema_or_claim",
             "unlinked_narrative_number",
+            "claim_output_contract_mismatch",
         ],
     ) -> None:
         self.reason = reason
@@ -241,6 +243,21 @@ class StructuredInvestigationSynthesizer:
                 "rows cannot be answered from the restricted relation. These filters "
                 "do not establish that the user's intended meaning was captured.\n"
             )
+        if state.claim_output_contract is not None:
+            instructions += (
+                "CALLER-SELECTED CLAIM OUTPUT CONTRACT (application policy):\n"
+                + json.dumps(
+                    to_jsonable(state.claim_output_contract), separators=(",", ":")
+                )
+                + "\nFor nonempty claims, match this exact operation multiset, "
+                "including count and repetitions. Order is irrelevant. "
+                "Do not add component claims or their numerical values to the "
+                "conclusion when only the final metric is requested. "
+                "If evidence is insufficient, explain the limitation and return "
+                "empty claims; never invent claims to fill this contract. Empty "
+                "claims will not pass the final output assessment. This policy "
+                "does not establish task semantics or numerical support.\n"
+            )
         prompt = self._budget.enforce(
             instructions
             + "RESPONSE SCHEMA:\n"
@@ -252,7 +269,7 @@ class StructuredInvestigationSynthesizer:
         )
         response = self._generate(prompt)
         try:
-            return self._check_narrative(self._parse_response(response), state.question)
+            return self._check_response(self._parse_response(response), state)
         except _SynthesisFormatError as exc:
             feedback = json.dumps({"validation_error": exc.reason})
 
@@ -270,8 +287,22 @@ class StructuredInvestigationSynthesizer:
             "numerical assertion and explain the missing evidence. "
             "The rejected response is intentionally omitted.\n"
         )
-        return self._check_narrative(
-            self._parse_response(self._generate(repair_prompt)), state.question
+        return self._check_response(
+            self._parse_response(self._generate(repair_prompt)), state
+        )
+
+    @staticmethod
+    def _check_response(
+        synthesis: StructuredSynthesis, state: InvestigationState
+    ) -> StructuredSynthesis:
+        """Check explicit claim shape without forcing unsupported assertions."""
+        contract = state.claim_output_contract
+        if contract is not None and synthesis.claims:
+            operations = tuple(claim.operation for claim in synthesis.claims)
+            if Counter(operations) != Counter(contract.operations):
+                raise _SynthesisFormatError("claim_output_contract_mismatch")
+        return StructuredInvestigationSynthesizer._check_narrative(
+            synthesis, state.question
         )
 
     @staticmethod

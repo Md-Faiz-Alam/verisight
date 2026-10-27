@@ -1,6 +1,7 @@
 """Domain models for autonomous analytical investigations."""
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.execution.context import (
@@ -10,6 +11,9 @@ from verisight.execution.context import (
 )
 from verisight.execution.execution import QueryRepairAttempt
 from verisight.execution.observations import QueryObservation
+
+if TYPE_CHECKING:
+    from verisight.execution.investigation_result import ClaimOutputContract
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +39,9 @@ class InvestigationState:
     analysis: DatasetAnalysisResult
     population: tuple[PopulationFilter, ...] = field(default=(), kw_only=True)
     remaining_steps: int | None = field(default=None, kw_only=True)
+    claim_output_contract: "ClaimOutputContract | None" = field(
+        default=None, kw_only=True
+    )
     observations: tuple[QueryObservation, ...] = ()
     failed_attempts: tuple[FailedQueryAttempt, ...] = ()
 
@@ -76,6 +83,7 @@ class InvestigationState:
             question=self.question,
             analysis=self.analysis,
             population=self.population,
+            claim_output_contract=self.claim_output_contract,
             remaining_steps=(
                 None
                 if self.remaining_steps is None
@@ -95,6 +103,7 @@ class InvestigationState:
             question=self.question,
             analysis=self.analysis,
             population=self.population,
+            claim_output_contract=self.claim_output_contract,
             remaining_steps=(
                 None
                 if self.remaining_steps is None

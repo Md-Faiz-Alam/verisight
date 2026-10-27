@@ -364,6 +364,23 @@ The separate assessment retains the contract, actual operations, violations,
 grain, units, denominator, query order, semantic linkage, or narrative meaning.
 It is not a guarantee that prose reports only the intended final metric.
 
+The public `investigate()` method accepts an optional `claim_output_contract`.
+The CLI passes its selected contract through that parameter into the orchestrator
+and immutable investigation state. Observation and failed-attempt transitions
+preserve it. The structured synthesizer receives it as explicit application
+policy, separately from untrusted evidence. A nonempty claim list must match the
+exact operation multiset. A mismatch uses the existing single format-repair
+attempt with the safe `claim_output_contract_mismatch` category. Repair feedback
+omits the rejected response. Queries are not rerun, claims are not silently
+removed, and numerical contradictions do not trigger this shape repair.
+
+Empty claims remain permitted when evidence is insufficient; the nonempty final
+contract still rejects them. If shape repair fails, the investigation is
+incomplete with observations retained and synthesis failure metadata. Provider
+failures and the shared deadline keep their existing handling. Injected custom
+synthesizers receive the state but may ignore this generation policy; callers
+must still inspect the final assessment.
+
 The CLI accepts repeated `--require-claim` options. With a contract, successful
 exit requires both completion and acceptance; without it, exit remains
 workflow-based. Preview and final reports retain the selected contract. The

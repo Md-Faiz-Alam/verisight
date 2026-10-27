@@ -591,10 +591,18 @@ def test_cli_previews_output_contract_without_generation(
         ("supported", ["value", "value"], 1),
         ("contradicted", ["value"], 1),
         ("incomplete", ["value"], 1),
+        ("empty", ["value"], 1),
     ],
-    ids=["accepted", "wrong-operation", "wrong-count", "contradicted", "incomplete"],
+    ids=[
+        "accepted",
+        "wrong-operation",
+        "wrong-count",
+        "contradicted",
+        "incomplete",
+        "empty",
+    ],
 )
-def test_cli_enforces_selected_output_contract_without_additional_calls(
+def test_cli_enforces_selected_output_contract_with_bounded_shape_repair(
     source: Path,
     population: Path,
     tmp_path: Path,
@@ -617,18 +625,41 @@ def test_cli_enforces_selected_output_contract_without_additional_calls(
     ]
     for operation in required:
         arguments.extend(["--require-claim", operation])
+    generation_responses = responses(mode)
+    shape_mismatch = required != ["value"]
+    if shape_mismatch:
+        generation_responses.append(generation_responses[-1])
+    if mode == "empty":
+        generation_responses[-1] = json.dumps(
+            {
+                "conclusion": "Insufficient evidence for the requested metric.",
+                "claims": [],
+            }
+        )
     with patch(
         "verisight.execution.gemini.GeminiTextGenerationClient.generate",
-        side_effect=responses(mode),
+        side_effect=generation_responses,
     ) as generate:
         assert main(arguments) == expected_code
-    assert generate.call_count == (3 if mode == "incomplete" else 4)
+    assert generate.call_count == (
+        3 if mode == "incomplete" else 4 + int(shape_mismatch)
+    )
+    if mode != "incomplete":
+        assert (
+            "CALLER-SELECTED CLAIM OUTPUT CONTRACT"
+            in generate.call_args_list[3].args[0]
+        )
+    if shape_mismatch:
+        assert (
+            '"validation_error": "claim_output_contract_mismatch"'
+            in generate.call_args.args[0]
+        )
     report = json.loads(capsys.readouterr().out)
     assert report["request"]["claim_output_contract"]["operations"] == required
     assert report["claim_output_assessment"]["accepted"] is (expected_code == 0)
     assert report["claim_output_assessment"]["task_semantics_verified"] is False
     assert report["workflow_status"] == (
-        "incomplete" if mode == "incomplete" else "complete"
+        "incomplete" if mode == "incomplete" or shape_mismatch else "complete"
     )
     assert report["investigation"]["observations"][0]["result"]["rows"] == [[30]]
     assert json.loads(output.read_text(encoding="utf-8")) == report
@@ -649,3 +680,125 @@ def test_cli_rejects_unknown_claim_operations_before_work(source: Path) -> None:
         )
     assert caught.value.code == 2
     app.assert_not_called()
+
+
+@pytest.mark.parametrize("recover", [False, True])
+def test_cli_repairs_extra_claims_using_the_selected_difference_contract(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], recover: bool
+) -> None:
+    source = tmp_path / "measurements.csv"
+    source.write_text(
+        "period,state,amount\nbefore,accepted,40\nbefore,accepted,60\n"
+        "after,accepted,90\nafter,accepted,60\nafter,rejected,999\n"
+        "other,accepted,700\n",
+        encoding="utf-8",
+    )
+    before = {"observation_index": 0, "row_index": 0, "column": "total"}
+    after = {"observation_index": 1, "row_index": 0, "column": "total"}
+    difference = {
+        "operation": "difference",
+        "expected": "50",
+        "left": after,
+        "right": before,
+    }
+    rejected = json.dumps(
+        {
+            "conclusion": (
+                "Private rejected output: before 100, after 150, difference 50."
+            ),
+            "claims": [
+                {
+                    "operation": "value",
+                    "expected": "100",
+                    "left": before,
+                    "right": None,
+                },
+                {"operation": "value", "expected": "150", "left": after, "right": None},
+                difference,
+            ],
+        }
+    )
+    repaired = json.dumps(
+        {"conclusion": "The difference is 50.", "claims": [difference]}
+    )
+    generation_responses = [
+        json.dumps(
+            {
+                "action": "investigate",
+                "reasoning": "Measure",
+                "question": "Measure before",
+            }
+        ),
+        (
+            "SELECT SUM(amount) AS total FROM measurements "
+            "WHERE state = 'accepted' AND period = 'before'"
+        ),
+        json.dumps(
+            {
+                "action": "investigate",
+                "reasoning": "Compare",
+                "question": "Measure after",
+            }
+        ),
+        (
+            "SELECT SUM(amount) AS total FROM measurements "
+            "WHERE state = 'accepted' AND period = 'after'"
+        ),
+        json.dumps({"action": "finish", "reasoning": "Done", "question": None}),
+        rejected,
+        repaired if recover else rejected,
+    ]
+    question = (
+        "Measure before then after in separate queries; report only their difference."
+    )
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=generation_responses,
+    ) as generate:
+        code = main(
+            [
+                "investigate",
+                str(source),
+                "--question",
+                question,
+                "--max-steps",
+                "2",
+                "--require-claim",
+                "difference",
+                "--allow-llm-data-disclosure",
+            ]
+        )
+    report = json.loads(capsys.readouterr().out)
+    investigation = report["investigation"]
+    assert generate.call_count == 7
+    assert [item["result"]["rows"] for item in investigation["observations"]] == [
+        [[100]],
+        [[150]],
+    ]
+    assert [item["question"] for item in investigation["observations"]] == [
+        "Measure before",
+        "Measure after",
+    ]
+    assert report["request"]["question"] == question
+    assert report["claim_output_assessment"]["accepted"] is recover
+    assert report["claim_output_assessment"]["task_semantics_verified"] is False
+    assert code == (0 if recover else 1)
+    repair_prompt = generate.call_args.args[0]
+    assert '"validation_error": "claim_output_contract_mismatch"' in repair_prompt
+    assert "Private rejected output" not in repair_prompt
+    assert "CALLER-SELECTED CLAIM OUTPUT CONTRACT" in repair_prompt
+    if recover:
+        assert report["workflow_status"] == "complete"
+        claims = investigation["verified_claims"]
+        assert len(claims) == 1
+        assert claims[0]["claim"]["operation"] == "difference"
+        assert claims[0]["claim"]["left"] == after
+        assert claims[0]["claim"]["right"] == before
+        assert claims[0]["verification"]["actual"] == "50"
+        assert claims[0]["verification"]["status"] == "supported"
+        assert investigation["synthesis_failure"] is None
+    else:
+        assert report["workflow_status"] == "incomplete"
+        assert investigation["verified_claims"] == []
+        assert investigation["synthesis_failure"]["kind"] == "synthesis_error"
+        assert investigation["investigation_failure"] is None

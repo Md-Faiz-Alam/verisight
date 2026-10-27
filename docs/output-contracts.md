@@ -26,8 +26,12 @@ An incomplete result or an empty claim list cannot satisfy a nonempty contract.
 from verisight.execution.claim_verification import ClaimOperation
 from verisight.execution.investigation_result import ClaimOutputContract
 
-# result is the InvestigationResult returned by app.investigate(...).
 contract = ClaimOutputContract((ClaimOperation.DIFFERENCE,))
+result = app.investigate(
+    paths,
+    question,
+    claim_output_contract=contract,
+)
 assessment = result.assess_output(contract)
 if not assessment.accepted:
     print(assessment.violations)
@@ -51,9 +55,26 @@ Repeat `--require-claim` once per required claim. For example, two occurrences
 of `--require-claim value` require exactly two VALUE claims. `--preview` shows
 the selected contract without generation.
 
-The option adds a post-generation acceptance check; it does not rewrite the
-question or send an additional instruction to the model. State the intended
-output in the question as well. A contract rejection does not trigger a retry.
+The option passes the selected contract into investigation state and structured
+synthesis, without rewriting the question. State the intended output in the
+question as well. The synthesizer receives the contract as application policy,
+separately from untrusted evidence. A nonempty response with the wrong operation
+multiset or claim count uses the existing single format-repair attempt. Feedback
+contains the safe `claim_output_contract_mismatch` category and the original
+evidence, not the rejected response. There is no additional repair loop, query
+retry, or silent removal of claims.
+
+If evidence is insufficient, empty claims remain allowed; they cannot pass a
+nonempty output contract. The system does not force a numerical assertion to
+fill the required count. Repeated shape failure produces an incomplete result
+with SQL observations retained and synthesis failure metadata. Numerical
+contradictions do not trigger shape repair. Provider failures and the shared
+deadline retain their existing handling.
+
+Final `assess_output()` remains a separate deterministic check with no model
+calls. A rejection there does not trigger further generation. Custom injected
+synthesizers receive the contract in state but can ignore its generation policy;
+consumers must still check the final assessment.
 
 The report retains `workflow_status`, the complete investigation evidence,
 `request.claim_output_contract`, and `claim_output_assessment`. With a selected

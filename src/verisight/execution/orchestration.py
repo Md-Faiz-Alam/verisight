@@ -21,6 +21,7 @@ from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.incomplete_evidence import IncompleteEvidenceError
 from verisight.execution.investigation import FailedQueryAttempt, InvestigationState
 from verisight.execution.investigation_result import (
+    ClaimOutputContract,
     InvestigationFailure,
     InvestigationResult,
     InvestigationStatus,
@@ -51,6 +52,7 @@ class InvestigationOrchestrator:
         max_steps: int = 5,
         timeout_seconds: float = 300.0,
         population: tuple[PopulationFilter, ...] = (),
+        claim_output_contract: ClaimOutputContract | None = None,
     ) -> None:
         """Initialize the investigation orchestrator."""
 
@@ -61,6 +63,7 @@ class InvestigationOrchestrator:
             raise ValueError("Investigation timeout must be finite and positive.")
 
         self._population = population
+        self._claim_output_contract = claim_output_contract
         self._timeout_seconds = timeout_seconds
         self._execution_service = execution_service
         self._investigator = investigator
@@ -98,6 +101,7 @@ class InvestigationOrchestrator:
             analysis=analysis,
             population=self._population,
             remaining_steps=self._max_steps,
+            claim_output_contract=self._claim_output_contract,
         )
         attempted_questions: set[str] = set()
         attempt_count = 0

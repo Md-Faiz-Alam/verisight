@@ -105,11 +105,14 @@ implementation documentation. No newly invented metadata or inferred review
 status substitutes for evidence.
 
 Implemented subset: the CLI separates workflow, population, numerical statements,
-unverified prose, and SQL evidence. With `--require-claim`, it rejects unmet typed
-claim output requirements without deleting evidence or retrying generation.
-The assessment is not inferred from the question and does not certify the whole
-task. Remaining acceptance work concerns interpretation, meaningful review of
-procedures, and unfamiliar-data evidence. See [Output contracts](output-contracts.md).
+unverified prose, and SQL evidence. With `--require-claim`, it supplies the typed
+contract to structured synthesis and rejects unmet requirements in the final
+assessment. Nonempty claim-shape mismatches use the existing single format-repair
+attempt; evidence is not deleted and queries are not rerun. The final assessment
+itself makes no model calls. It is not inferred from the question and does not
+certify the whole task. Remaining acceptance work concerns interpretation,
+meaningful review of procedures, and unfamiliar-data evidence. See
+[Output contracts](output-contracts.md).
 
 ## 2. Validate the implemented local workflow
 

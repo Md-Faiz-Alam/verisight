@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ from verisight.analysis.result import AnalysisResultBuilder
 from verisight.config import Settings
 from verisight.exceptions import ConfigurationError
 from verisight.execution.claim_verification import (
+    ClaimOperation,
     NumericalClaimVerifier,
     VerificationStatus,
 )
@@ -18,6 +20,7 @@ from verisight.execution.exceptions import InvestigationError
 from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import (
+    ClaimOutputContract,
     InvestigationStatus,
     SynthesisFailureKind,
 )
@@ -984,3 +987,44 @@ def test_narrative_linkage_does_not_certify_unsupported_token_syntax() -> None:
     assert synthesis.conclusion == "The label is 1,23."
     assert synthesis.claims == ()
     assert len(client.prompts) == 1
+
+
+@pytest.mark.parametrize(
+    ("required", "returned", "matches"),
+    [
+        (("value", "difference"), ("difference", "value"), True),
+        (("value", "value"), ("value",), False),
+        (("value", "difference"), ("value", "value"), False),
+    ],
+    ids=["order-independent", "multiplicity", "operation-mismatch"],
+)
+def test_synthesis_enforces_the_exact_selected_operation_multiset(
+    required: tuple[str, ...], returned: tuple[str, ...], matches: bool
+) -> None:
+    contract = ClaimOutputContract(tuple(ClaimOperation(item) for item in required))
+    state = replace(_build_state(), claim_output_contract=contract)
+    claims = []
+    for operation in returned:
+        claim = _claim()
+        if operation == "difference":
+            claim = {
+                **claim,
+                "operation": "difference",
+                "expected": "0",
+                "right": claim["left"],
+            }
+        claims.append(claim)
+    client = _Client(_response(claims))
+    synthesizer = StructuredInvestigationSynthesizer(client)
+    if matches:
+        synthesis = synthesizer.synthesize(state)
+        assert tuple(claim.operation.value for claim in synthesis.claims) == returned
+        assert len(client.prompts) == 1
+    else:
+        with pytest.raises(InvestigationError, match="response is invalid"):
+            synthesizer.synthesize(state)
+        assert len(client.prompts) == 2
+        assert (
+            '"validation_error": "claim_output_contract_mismatch"' in client.prompts[1]
+        )
+    assert "CALLER-SELECTED CLAIM OUTPUT CONTRACT" in client.prompts[0]
