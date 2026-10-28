@@ -247,6 +247,64 @@ replay can show that the gate rejects the recorded extra claims; it is not a
 new provider run or proof that generation now satisfies the contract. Do not
 retroactively rewrite report outcomes or assign new CLI exit codes to old runs.
 
+## Reviewed local contract diagnostics and synthesis replay
+
+The following checkpoints summarize reviewed Windows terminal output from
+October 27–28, 2026. Their original reports, logs, and replay record remain in
+the local temporary validation directories; those raw artifacts are not
+committed with this summary. This section is a transcription of reviewed
+results, not a replacement for those artifacts or a complete request trace.
+The frozen synthetic task comes from `reservoir_two_queries` in the existing
+[fixed CLI batch](../reports/evaluations/fixed-cli-batch-20261024.json).
+
+The task requests separate before and after queries, accepted readings only,
+other periods excluded, and exactly one final DIFFERENCE claim. Independent
+CSV arithmetic gives before `100`, after `150`, and after minus before `50`
+litres. The fixture's UTF-8 LF byte SHA-256 is
+`92e923a4e027cdde97e90df27db66718d71e93c45c3e2d1fbae047cbcaf5ff7f`.
+These checkpoints used `gemini-3.1-flash-lite`, no caller-selected population,
+a DIFFERENCE output contract, request timeout 60 seconds, and shared budget
+120 seconds. Full investigations allowed two analytical attempts; the replay
+below performed no investigation decisions, planning, or SQL execution.
+
+| Tested revision | Validation path | Observed outcome | Elapsed seconds |
+| --- | --- | --- | --- |
+| `bfba4ce` | Full CLI investigation | Correct ordered totals and supported difference, but three claims; output contract rejected, exit 1 | `76.164` |
+| `aa6f51b` | Full CLI recheck | Correct ordered totals; incomplete with generic synthesis error and no claims, exit 1; terminal validation category unavailable | `42.314` |
+| `001bb56` | Full CLI diagnostic recheck | Correct ordered totals; repaired synthesis failed `unlinked_narrative_number`, with `repair_attempted=true`; no claims, exit 1 | `49.859` |
+| `a89ba7d` | Full CLI recheck | Only before `100` retained; investigation budget exhausted, no final claims, exit 1 | `122.209` |
+| `a89ba7d` | Separate CLI invocation with telemetry | First investigator generation returned no text after two provider attempts; `provider_unavailable`, exit 1 | `11.729` |
+| `3c60ea1` | Synthesis-only retained-evidence replay | One supported DIFFERENCE claim `50`, correct after-minus-before references, final-only numerical conclusion, output assessment accepted | `16.862` |
+
+The two `a89ba7d` attempts are distinct. The telemetry attempt recorded one
+investigator call lasting `9.693` seconds, including its two provider attempts.
+It does not explain the preceding run's timeout. An `operation_error` report
+has no request payload: comparing its missing request with the submitted one
+does not establish that the submitted request changed. Missing failure fields
+in the earlier deadline result do not identify which stage consumed its budget.
+
+The successful replay at full revision
+`3c60ea18392f7e208e5b2bda6596ace7cb008572` reused the two retained observations
+from the `001bb56` run. It loaded the verified synthetic input for offline
+analysis and supplied the original question and selected output contract to the
+configured structured synthesizer. The retained SQL was not rerun. The replay
+checked the referenced values against independent CSV arithmetic.
+
+Telemetry recorded exactly one `structured_synthesis` generation call, one
+provider attempt, `returned_text=true`, and `16.860` call seconds. No format
+repair was needed. Its single claim referenced observation index 1 (after) as
+left and observation index 0 (before) as right; actual and expected were `50`
+at zero tolerance. The conclusion reported only `50` litres. The assessment
+had no violations and retained `task_semantics_verified=false`. This standalone
+replay did not invoke the CLI and has no CLI exit-code claim.
+
+This is one successful live synthesis from known development evidence. It does
+not establish end-to-end investigation success, live format-repair effectiveness,
+repeatable compliance, unfamiliar-data accuracy, or a causal effect of the
+implementation change. Preserve all preceding failures; do not pool these
+different revisions and invocation paths into a success rate. Further changes
+to synthesis are not justified solely by this successful replay.
+
 ## Scorer, output acceptance, and semantic review
 
 `score_result()` requires a complete result with exactly one supported VALUE
