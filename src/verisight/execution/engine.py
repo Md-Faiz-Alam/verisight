@@ -20,6 +20,7 @@ from verisight.execution.deadline import (
     remaining_seconds,
 )
 from verisight.execution.exceptions import (
+    QueryDataBindingError,
     QueryResultLimitError,
     QueryRuntimeError,
     QueryTimeoutError,
@@ -294,7 +295,7 @@ class DuckDBExecutor:
 
             decimals = [Decimal(str(value)) for value in values]
             if not all(value.is_finite() for value in decimals):
-                raise QueryRuntimeError(
+                raise QueryDataBindingError(
                     "Object-backed numerical data must be finite for exact SQL binding."
                 )
             decimals = [value if value else Decimal(0) for value in decimals]
@@ -305,7 +306,7 @@ class DuckDBExecutor:
             )
             precision = max(1, integer_digits + scale)
             if precision > 38:
-                raise QueryRuntimeError(
+                raise QueryDataBindingError(
                     "Object-backed numerical data exceeds DuckDB's exact "
                     "decimal precision limit of 38 digits."
                 )

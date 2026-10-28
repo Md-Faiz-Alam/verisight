@@ -4,6 +4,7 @@ import json
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import MagicMock
 from uuid import UUID
 
 import pandas as pd
@@ -14,7 +15,11 @@ from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder, DatasetAnalysisResult
 from verisight.config import Settings
 from verisight.error_reporting import ErrorCode
-from verisight.execution.exceptions import QueryRuntimeError, QueryValidationError
+from verisight.execution.exceptions import (
+    QueryDataBindingError,
+    QueryRuntimeError,
+    QueryValidationError,
+)
 from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
 from verisight.execution.generative_synthesis import (
@@ -328,6 +333,7 @@ def test_csv_preserves_fractional_digits_lost_by_float_conversion(
     "values",
     [
         [Decimal("1e-38"), Decimal(0)],
+        [Decimal("9" * 38), Decimal(0)],
         [Decimal("1.2300"), Decimal("0.5")],
         [2**100, 0],
         [0.1, 0.2],
@@ -360,14 +366,50 @@ def test_explicit_decimal_binding_preserves_object_backed_numbers(
 
 
 @pytest.mark.parametrize("value", [Decimal("1e38"), Decimal("1e-39"), float("inf")])
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT value FROM observations",
+        "SELECT safe_value FROM observations",
+        "SELECT COUNT(*) FROM observations",
+    ],
+    ids=["numeric-column", "unrelated-column", "row-count"],
+)
 def test_exact_sql_binding_rejects_unsupported_precision_or_nonfinite_values(
     value: Decimal | float,
+    query: str,
 ) -> None:
     dataset = _dataset()
-    dataset.tables[0].data = pd.DataFrame({"value": pd.Series([value], dtype=object)})
+    dataset.tables[0].data = pd.DataFrame(
+        {"value": pd.Series([value], dtype=object), "safe_value": [7]}
+    )
+    original = dataset.tables[0].data.copy(deep=True)
 
-    with pytest.raises(QueryRuntimeError, match="Object-backed numerical data"):
-        AnalyticalExecutionService(dataset).execute("SELECT value FROM observations")
+    class Planner:
+        def plan(self, request: QueryRequest) -> QueryPlan:
+            return QueryPlan(request.question, query)
+
+    repairer = MagicMock()
+    repairer.repair.side_effect = AssertionError(
+        "Binding errors must not invoke SQL repair."
+    )
+    service = AnalyticalExecutionService(dataset, planner=Planner(), repairer=repairer)
+    with pytest.raises(
+        QueryDataBindingError, match="Object-backed numerical data"
+    ) as caught:
+        service.execute(query)
+    assert isinstance(caught.value, QueryRuntimeError)
+    with pytest.raises(QueryDataBindingError):
+        service.run("Read the synthetic measurements.")
+    public = run_public_operation(
+        lambda: service.run("Read the synthetic measurements.")
+    )
+    assert public.error is not None
+    assert public.error.code is ErrorCode.QUERY_RUNTIME_ERROR
+    assert public.error.message == "The analytical query could not be executed."
+    assert public.value is None
+    repairer.repair.assert_not_called()
+    pd.testing.assert_frame_equal(dataset.tables[0].data, original)
 
 
 def test_large_integer_outside_sampling_range_remains_exact(tmp_path: Path) -> None:

@@ -9,6 +9,7 @@ from verisight.execution.context import (
 from verisight.execution.deadline import InvestigationDeadlineExceeded
 from verisight.execution.engine import DuckDBExecutor
 from verisight.execution.exceptions import (
+    QueryDataBindingError,
     QueryExecutionError,
     QueryPlanningError,
     QueryRuntimeError,
@@ -120,6 +121,9 @@ class AnalyticalExecutionService:
 
         try:
             result = self.execute(plan.sql)
+        except QueryDataBindingError:
+            # Changing SQL cannot repair source numeric registration limits.
+            raise
         except QueryRuntimeError as exc:
             return self._repair_and_run(
                 question=question,

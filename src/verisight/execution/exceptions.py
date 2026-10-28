@@ -15,6 +15,14 @@ class QueryRuntimeError(QueryExecutionError):
     """Raised when an allowed analytical query fails during execution."""
 
 
+class QueryDataBindingError(QueryRuntimeError):
+    """Raised when source numeric data cannot be bound exactly for SQL.
+
+    SQL repair cannot resolve this registration failure. Preserve the existing
+    runtime-error inheritance for callers and public error classification.
+    """
+
+
 class QueryResultLimitError(QueryExecutionError):
     """Raised when an analytical query exceeds the allowed result size."""
 
@@ -59,10 +67,8 @@ class SynthesisValidationError(InvestigationError):
             raise ValueError("Unsupported synthesis validation category.")
         if type(repair_attempted) is not bool:
             raise ValueError("Synthesis repair flag must be a boolean.")
-
         self.reason: SynthesisValidationReason = reason
         self.repair_attempted: bool = repair_attempted
-
         message = (
             "Structured synthesis response is too large."
             if reason == "response_too_large"

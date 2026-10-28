@@ -52,6 +52,16 @@ precision above 38 digits raise a query runtime error. Native float columns keep
 their existing floating-point semantics, and digits lost before ingestion cannot
 be recovered. These protections do not make every SQL operation exact.
 
+Explicit numeric binding failures raise `QueryDataBindingError`, a subtype of
+`QueryRuntimeError`. The execution service propagates these failures without
+calling the SQL repairer; changing SQL cannot change source registration limits.
+Public reports retain the existing safe `query_runtime_error` code and message.
+All supplied tables are registered before execution, so an unsupported numeric
+column can prevent even an unrelated-column query or row count. This correction
+does not remove that limit, silently round values, reject the source at ingestion,
+or change the caller's loaded data. Other runtime SQL errors retain their
+existing bounded repair path. Planning can still occur before binding fails.
+
 JSON parsing rejects duplicate keys and nonstandard NaN/infinity constants.
 Integers retain their source values; decimal tokens use a Decimal fallback when
 ordinary float conversion changes the decimal string value. Supported tabular
