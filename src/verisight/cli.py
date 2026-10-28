@@ -156,14 +156,23 @@ def _population(path: Path | None) -> tuple[PopulationFilter, ...]:
 
 def _csv_options(args: argparse.Namespace) -> dict[Path, CsvReadOptions]:
     """Resolve per-file declarations against the requested input paths."""
-    available = {path.expanduser().resolve() for path in args.paths}
+
+    def resolve_input(path: Path) -> Path:
+        try:
+            return path.expanduser().resolve()
+        except (OSError, RuntimeError, ValueError):
+            raise argparse.ArgumentTypeError(
+                "Could not resolve an input path for CSV parsing options."
+            ) from None
+
+    available = {resolve_input(path) for path in args.paths}
     declarations: dict[Path, dict[str, str]] = {}
     for field, entries in (
         ("encoding", args.csv_encoding),
         ("delimiter", args.csv_delimiter),
     ):
         for raw_path, value in entries or ():
-            path = Path(raw_path).expanduser().resolve()
+            path = resolve_input(Path(raw_path))
             if path not in available or path.suffix.lower() != ".csv":
                 raise argparse.ArgumentTypeError(
                     "CSV parsing options must name a supplied .csv input path."

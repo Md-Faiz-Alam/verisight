@@ -15,6 +15,14 @@ from verisight.ingestion.loaders.json import JsonLoader
 from verisight.ingestion.models import CsvReadOptions, IngestionResult
 
 
+def _resolve_csv_path(path: str | Path) -> Path:
+    """Classify expected filesystem failures during CSV option matching."""
+    try:
+        return Path(path).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise FileValidationError("Could not resolve a CSV input path.") from exc
+
+
 class IngestionLoader(Protocol):
     """Interface required by the file loader registry."""
 
@@ -47,7 +55,7 @@ class FileLoader:
                     raise FileValidationError(
                         "CSV option values must be CsvReadOptions objects."
                     )
-                resolved = Path(path).expanduser().resolve()
+                resolved = _resolve_csv_path(path)
                 if resolved.suffix.lower() != ".csv":
                     raise FileValidationError("CSV options require a .csv input path.")
                 if resolved in self._csv_options:
@@ -88,6 +96,6 @@ class FileLoader:
         if isinstance(loader, CsvLoader):
             return loader.load(
                 file_path,
-                options=self._csv_options.get(file_path.resolve()),
+                options=self._csv_options.get(_resolve_csv_path(file_path)),
             )
         return loader.load(file_path)

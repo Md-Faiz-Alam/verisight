@@ -221,3 +221,27 @@ def test_public_facade_applies_distinct_csv_choices_and_retains_sources(
     assert [
         (item.csv_encoding, item.csv_delimiter) for item in analysis.analysis.sources
     ] == [("shift_jis", ";"), ("utf-8", ",")]
+
+
+@pytest.mark.parametrize("error_type", [OSError, RuntimeError, ValueError])
+@pytest.mark.parametrize("operation", ["configure", "load"])
+def test_csv_path_resolution_errors_are_classified(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[Exception],
+    operation: str,
+) -> None:
+    source = tmp_path / "source.csv"
+    source.write_text("value\n1\n", encoding="utf-8")
+    settings = Settings(allow_llm_data_disclosure=False)
+
+    def fail_resolution(self: Path, strict: bool = False) -> Path:
+        raise error_type("private filesystem detail")
+
+    with monkeypatch.context() as context:
+        context.setattr(Path, "resolve", fail_resolution)
+        with pytest.raises(FileValidationError, match="Could not resolve"):
+            if operation == "configure":
+                FileLoader(settings, csv_options={source: CsvReadOptions()})
+            else:
+                FileLoader(settings).load(source)

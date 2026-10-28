@@ -926,3 +926,31 @@ def test_cli_rejects_invalid_csv_choices_before_generation(
     assert raised.value.code == 2
     generate.assert_not_called()
     assert "error:" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("error_type", [OSError, RuntimeError, ValueError])
+@pytest.mark.parametrize("location", ["input", "declaration"])
+def test_cli_classifies_csv_path_resolution_errors(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    error_type: type[Exception],
+    location: str,
+) -> None:
+    source = tmp_path / "source.csv"
+    arguments = ["profile", str(source)]
+    failures: list[object] = [error_type("private filesystem detail")]
+    if location == "declaration":
+        arguments += ["--csv-encoding", str(source), "utf-8"]
+        failures.insert(0, source)
+    with (
+        patch("pathlib.Path.resolve", side_effect=failures),
+        patch("verisight.cli._run") as run,
+        pytest.raises(SystemExit) as raised,
+    ):
+        main(arguments)
+    assert raised.value.code == 2
+    run.assert_not_called()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Could not resolve an input path" in captured.err
+    assert "private filesystem detail" not in captured.err
