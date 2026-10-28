@@ -298,12 +298,46 @@ at zero tolerance. The conclusion reported only `50` litres. The assessment
 had no violations and retained `task_semantics_verified=false`. This standalone
 replay did not invoke the CLI and has no CLI exit-code claim.
 
-This is one successful live synthesis from known development evidence. It does
-not establish end-to-end investigation success, live format-repair effectiveness,
-repeatable compliance, unfamiliar-data accuracy, or a causal effect of the
-implementation change. Preserve all preceding failures; do not pool these
-different revisions and invocation paths into a success rate. Further changes
-to synthesis are not justified solely by this successful replay.
+The synthesis-only replay established successful synthesis from retained
+development evidence. A subsequent full workflow through
+`verisight.cli.main()` at revision
+`58e22433eb5a0805a4a6cfacb8f19678e3b9b39a` completed successfully on
+October 28, 2026. The exported request matched the offline preview, and the
+CLI returned exit 0 after `75.753` seconds. Original reports and logs remain
+in the existing temporary validation root's `full-cli-58e2243` directory.
+
+Manual SQL review confirmed two separate queries in the requested order.
+Accepted before readings summed to `100`; accepted after readings summed
+to `150`. Both queries excluded rejected readings and other periods.
+Neither query required SQL repair.
+
+Exactly one supported DIFFERENCE claim referenced the after cell at
+observation index 1, column `sum(litres)`, minus the before cell at
+observation index 0, column `total_accepted_litres_before`. Actual and
+expected were `50` at zero tolerance. The conclusion contained only the
+final numerical difference in the context of accepted litres. Workflow
+status was complete, the output assessment had no violations, and both
+failure fields were null. The automatic assessment retained
+`task_semantics_verified=false`; task acceptance here also relies on
+manual review and independent fixture arithmetic.
+
+Telemetry recorded seven generation calls: three investigator calls, two
+generic text-generation calls, and two structured-synthesis calls. Every
+call returned text using one provider attempt. The synthesis calls lasted
+`3.328` and `2.754` seconds, consistent with successful completion through
+the existing bounded format-repair path. The rejected response and its
+validation category were not retained in the reviewed output, so the
+specific repair reason is unknown. The second generic text-generation
+call took `57.011` seconds and dominated elapsed time; this does not
+identify a transport or provider cause.
+
+This full run satisfies the requested task for one known synthetic
+development fixture. It does not establish repeatable compliance,
+unfamiliar-data accuracy, general semantic verification, or a causal
+effect of an implementation change. Preserve all preceding failures;
+do not pool different revisions and invocation paths into a success
+rate. This successful validation alone does not justify another runtime
+correction.
 
 ## Scorer, output acceptance, and semantic review
 
