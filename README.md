@@ -226,6 +226,55 @@ contain supported scalar cells; maps, lists, structs, and binary values are
 rejected before becoming observations. These protections do not establish
 support for arbitrary file formats, data sizes, or domain semantics.
 
+## CSV parsing choices
+
+Automatic CSV loading validates UTF-8 (with or without its BOM) or BOM-marked
+UTF-16. It no longer guesses CP1252 or Latin-1 after invalid UTF-8. Declare
+legacy encodings explicitly; a successful decode cannot establish the original
+encoding. Explicit encoding names use Python's installed codecs and strict
+decoding. Incorrect caller declarations can still produce incorrect text.
+
+Delimiter detection considers comma, semicolon, tab, and pipe in an 8,192-character
+sample. An inconclusive sample containing a possible separator, or reaching the
+sample limit, is rejected rather than silently treated as comma-separated.
+A short sample without any supported separator remains a single-column input.
+Detection is a convenience, not proof of the intended CSV dialect. Declare
+known delimiters explicitly, especially for long quoted or multiline fields.
+
+Both CLI commands accept per-file parsing options; repeat them for other inputs:
+
+```powershell
+verisight profile data.csv --csv-encoding data.csv cp1252 --csv-delimiter data.csv ";"
+verisight investigate data.csv --question "Describe this table" --preview --csv-encoding data.csv shift_jis --csv-delimiter data.csv ";"
+```
+
+Paths in these options must identify supplied CSV inputs. Declare an encoding
+or delimiter only once for each file. The same options work for live
+investigations; existing disclosure and model configuration requirements apply.
+
+The Python facade accepts independent choices for each input:
+
+```python
+from verisight import VeriSight
+from verisight.ingestion.models import CsvReadOptions
+
+app = VeriSight(
+    csv_options={
+        "data.csv": CsvReadOptions(encoding="shift_jis", delimiter=";"),
+    }
+)
+analysis = app.analyze(["data.csv", "other.csv"])
+```
+
+Unspecified files use automatic mode. Resolved file paths select options, so
+relative and absolute spellings of the same path match. Loaded source metadata
+records `csv_encoding` and `csv_delimiter`; deterministic analysis retains it
+in `analysis.analysis.sources`. CLI profiles and investigation reports expose
+this metadata under `profile.sources`. Explicit investigation declarations also
+appear in `request.csv_options`. Other formats leave CSV metadata fields null.
+This parsing contract does not certify analytical meaning or recover source
+text whose encoding was declared incorrectly.
+
 ## Gemini investigations
 
 Configure a local `.env` file or environment variables:

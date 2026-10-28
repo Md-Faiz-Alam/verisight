@@ -1,12 +1,13 @@
 """High-level ingestion services for VeriSight."""
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from verisight.config import Settings
 from verisight.ingestion.dispatcher import FileLoader
 from verisight.ingestion.models import (
+    CsvReadOptions,
     LoadedDataset,
     LoadedTable,
     LoadedWorkbook,
@@ -55,8 +56,13 @@ _RESERVED_RELATION_NAMES = frozenset(
 class DatasetLoader:
     """Load one or more files into a normalized dataset."""
 
-    def __init__(self, settings: Settings) -> None:
-        self._file_loader = FileLoader(settings)
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        csv_options: Mapping[str | Path, CsvReadOptions] | None = None,
+    ) -> None:
+        self._file_loader = FileLoader(settings, csv_options=csv_options)
 
     def load(self, paths: Iterable[str | Path]) -> LoadedDataset:
         """Load files and normalize their tables into one dataset."""
@@ -111,6 +117,6 @@ class DatasetLoader:
             normalized = f"table_{normalized}"
 
         if normalized in _RESERVED_RELATION_NAMES:
-            normalized = f"table_{normalized}"
+            return f"table_{normalized}"
 
         return normalized

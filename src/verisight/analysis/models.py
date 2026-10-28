@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from verisight.ingestion.models import SourceMetadata
 from verisight.ingestion.schema import DatasetSchema
 from verisight.profiling.models import DatasetProfile
 from verisight.quality.models import QualityIssue
@@ -14,6 +15,7 @@ class DatasetAnalysis:
     schema: DatasetSchema
     profile: DatasetProfile
     issues: tuple[QualityIssue, ...]
+    sources: tuple[SourceMetadata, ...] = ()
 
     @property
     def issue_count(self) -> int:

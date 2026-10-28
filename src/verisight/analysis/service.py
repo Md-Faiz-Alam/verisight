@@ -35,4 +35,5 @@ class DatasetAnalyzer:
             schema=schema,
             profile=profile,
             issues=tuple(issues),
+            sources=tuple(table.source for table in dataset.tables),
         )

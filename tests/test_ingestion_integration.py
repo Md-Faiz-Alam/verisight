@@ -10,6 +10,7 @@ from verisight.ingestion.exceptions import (
     FileValidationError,
     UnsupportedFileTypeError,
 )
+from verisight.ingestion.models import CsvReadOptions
 from verisight.ingestion.schema import LogicalType, SchemaInferer
 from verisight.ingestion.service import DatasetLoader
 
@@ -185,7 +186,8 @@ def test_csv_implicit_index_cannot_become_query_evidence(tmp_path: Path) -> None
     path = tmp_path / "measurements.csv"
     path.write_text("a,b\nprivate-key,10,900\n", encoding="utf-8")
     app = VeriSight(
-        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False)
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False),
+        csv_options={path: CsvReadOptions(delimiter=",")},
     )
 
     with pytest.raises(DataLoadError, match="Implicit row indexes") as caught:

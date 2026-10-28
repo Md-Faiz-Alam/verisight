@@ -13,7 +13,7 @@ from verisight.ingestion.exceptions import (
     FileValidationError,
     UnsupportedFileTypeError,
 )
-from verisight.ingestion.models import LoadedTable, LoadedWorkbook
+from verisight.ingestion.models import CsvReadOptions, LoadedTable, LoadedWorkbook
 from verisight.public_api import run_public_operation
 
 
@@ -178,3 +178,46 @@ def test_public_workflows_classify_invalid_dataset_entries(
     assert result.error.code is ErrorCode.FILE_VALIDATION_ERROR
     assert "private-data" not in repr(result)
     assert str(tmp_path) not in repr(result)
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        [],
+        {"": CsvReadOptions()},
+        {3: CsvReadOptions()},
+        {"a.csv": {}},
+        {"a.json": CsvReadOptions()},
+    ],
+)
+def test_csv_option_mapping_rejects_invalid_declarations(invalid: Any) -> None:
+    with pytest.raises(FileValidationError):
+        FileLoader(Settings(), csv_options=invalid)
+
+
+def test_csv_option_mapping_rejects_duplicate_resolved_paths(tmp_path: Path) -> None:
+    path = tmp_path / "sample.csv"
+    with pytest.raises(FileValidationError, match="duplicate resolved paths"):
+        FileLoader(
+            Settings(),
+            csv_options={path: CsvReadOptions(), str(path): CsvReadOptions()},
+        )
+
+
+def test_public_facade_applies_distinct_csv_choices_and_retains_sources(
+    tmp_path: Path,
+) -> None:
+    legacy = tmp_path / "legacy.csv"
+    legacy.write_bytes("name;amount\n東京;2\n".encode("shift_jis"))
+    utf8 = tmp_path / "utf8.csv"
+    utf8.write_text("name,amount\nAda,3\n", encoding="utf-8")
+    choices = CsvReadOptions(encoding="shift_jis", delimiter=";")
+    app = VeriSight(
+        settings=Settings(allow_llm_data_disclosure=False),
+        csv_options={legacy: choices},
+    )
+    assert app.execute([legacy, utf8], "SELECT SUM(amount) FROM legacy").rows == ((2,),)
+    analysis = app.analyze([legacy, utf8])
+    assert [
+        (item.csv_encoding, item.csv_delimiter) for item in analysis.analysis.sources
+    ] == [("shift_jis", ";"), ("utf-8", ",")]

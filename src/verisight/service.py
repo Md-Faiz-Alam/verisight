@@ -1,6 +1,6 @@
 """Public analysis and analytical execution facade for VeriSight."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from verisight.analysis.result import (
@@ -38,7 +38,7 @@ from verisight.execution.structured_synthesis import (
 )
 from verisight.execution.synthesis import InvestigationSynthesizer
 from verisight.ingestion.exceptions import FileValidationError
-from verisight.ingestion.models import LoadedDataset
+from verisight.ingestion.models import CsvReadOptions, LoadedDataset
 from verisight.ingestion.service import DatasetLoader
 
 
@@ -76,13 +76,15 @@ class VeriSight:
         investigator: Investigator | None = None,
         synthesizer: InvestigationSynthesizer | None = None,
         repairer: QueryRepairer | None = None,
+        *,
+        csv_options: Mapping[str | Path, CsvReadOptions] | None = None,
     ) -> None:
         """Initialize the VeriSight facade."""
 
         resolved_settings = settings if settings is not None else Settings()
 
         self._settings = resolved_settings
-        self._dataset_loader = DatasetLoader(resolved_settings)
+        self._dataset_loader = DatasetLoader(resolved_settings, csv_options=csv_options)
         self._dataset_analyzer = DatasetAnalyzer()
         self._result_builder = AnalysisResultBuilder()
 

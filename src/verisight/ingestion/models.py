@@ -1,15 +1,42 @@
 """Domain models for the VeriSight ingestion subsystem."""
 
+import codecs
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pandas as pd
 
-from verisight.ingestion.exceptions import TableValidationError
+from verisight.ingestion.exceptions import DataLoadError, TableValidationError
 
 _ASCII_LOWERCASE = str.maketrans(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"
 )
+
+
+@dataclass(frozen=True, slots=True)
+class CsvReadOptions:
+    """Explicit CSV parsing choices for one input; None selects automatic mode."""
+
+    encoding: str | None = None
+    delimiter: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.encoding is not None:
+            if not isinstance(self.encoding, str) or not self.encoding.strip():
+                raise DataLoadError("CSV encoding must be a nonblank codec name.")
+            try:
+                codecs.lookup(self.encoding)
+            except LookupError as exc:
+                raise DataLoadError("CSV encoding is not recognized.") from exc
+        if self.delimiter is not None and (
+            not isinstance(self.delimiter, str)
+            or len(self.delimiter) != 1
+            or self.delimiter in '\r\n\x00"'
+        ):
+            raise DataLoadError(
+                "CSV delimiter must be one character other than "
+                "a quote, NUL, or newline."
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +48,8 @@ class SourceMetadata:
     file_extension: str
     file_size_bytes: int
     sheet_name: str | None = None
+    csv_encoding: str | None = None
+    csv_delimiter: str | None = None
 
 
 @dataclass(slots=True)

@@ -19,6 +19,8 @@ from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
 )
+from verisight.ingestion.exceptions import DataLoadError
+from verisight.ingestion.models import CsvReadOptions
 from verisight.public_api import run_public_operation
 from verisight.serialization import to_jsonable
 from verisight.service import VeriSight
@@ -51,6 +53,20 @@ def _parser() -> argparse.ArgumentParser:
         command = commands.add_parser(name, help=help_text)
         command.add_argument("paths", nargs="+", type=Path)
         command.add_argument("--output", type=Path, help="Export JSON to a NEW file.")
+        command.add_argument(
+            "--csv-encoding",
+            nargs=2,
+            action="append",
+            metavar=("PATH", "ENCODING"),
+            help="Declare the encoding for one CSV input; repeat for other files.",
+        )
+        command.add_argument(
+            "--csv-delimiter",
+            nargs=2,
+            action="append",
+            metavar=("PATH", "CHARACTER"),
+            help="Declare a one-character delimiter for one CSV input.",
+        )
         if name == "investigate":
             command.add_argument("--question", required=True)
             command.add_argument(
@@ -138,10 +154,42 @@ def _population(path: Path | None) -> tuple[PopulationFilter, ...]:
         ) from None
 
 
+def _csv_options(args: argparse.Namespace) -> dict[Path, CsvReadOptions]:
+    """Resolve per-file declarations against the requested input paths."""
+    available = {path.expanduser().resolve() for path in args.paths}
+    declarations: dict[Path, dict[str, str]] = {}
+    for field, entries in (
+        ("encoding", args.csv_encoding),
+        ("delimiter", args.csv_delimiter),
+    ):
+        for raw_path, value in entries or ():
+            path = Path(raw_path).expanduser().resolve()
+            if path not in available or path.suffix.lower() != ".csv":
+                raise argparse.ArgumentTypeError(
+                    "CSV parsing options must name a supplied .csv input path."
+                )
+            choices = declarations.setdefault(path, {})
+            if field in choices:
+                raise argparse.ArgumentTypeError(
+                    "Declare each CSV encoding or delimiter only once per input."
+                )
+            choices[field] = value
+    try:
+        return {
+            path: CsvReadOptions(
+                encoding=choices.get("encoding"), delimiter=choices.get("delimiter")
+            )
+            for path, choices in declarations.items()
+        }
+    except DataLoadError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
 def _profile_view(analysis: DatasetAnalysisResult) -> dict[str, object]:
     return {
         "information_scope": "original_loaded_dataset",
         "summary": analysis.summary,
+        "sources": analysis.analysis.sources,
         "schema": analysis.analysis.schema,
         "profiles": analysis.analysis.profile,
         "quality_findings": analysis.analysis.issues,
@@ -166,7 +214,7 @@ def _run(
         )
     except ValueError:
         raise ConfigurationError("Invalid command configuration.") from None
-    app = VeriSight(settings=settings)
+    app = VeriSight(settings=settings, csv_options=args.csv_options)
     print("Inspecting original dataset...", file=sys.stderr)
     analysis = app.analyze(args.paths)
     profile = _profile_view(analysis)
@@ -198,6 +246,10 @@ def _run(
         "max_query_memory_mb": settings.max_query_memory_mb,
         "max_query_temp_storage_mb": settings.max_query_temp_storage_mb,
     }
+    if args.csv_options:
+        request["csv_options"] = {
+            str(path): choices for path, choices in args.csv_options.items()
+        }
     preview: dict[str, object] = {
         "kind": "investigation_preview",
         "request": request,
@@ -260,6 +312,7 @@ def main(argv: list[str] | None = None) -> int:
     ):
         parser.error("Output must be a new file in an existing directory.")
     try:
+        args.csv_options = _csv_options(args)
         population = (
             _population(args.population) if args.command == "investigate" else ()
         )

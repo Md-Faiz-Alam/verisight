@@ -857,3 +857,72 @@ def test_cli_contract_repairs_question_context_numbers(
             == "unlinked_narrative_number"
         )
         assert investigation["synthesis_failure"]["repair_attempted"] is True
+
+
+@pytest.mark.parametrize("command", ["profile", "preview"])
+def test_cli_csv_choices_preserve_source_and_are_exported(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], command: str
+) -> None:
+    source = tmp_path / "names.csv"
+    source.write_bytes("name;amount\n東京;2\n".encode("shift_jis"))
+    arguments = (
+        ["profile", str(source)]
+        if command == "profile"
+        else ["investigate", str(source), "--question", "Total amount?", "--preview"]
+    )
+    arguments += [
+        "--csv-encoding",
+        str(source),
+        "shift_jis",
+        "--csv-delimiter",
+        str(source),
+        ";",
+    ]
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=AssertionError("Network forbidden"),
+    ) as generate:
+        assert main(arguments) == 0
+    generate.assert_not_called()
+    report = json.loads(capsys.readouterr().out)
+    metadata = report["profile"]["sources"][0]
+    assert metadata["csv_encoding"] == "shift_jis"
+    assert metadata["csv_delimiter"] == ";"
+    assert report["profile"]["schema"]["tables"][0]["column_count"] == 2
+    if command == "preview":
+        assert report["request"]["csv_options"][str(source.resolve())] == {
+            "encoding": "shift_jis",
+            "delimiter": ";",
+        }
+
+
+@pytest.mark.parametrize(
+    "scenario", ["not-input", "not-csv", "duplicate", "bad-encoding", "bad-delimiter"]
+)
+def test_cli_rejects_invalid_csv_choices_before_generation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], scenario: str
+) -> None:
+    source = tmp_path / ("source.json" if scenario == "not-csv" else "source.csv")
+    source.write_text("value\n1\n", encoding="utf-8")
+    target = source.with_name("other.csv") if scenario == "not-input" else source
+    flag = "--csv-delimiter" if scenario == "bad-delimiter" else "--csv-encoding"
+    value = (
+        "xx"
+        if scenario == "bad-delimiter"
+        else "invalid-csv-codec"
+        if scenario == "bad-encoding"
+        else "utf-8"
+    )
+    arguments = ["profile", str(source), flag, str(target), value]
+    if scenario == "duplicate":
+        arguments += [flag, str(target), value]
+    with (
+        patch(
+            "verisight.execution.gemini.GeminiTextGenerationClient.generate"
+        ) as generate,
+        pytest.raises(SystemExit) as raised,
+    ):
+        main(arguments)
+    assert raised.value.code == 2
+    generate.assert_not_called()
+    assert "error:" in capsys.readouterr().err

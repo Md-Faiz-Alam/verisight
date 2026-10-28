@@ -12,6 +12,7 @@ from verisight.ingestion.exceptions import (
 )
 from verisight.ingestion.loaders.base import BaseTableLoader
 from verisight.ingestion.loaders.csv import CsvLoader
+from verisight.ingestion.models import CsvReadOptions
 
 
 def test_csv_loader_implements_base_loader() -> None:
@@ -60,12 +61,11 @@ def test_csv_loader_preserves_missing_values(tmp_path: Path) -> None:
     assert pd.isna(table.data.loc[1, "name"])
 
 
-def test_csv_loader_supports_quoted_commas(tmp_path: Path) -> None:
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_csv_loader_supports_quoted_commas(tmp_path: Path, newline: str) -> None:
     file_path = tmp_path / "companies.csv"
-    file_path.write_text(
-        'id,company\n1,"Smith, Jones & Co."\n',
-        encoding="utf-8",
-    )
+    content = 'id,company\n1,"Smith, Jones & Co."\n'
+    file_path.write_bytes(content.replace("\n", newline).encode("utf-8"))
 
     loader = CsvLoader(Settings())
     table = loader.load(file_path)
@@ -389,7 +389,11 @@ def test_csv_loader_supports_cp1252_encoding(
         "customer_id,name,city\n1,André,Montréal\n2,José,São Paulo\n".encode("cp1252")
     )
 
-    table = CsvLoader(Settings()).load(file_path)
+    with pytest.raises(DataLoadError, match="no legacy fallback"):
+        CsvLoader(Settings()).load(file_path)
+    table = CsvLoader(Settings()).load(
+        file_path, options=CsvReadOptions(encoding="cp1252")
+    )
 
     assert table.column_count == 3
     assert table.row_count == 2
@@ -504,14 +508,18 @@ def test_csv_loader_rejects_utf32(
         CsvLoader(Settings()).load(file_path)
 
 
-def test_csv_loader_falls_back_to_latin1(
+def test_csv_loader_supports_explicit_latin1(
     tmp_path: Path,
 ) -> None:
     file_path = tmp_path / "customers.csv"
 
     file_path.write_bytes(b"customer_id,name\n1,Alice\x81\n2,Bob\n")
 
-    table = CsvLoader(Settings()).load(file_path)
+    with pytest.raises(DataLoadError, match="no legacy fallback"):
+        CsvLoader(Settings()).load(file_path)
+    table = CsvLoader(Settings()).load(
+        file_path, options=CsvReadOptions(encoding="latin-1")
+    )
 
     assert table.column_count == 2
     assert table.row_count == 2
@@ -565,16 +573,18 @@ def test_csv_encoding_detection_checks_invalid_utf8_after_first_chunk(
     file_path = tmp_path / "late_invalid.csv"
     file_path.write_bytes(b"name\n" + b"a" * 65536 + b"\xe9\n")
 
-    assert CsvLoader._detect_encoding(file_path) == "cp1252"
+    with pytest.raises(DataLoadError, match="no legacy fallback"):
+        CsvLoader._detect_encoding(file_path)
 
 
-def test_csv_encoding_detection_latin1_fallback_after_first_chunk(
+def test_csv_encoding_detection_rejects_legacy_bytes_after_first_chunk(
     tmp_path: Path,
 ) -> None:
     file_path = tmp_path / "late_latin1.csv"
     file_path.write_bytes(b"name\n" + b"a" * 65536 + b"\x81\n")
 
-    assert CsvLoader._detect_encoding(file_path) == "latin-1"
+    with pytest.raises(DataLoadError, match="no legacy fallback"):
+        CsvLoader._detect_encoding(file_path)
 
 
 def test_csv_encoding_detection_handles_incomplete_utf8_at_eof(
@@ -583,13 +593,14 @@ def test_csv_encoding_detection_handles_incomplete_utf8_at_eof(
     file_path = tmp_path / "incomplete.csv"
     file_path.write_bytes(b"name\nAlice\xe2\x82")
 
-    assert CsvLoader._detect_encoding(file_path) == "cp1252"
+    with pytest.raises(DataLoadError, match="no legacy fallback"):
+        CsvLoader._detect_encoding(file_path)
 
 
-def test_csv_encoding_detection_continues_after_both_decoders_fail(
+def test_csv_encoding_detection_continues_after_invalid_utf8(
     tmp_path: Path,
 ) -> None:
-    """Continue scanning after both decoders fail to catch later NUL bytes."""
+    """Continue scanning after invalid UTF-8 before rejecting the encoding."""
 
     file_path = tmp_path / "multiple_chunks.csv"
 
@@ -597,7 +608,8 @@ def test_csv_encoding_detection_continues_after_both_decoders_fail(
 
     file_path.write_bytes(b"a" * chunk_size + b"\x81" + b"b" * (chunk_size - 1) + b"c")
 
-    assert CsvLoader._detect_encoding(file_path) == "latin-1"
+    with pytest.raises(DataLoadError, match="no legacy fallback"):
+        CsvLoader._detect_encoding(file_path)
 
 
 def test_csv_type_inference_updates_input_dataframe_in_place() -> None:
@@ -695,3 +707,83 @@ def test_csv_oversized_identifier_survives_sql_execution(tmp_path: Path) -> None
     )
 
     assert result.rows == ((identifier,),)
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+@pytest.mark.parametrize("kind", ["long-value", "long-header", "multiline-value"])
+def test_inconclusive_delimiter_requires_explicit_selection(
+    tmp_path: Path, kind: str, newline: str
+) -> None:
+    header = "x" * 9000 if kind == "long-header" else "name"
+    value = "x\n" * 5000 if kind == "multiline-value" else "x" * 9000
+    path = tmp_path / "sample.csv"
+    content = header + ';amount\n"' + value + '";1\n'
+    path.write_bytes(content.replace("\n", newline).encode("utf-8"))
+    with pytest.raises(DataLoadError, match="delimiter detection was inconclusive"):
+        CsvLoader(Settings()).load(path)
+    table = CsvLoader(Settings()).load(path, options=CsvReadOptions(delimiter=";"))
+    assert table.data.columns.tolist() == [header, "amount"]
+    assert table.data[header].tolist() == [value.replace("\n", newline)]
+    assert table.data["amount"].tolist() == [1]
+    assert table.source.csv_encoding == "utf-8"
+    assert table.source.csv_delimiter == ";"
+
+
+def test_explicit_encoding_preserves_shift_jis_text(tmp_path: Path) -> None:
+    path = tmp_path / "names.csv"
+    path.write_bytes("name,value\n東京,1\n".encode("shift_jis"))
+    with pytest.raises(DataLoadError, match="no legacy fallback"):
+        CsvLoader(Settings()).load(path)
+    table = CsvLoader(Settings()).load(
+        path, options=CsvReadOptions(encoding="shift_jis")
+    )
+    assert table.data["name"].tolist() == ["東京"]
+    assert table.source.csv_encoding == "shift_jis"
+    assert table.source.csv_delimiter == ","
+
+
+@pytest.mark.parametrize("payload", [b"name\nJos\xc3\n", b"name\nAlice\xe2\x82"])
+def test_truncated_utf8_is_not_reinterpreted_as_legacy_text(
+    tmp_path: Path, payload: bytes
+) -> None:
+    path = tmp_path / "truncated.csv"
+    path.write_bytes(payload)
+    with pytest.raises(DataLoadError, match="no legacy fallback"):
+        CsvLoader(Settings()).load(path)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"encoding": ""},
+        {"encoding": "unknown-csv-codec"},
+        {"encoding": 3},
+        {"delimiter": ""},
+        {"delimiter": ";;"},
+        {"delimiter": "\n"},
+        {"delimiter": "\r"},
+        {"delimiter": "\x00"},
+        {"delimiter": '"'},
+        {"delimiter": 3},
+    ],
+)
+def test_invalid_csv_choices_are_rejected(options: dict[str, object]) -> None:
+    with pytest.raises(DataLoadError):
+        CsvReadOptions(**options)  # type: ignore[arg-type]
+
+
+def test_explicit_decoder_rejects_invalid_bytes_and_nul(tmp_path: Path) -> None:
+    path = tmp_path / "invalid.csv"
+    path.write_bytes(b"name\n\xff\n")
+    with pytest.raises(DataLoadError, match="Could not load CSV"):
+        CsvLoader(Settings()).load(path, options=CsvReadOptions(encoding="utf-8"))
+    path.write_bytes(b"name\nA\x00B\n")
+    with pytest.raises(DataLoadError, match="NUL"):
+        CsvLoader(Settings()).load(path, options=CsvReadOptions(encoding="cp1252"))
+
+
+def test_loader_rejects_invalid_options_object(tmp_path: Path) -> None:
+    path = tmp_path / "sample.csv"
+    path.write_text("name\nAlice\n", encoding="utf-8")
+    with pytest.raises(DataLoadError, match="CsvReadOptions object"):
+        CsvLoader(Settings()).load(path, options={})  # type: ignore[arg-type]

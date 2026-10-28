@@ -2,6 +2,7 @@
 
 import codecs
 import csv
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import pandas as pd
 from verisight.config import Settings
 from verisight.ingestion.exceptions import DataLoadError
 from verisight.ingestion.loaders.base import BaseTableLoader
-from verisight.ingestion.models import LoadedTable
+from verisight.ingestion.models import CsvReadOptions, LoadedTable
 from verisight.ingestion.validation import validate_file
 
 _MAX_SAFE_FLOAT_INTEGER = 2**53 - 1
@@ -44,7 +45,9 @@ class CsvLoader(BaseTableLoader):
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    def load(self, path: str | Path) -> LoadedTable:
+    def load(
+        self, path: str | Path, *, options: CsvReadOptions | None = None
+    ) -> LoadedTable:
         """Validate and load a CSV file."""
 
         metadata = validate_file(
@@ -57,12 +60,21 @@ class CsvLoader(BaseTableLoader):
                 f"CsvLoader cannot load file type '{metadata.file_extension}'."
             )
 
-        try:
-            encoding = self._detect_encoding(metadata.path)
+        if options is not None and not isinstance(options, CsvReadOptions):
+            raise DataLoadError("CSV options must be a CsvReadOptions object.")
+        choices = options if options is not None else CsvReadOptions()
 
-            delimiter = self._detect_delimiter(
-                metadata.path,
-                encoding=encoding,
+        try:
+            if choices.encoding is None:
+                encoding = self._detect_encoding(metadata.path)
+            else:
+                encoding = codecs.lookup(choices.encoding).name
+                self._validate_decoded_content(metadata.path, encoding=encoding)
+
+            delimiter = (
+                choices.delimiter
+                if choices.delimiter is not None
+                else self._detect_delimiter(metadata.path, encoding=encoding)
             )
 
             # Read the source header as values before pandas can rename it.
@@ -107,7 +119,7 @@ class CsvLoader(BaseTableLoader):
         return LoadedTable(
             name=metadata.path.stem,
             data=data,
-            source=metadata,
+            source=replace(metadata, csv_encoding=encoding, csv_delimiter=delimiter),
         )
 
     @staticmethod
@@ -134,8 +146,6 @@ class CsvLoader(BaseTableLoader):
 
             utf8_decoder = codecs.getincrementaldecoder("utf-8")()
             utf8_valid = True
-            cp1252_decoder = codecs.getincrementaldecoder("cp1252")()
-            cp1252_valid = True
 
             while chunk := file.read(_ENCODING_CHUNK_SIZE):
                 if b"\x00" in chunk:
@@ -150,12 +160,6 @@ class CsvLoader(BaseTableLoader):
                     except UnicodeDecodeError:
                         utf8_valid = False
 
-                if cp1252_valid:
-                    try:
-                        cp1252_decoder.decode(chunk, final=False)
-                    except UnicodeDecodeError:
-                        cp1252_valid = False
-
             if utf8_valid:
                 try:
                     utf8_decoder.decode(b"", final=True)
@@ -165,10 +169,11 @@ class CsvLoader(BaseTableLoader):
             if utf8_valid:
                 return "utf-8"
 
-            if cp1252_valid:
-                return "cp1252"
-
-            return "latin-1"
+            raise DataLoadError(
+                "CSV encoding could not be established as UTF-8 or BOM-marked UTF-16. "
+                "Supply an explicit CsvReadOptions encoding; "
+                "no legacy fallback was used."
+            )
 
     @staticmethod
     def _validate_decoded_content(path: Path, *, encoding: str) -> None:
@@ -184,12 +189,14 @@ class CsvLoader(BaseTableLoader):
         *,
         encoding: str,
     ) -> str:
-        """Detect a supported delimiter, defaulting to comma when ambiguous."""
+        """Detect a supported delimiter or reject an inconclusive sample."""
 
+        # Normalize line endings only for inference. Pandas still reads the
+        # original file, preserving newlines embedded in quoted field values.
         with path.open(
             "r",
             encoding=encoding,
-            newline="",
+            newline=None,
         ) as file:
             sample = file.read(_CSV_SAMPLE_SIZE)
 
@@ -198,8 +205,17 @@ class CsvLoader(BaseTableLoader):
                 sample,
                 delimiters=_CSV_DELIMITERS,
             )
-        except csv.Error:
-            return _DEFAULT_CSV_DELIMITER
+        except csv.Error as exc:
+            # A short sample with no supported separator is a single-column CSV.
+            # Never reinterpret an inconclusive multi-column sample as comma CSV.
+            if len(sample) < _CSV_SAMPLE_SIZE and not any(
+                character in sample for character in _CSV_DELIMITERS
+            ):
+                return _DEFAULT_CSV_DELIMITER
+            raise DataLoadError(
+                "CSV delimiter detection was inconclusive. "
+                "Supply an explicit CsvReadOptions delimiter."
+            ) from exc
 
         return dialect.delimiter
 
