@@ -218,6 +218,28 @@ class VeriSight:
 
         return self._result_builder.build(analysis)
 
+    def plan(
+        self,
+        paths: str | Path | Iterable[str | Path],
+        question: str,
+        *,
+        population: tuple[PopulationFilter, ...] = (),
+    ) -> QueryPlan:
+        """Generate SQL for caller review without executing or repairing it.
+
+        Planning may disclose query context to the configured provider. A returned
+        plan does not establish SQL validity or analytical correctness. Execute
+        its SQL explicitly after review, using the same inputs and population.
+        Files are reloaded by execute; this is not an immutable dataset snapshot.
+        """
+        dataset = self._load_dataset(paths)
+        execution_service = AnalyticalExecutionService(
+            dataset,
+            planner=self._planner,
+            population=population,
+        )
+        return execution_service.plan(question)
+
     def execute(
         self,
         paths: str | Path | Iterable[str | Path],

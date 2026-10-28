@@ -432,6 +432,44 @@ stage, and a per-client call number. Evaluation telemetry records generation
 attempts, elapsed time, and whether text returned, without prompts or responses.
 Returning text does not imply valid JSON or a correct answer.
 
+## Review SQL before execution
+
+The Python facade supports planning separately from execution:
+
+```python
+plan = app.plan(paths, question, population=population)
+print(plan.question)
+print(plan.sql)
+```
+
+`app` is a configured `VeriSight` instance. Model-backed planning requires
+credentials and explicit data-disclosure permission. Planning can make provider
+calls but does not execute analytical SQL or invoke SQL repair.
+
+Inspect the proposed SQL for population, entity grain, denominator, units,
+joins, missing values, and operation order. A returned plan does not establish
+SQL validity or analytical correctness.
+
+After review, execute its SQL explicitly:
+
+```python
+result = app.execute(paths, plan.sql, population=population)
+```
+
+Execution applies the existing SQL validation, population restrictions, and
+resource limits. It does not replan or invoke model-based SQL repair. An invalid
+query fails rather than being replaced automatically.
+
+Use the same files, CSV parsing options, and population for both calls.
+Execution reloads the files; this workflow does not freeze their contents.
+The caller is responsible for keeping inputs unchanged between review and
+execution. Keep the plan alongside the returned result when recording evidence.
+
+This optional Python workflow returns a `QueryResult`, not an investigation
+with generated claims or synthesis. The existing CLI preview remains offline
+input inspection; it does not generate proposed SQL. Autonomous investigations
+continue to use their existing workflow.
+
 ## Evaluation
 
 Run the deterministic development benchmark:

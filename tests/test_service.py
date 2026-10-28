@@ -9,6 +9,7 @@ from verisight.analysis.result import DatasetAnalysisResult
 from verisight.config import Settings
 from verisight.error_reporting import to_public_error
 from verisight.execution.claim_verification import VerificationStatus
+from verisight.execution.context import PopulationFilter
 from verisight.execution.decisions import (
     InvestigationAction,
     InvestigationDecision,
@@ -1340,3 +1341,66 @@ def test_lazy_gemini_repairer_requires_disclosure_permission() -> None:
             repairer.repair(MagicMock())
 
         client_class.assert_not_called()
+
+
+def test_reviewed_plan_executes_without_replanning_or_repair(tmp_path: Path) -> None:
+    source = tmp_path / "orders.csv"
+    source.write_text(
+        "state,amount\nactive,10\nother,900\nactive,20\n", encoding="utf-8"
+    )
+    planner = MagicMock()
+    planner.plan.return_value = QueryPlan(
+        "Total active amount?", "SELECT SUM(amount) FROM orders"
+    )
+    repairer = MagicMock()
+    population = (PopulationFilter("orders", "state", ("active",)),)
+    app = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False),
+        planner=planner,
+        repairer=repairer,
+    )
+    with patch("verisight.execution.engine.DuckDBExecutor.execute") as execute:
+        plan = app.plan(source, "Total active amount?", population=population)
+    execute.assert_not_called()
+    assert plan.sql == "SELECT SUM(amount) FROM orders"
+    request = planner.plan.call_args.args[0]
+    assert request.context.population == population
+    result = app.execute(source, plan.sql, population=population)
+    assert result.rows == ((30,),)
+    planner.plan.assert_called_once()
+    repairer.repair.assert_not_called()
+
+
+def test_reviewed_plan_runtime_failure_does_not_trigger_repair(tmp_path: Path) -> None:
+    source = tmp_path / "orders.csv"
+    source.write_text("amount\n10\n", encoding="utf-8")
+    planner = MagicMock()
+    planner.plan.return_value = QueryPlan("Total?", "SELECT missing FROM orders")
+    repairer = MagicMock()
+    app = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False),
+        planner=planner,
+        repairer=repairer,
+    )
+    plan = app.plan(source, "Total?")
+    with pytest.raises(QueryRuntimeError):
+        app.execute(source, plan.sql)
+    planner.plan.assert_called_once()
+    repairer.repair.assert_not_called()
+
+
+def test_plan_rejects_invalid_population_before_planning(tmp_path: Path) -> None:
+    source = tmp_path / "orders.csv"
+    source.write_text("amount\n10\n", encoding="utf-8")
+    planner = MagicMock()
+    app = VeriSight(
+        settings=Settings(gemini_api_key=None, allow_llm_data_disclosure=False),
+        planner=planner,
+    )
+    with pytest.raises(QueryValidationError):
+        app.plan(
+            source,
+            "Total?",
+            population=(PopulationFilter("missing", "state", ("active",)),),
+        )
+    planner.plan.assert_not_called()
