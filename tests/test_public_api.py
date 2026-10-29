@@ -16,9 +16,15 @@ from verisight.execution.exceptions import (
     QueryRuntimeError,
     QueryValidationError,
 )
+from verisight.execution.gemini import (
+    GeminiGenerationError,
+    GeminiTransientError,
+    ProviderFailureDiagnostics,
+)
 from verisight.execution.prompt_budget import PromptBudget
 from verisight.ingestion.exceptions import FileValidationError
 from verisight.public_api import run_public_operation
+from verisight.serialization import to_jsonable
 
 
 def test_public_operation_returns_successful_value() -> None:
@@ -267,3 +273,118 @@ def test_public_operation_logs_no_exception_details(
     assert "Credential:" not in caplog.text
     assert "Dataset value:" not in caplog.text
     assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.parametrize("http_status", [None, 503])
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_public_operation_retains_only_safe_provider_diagnostics(
+    http_status: int | None, wrapped: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    details = ProviderFailureDiagnostics(http_status, True, 2, "text_generation", 3)
+    provider = GeminiTransientError("private-provider-secret", diagnostics=details)
+
+    def operation() -> None:
+        if wrapped:
+            raise QueryPlanningError("private-query-secret") from provider
+        raise provider
+
+    result = run_public_operation(operation)
+
+    assert result.provider_diagnostics == details
+    assert result.provider_diagnostics is not details
+    assert result.error is not None
+    assert result.error.code is (
+        ErrorCode.QUERY_PLANNING_ERROR if wrapped else ErrorCode.PROVIDER_UNAVAILABLE
+    )
+    serialized = to_jsonable(result)
+    assert isinstance(serialized, dict)
+    assert serialized["provider_diagnostics"] == {
+        "http_status": http_status,
+        "retryable": True,
+        "attempts": 2,
+        "stage": "text_generation",
+        "call_number": 3,
+    }
+    assert "private-" not in repr(result)
+    assert "private-" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"http_status": "private-status"},
+        {"http_status": True},
+        {"http_status": 99},
+        {"http_status": 600},
+        {"retryable": "private-retryability"},
+        {"attempts": "private-attempts"},
+        {"attempts": 0},
+        {"stage": ["private-stage"]},
+        {"stage": "private-stage"},
+        {"call_number": "private-call"},
+        {"call_number": 0},
+    ],
+)
+def test_public_operation_omits_malformed_provider_metadata(
+    overrides: dict[str, Any],
+) -> None:
+    values: dict[str, Any] = {
+        "http_status": 503,
+        "retryable": True,
+        "attempts": 1,
+        "stage": "investigator",
+        "call_number": 1,
+    }
+    values.update(overrides)
+    details = ProviderFailureDiagnostics(**values)
+
+    def operation() -> None:
+        raise GeminiTransientError("private-error", diagnostics=details)
+
+    result = run_public_operation(operation)
+    assert result.provider_diagnostics is None
+    assert "private-" not in repr(result)
+
+
+def test_public_operation_does_not_export_untyped_provider_metadata() -> None:
+    error = GeminiTransientError("private-error")
+    error.diagnostics = {"prompt": "private-prompt"}  # type: ignore[assignment]
+    result = run_public_operation(lambda: _raise_provider(error))
+    assert result.provider_diagnostics is None
+    assert "private-" not in repr(result)
+
+
+def _raise_provider(error: GeminiGenerationError) -> None:
+    raise error
+
+
+def test_public_operation_handles_missing_metadata_and_cause_cycles() -> None:
+    missing = run_public_operation(
+        lambda: _raise_provider(GeminiTransientError("private-error"))
+    )
+    assert missing.provider_diagnostics is None
+    error = QueryPlanningError("private-cycle")
+    error.__cause__ = error
+
+    def operation() -> None:
+        raise error
+
+    result = run_public_operation(operation)
+    assert result.provider_diagnostics is None
+    assert result.error is not None
+    assert result.error.code is ErrorCode.QUERY_PLANNING_ERROR
+
+
+def test_public_operation_does_not_export_incidental_provider_context() -> None:
+    details = ProviderFailureDiagnostics(503, True, 1, "investigator", 1)
+
+    def operation() -> None:
+        try:
+            raise GeminiTransientError("private-provider", diagnostics=details)
+        except GeminiTransientError:
+            raise QueryPlanningError("private-outer") from None
+
+    result = run_public_operation(operation)
+    assert result.provider_diagnostics is None
+    assert result.error is not None
+    assert result.error.code is ErrorCode.QUERY_PLANNING_ERROR

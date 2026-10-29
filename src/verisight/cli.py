@@ -339,6 +339,8 @@ def main(argv: list[str] | None = None) -> int:
             "kind": "operation_error",
             "error": operation.error,
         }
+        if operation.provider_diagnostics is not None:
+            payload["provider_diagnostics"] = operation.provider_diagnostics
         exit_code = 1
     else:
         assert operation.value is not None

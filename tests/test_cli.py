@@ -16,7 +16,10 @@ from verisight.execution.claim_verification import (
     EvidenceReference,
     NumericalClaim,
 )
-from verisight.execution.gemini import GeminiTransientError
+from verisight.execution.gemini import (
+    GeminiTransientError,
+    ProviderFailureDiagnostics,
+)
 from verisight.execution.investigation_result import (
     ClaimOutputContract,
     InvestigationResult,
@@ -954,3 +957,73 @@ def test_cli_classifies_csv_path_resolution_errors(
     assert captured.out == ""
     assert "Could not resolve an input path" in captured.err
     assert "private filesystem detail" not in captured.err
+
+
+@pytest.mark.parametrize("http_status", [None, 503])
+@pytest.mark.parametrize("stage", ["investigator", "text_generation"])
+def test_early_provider_failure_exports_safe_metadata_without_content(
+    source: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    http_status: int | None,
+    stage: str,
+) -> None:
+    from typing import cast
+
+    from verisight.execution.generation_telemetry import GenerationStage
+
+    details = ProviderFailureDiagnostics(
+        http_status, True, 1, cast(GenerationStage, stage), 1
+    )
+    failure = GeminiTransientError("private-provider-response", diagnostics=details)
+    responses: list[str | Exception] = [failure]
+    if stage == "text_generation":
+        responses.insert(
+            0,
+            json.dumps(
+                {
+                    "action": "investigate",
+                    "reasoning": "Measure",
+                    "question": "Sum amounts",
+                }
+            ),
+        )
+    output = tmp_path / "failure.json"
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=responses,
+    ):
+        exit_code = main(
+            [
+                "investigate",
+                str(source),
+                "--question",
+                "Sum active amounts",
+                "--max-steps",
+                "1",
+                "--allow-llm-data-disclosure",
+                "--output",
+                str(output),
+            ]
+        )
+
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert exit_code == 1
+    assert report["kind"] == "operation_error"
+    assert set(report["error"]) == {"code", "message"}
+    assert report["provider_diagnostics"] == to_jsonable(details)
+    assert "investigation" not in report
+    assert "request" not in report
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+    assert "private-provider-response" not in captured.out + captured.err
+    assert "offline-secret-key" not in captured.out + captured.err
+
+
+def test_nonprovider_cli_error_has_no_provider_metadata(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["profile", str(tmp_path / "missing.csv")]) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["kind"] == "operation_error"
+    assert "provider_diagnostics" not in report

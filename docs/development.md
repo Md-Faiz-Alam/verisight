@@ -190,6 +190,19 @@ Use safe diagnostics instead of raw provider exception text. Keep connectivity,
 format validity, SQL execution, numerical support, and analytical correctness
 separate. Do not infer a failure's cause from an SDK warning alone.
 
+`run_public_operation()` retains optional `provider_diagnostics` separately from
+its unchanged public error code and message. The CLI includes this field in
+operation-error exports only when valid provider metadata is available. It
+contains HTTP status (or null), retryability, attempt count, generation stage,
+and per-client call number. Only explicit exception causes are followed;
+incidental exception context and malformed metadata are not exported. Raw
+exception messages, tracebacks, requests, prompts, and responses are omitted.
+A null HTTP status does not distinguish timeout from other transport failures.
+Missing diagnostics mean unavailable metadata, not zero calls or no failure.
+This export adds no retry or generation call and does not recover diagnostics
+that an earlier wrapper discarded. Returned incomplete investigations retain
+their existing nested failure metadata.
+
 Token audits may miss unsupported number formats. Digit coverage flags unparsed
 digit characters but does not interpret them. Number words remain outside the
 coverage check, and `all_digits_parsed` does not certify a narrative.
