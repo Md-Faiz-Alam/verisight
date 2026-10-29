@@ -30,7 +30,6 @@ from verisight.execution.planning import (
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.repair import QueryRepairer, QueryRepairRequest
 from verisight.ingestion.models import LoadedDataset
-from verisight.ingestion.schema import SchemaInferer
 
 
 class AnalyticalExecutionService:
@@ -63,8 +62,9 @@ class AnalyticalExecutionService:
         self._planner = planner
         self._repairer = repairer
 
-        schema = SchemaInferer().infer_dataset(dataset)
-        self._context = QueryContextBuilder().build(schema, population=population)
+        self._context = QueryContextBuilder().build_from_dataset(
+            dataset, population=population
+        )
         self._formatted_context = QueryContextFormatter().format(self._context)
 
     @property

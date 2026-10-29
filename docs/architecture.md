@@ -11,9 +11,15 @@ separate questions. The current verifier addresses the first.
 
 ## Facade and deterministic processing
 
-`VeriSight` in `src/verisight/service.py` exposes `analyze`, `execute`, `ask`,
-and `investigate`. Inputs accept a string path, a `Path`, or an iterable of
+`VeriSight` in `src/verisight/service.py` exposes `analyze`, `plan`, `execute`,
+`ask`, and `investigate`. Inputs accept a string path, a `Path`, or an iterable of
 either. Empty collections and invalid entries are rejected.
+
+`plan()` returns proposed SQL without executing or repairing it. Callers can
+review that SQL and explicitly pass it to `execute()`, which does not replan
+or invoke SQL repair. Both calls reload inputs; they do not share an immutable
+dataset snapshot. A returned plan does not establish SQL validity or analytical
+correctness. This is a Python workflow, separate from the CLI offline preview.
 
 CSV, JSON, and Excel loaders validate supported inputs and produce loaded
 relations. Schema inference, profiling, and quality rules produce deterministic
@@ -187,9 +193,41 @@ query produces no observation and does not take the direct synthesis path.
 Its existing decision and failure handling remains in place. Other incomplete
 paths retain prior observations and recorded failures.
 
+## Bounded categorical evidence for planning and repair
+
+The built-in analytical service constructs query context from the loaded dataset.
+String columns can contribute complete distinct nonmissing values: at most eight
+values per column and 128 characters per value. A column is omitted entirely if
+it exceeds either limit. No partial list is labelled complete. Empty strings, if
+present as nonmissing loaded values, remain values; missing values are excluded.
+
+The serialized categorical array is limited to 8,192 characters across all
+relations, including identifiers and JSON escaping. Eligible columns are admitted
+in dataset and column order; values within each column are sorted. A column that
+would exceed the remaining budget is skipped, allowing a later smaller column.
+These bounds limit retained context, not dataset size or the cost of scanning
+already loaded columns. The existing complete-prompt budget still applies.
+
+The formatter identifies these values as untrusted data from the original loaded
+dataset before caller-selected population restrictions. They are not a category
+vocabulary, business definition, or guarantee that unlisted values are impossible.
+Omitted columns have unknown values. Schema-only context construction does not
+invent categorical values. Planning and runtime SQL repair share this context;
+the collector neither changes source frames nor rewrites SQL or selects filters.
+
+The default model-backed planning and repair paths retain their existing explicit
+LLM data-disclosure requirement. This context expands the source values that may
+be disclosed, including low-cardinality identifiers; it does not classify or redact
+sensitive data. Injected generation components remain caller-owned. Population
+filters do not make this original-dataset context private or population-scoped.
+
+Experimental known-fixture comparisons motivated this change; they do not establish
+general analytical accuracy. SQL review, independent evaluation, and numerical
+verification retain their separate roles.
+
 ## Optional caller-selected populations
 
-The public `execute`, `ask`, and `investigate` methods accept a keyword-only
+The public `plan`, `execute`, `ask`, and `investigate` methods accept a keyword-only
 `population` tuple. Each `PopulationFilter`, imported from
 `verisight.execution.context`, names an exact relation and column and a nonempty
 tuple of values. One value expresses equality; multiple values express

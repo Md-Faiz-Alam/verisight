@@ -1,9 +1,13 @@
 """Deterministic query context for analytical execution."""
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass, replace
+
+import pandas as pd
 
 from verisight.execution.exceptions import QueryValidationError
-from verisight.ingestion.schema import DatasetSchema, LogicalType
+from verisight.ingestion.models import LoadedDataset
+from verisight.ingestion.schema import DatasetSchema, LogicalType, SchemaInferer
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,11 +98,37 @@ class QueryRelation:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservedCategoryValues:
+    """Complete distinct nonmissing strings from one original loaded column.
+
+    These are untrusted data values, not a category vocabulary or business rule.
+    Missing columns are unknown: their values may have been omitted by limits.
+    """
+
+    relation: str
+    column: str
+    observed_nonmissing_values: tuple[str, ...]
+
+
+def _complete_string_values(series: pd.Series) -> tuple[str, ...] | None:
+    """Retain at most eight values of at most 128 characters; never sample."""
+    values: set[str] = set()
+    for value in series.dropna():
+        if not isinstance(value, str) or len(value) > 128:
+            return None
+        values.add(value)
+        if len(values) > 8:
+            return None
+    return tuple(sorted(values)) if values else None
+
+
+@dataclass(frozen=True, slots=True)
 class QueryContext:
     """Deterministic description of relations available for querying."""
 
     relations: tuple[QueryRelation, ...]
     population: tuple[PopulationFilter, ...] = ()
+    observed_categories: tuple[ObservedCategoryValues, ...] = ()
 
     @property
     def relation_count(self) -> int:
@@ -136,3 +166,41 @@ class QueryContextBuilder:
         context = QueryContext(relations=relations, population=population)
         validate_population(population, context)
         return context
+
+    def build_from_dataset(
+        self,
+        dataset: LoadedDataset,
+        *,
+        population: tuple[PopulationFilter, ...] = (),
+    ) -> QueryContext:
+        """Include bounded categorical evidence without modifying or filtering data.
+
+        The serialized category array is limited to 8,192 characters, including
+        identifiers and JSON escaping. Individual columns are omitted in full
+        when limits prevent a complete nonmissing value set. This bounds retained
+        prompt context, not input size or the cost of scanning loaded columns.
+        """
+        context = self.build(
+            SchemaInferer().infer_dataset(dataset), population=population
+        )
+        categories: list[ObservedCategoryValues] = []
+        used = 2
+        for table, relation in zip(dataset.tables, context.relations, strict=True):
+            for column in relation.columns:
+                if column.logical_type is not LogicalType.STRING:
+                    continue
+                values = _complete_string_values(table.data[column.name])
+                if values is None:
+                    continue
+                item = ObservedCategoryValues(
+                    relation=relation.relation_name,
+                    column=column.name,
+                    observed_nonmissing_values=values,
+                )
+                size = len(json.dumps(asdict(item), ensure_ascii=False))
+                size += 2 * bool(categories)
+                if used + size > 8_192:
+                    continue
+                categories.append(item)
+                used += size
+        return replace(context, observed_categories=tuple(categories))
