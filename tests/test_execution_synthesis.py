@@ -21,6 +21,7 @@ from verisight.execution.gemini import GeminiGenerationError, GeminiTransientErr
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import (
     ClaimOutputContract,
+    InvestigationResult,
     InvestigationStatus,
     SynthesisFailureKind,
 )
@@ -734,6 +735,7 @@ def test_weighted_mean_claim_must_reference_executed_final_metric(
     # This checks evidence linkage, not whether a live model obeys the prompt.
     path = tmp_path / "assays.csv"
     path.write_text("mass,assay\n100,1\n300,3\n", encoding="utf-8")
+
     app = VeriSight(settings=Settings(allow_llm_data_disclosure=False))
     sql = "SELECT SUM(mass * assay) AS sum_product, SUM(mass) AS sum_mass"
     if include_final:
@@ -1104,3 +1106,123 @@ def test_contract_narrative_failures_use_the_single_repair(
         "through claim references only, never as numbers in the conclusion"
         in client.prompts[0]
     )
+
+
+@pytest.mark.parametrize("recover", [False, True])
+def test_targeted_numeric_feedback_keeps_validation_and_evidence_checks(
+    recover: bool,
+) -> None:
+    state = replace(
+        _build_state(),
+        question="For cohort 2026 measure the total.",
+        claim_output_contract=ClaimOutputContract((ClaimOperation.VALUE,)),
+    ).add_observation(
+        QueryObservation(
+            question="Measure the total.",
+            sql="SELECT 30 AS total",
+            result=QueryResult(columns=("total",), rows=((30,),)),
+        )
+    )
+    rejected = json.dumps(
+        {
+            "conclusion": "synthetic-private-context For cohort 2026 the total is 30.",
+            "claims": [_claim()],
+        }
+    )
+    client = _SequenceClient([rejected, _response([_claim()]) if recover else rejected])
+    synthesizer = StructuredInvestigationSynthesizer(client)
+    if recover:
+        synthesis = synthesizer.synthesize(state)
+        verdict = NumericalClaimVerifier().verify(
+            synthesis.claims[0], state.observations
+        )
+        assert verdict.status is VerificationStatus.SUPPORTED
+        assert verdict.actual == 30
+        assert synthesis.claims[0].left.column == "total"
+        assert len(synthesis.claims) == 1
+        result = InvestigationResult(
+            question=state.question,
+            conclusion=synthesis.conclusion,
+            analysis=state.analysis,
+            observations=state.observations,
+            generated_claims=synthesis.claims,
+        )
+        assert result.assess_output(
+            ClaimOutputContract((ClaimOperation.VALUE,))
+        ).accepted
+    else:
+        with pytest.raises(SynthesisValidationError) as caught:
+            synthesizer.synthesize(state)
+        assert caught.value.reason == "unlinked_narrative_number"
+        assert caught.value.repair_attempted is True
+    assert len(client.prompts) == 2
+    feedback = json.loads(
+        client.prompts[1]
+        .split("FORMAT REPAIR (one attempt):\n", 1)[1]
+        .split("\n", 1)[0]
+    )
+    assert feedback == {
+        "validation_error": "unlinked_narrative_number",
+        "unlinked_numeric_values": ["2026"],
+    }
+    assert "synthetic-private-context" not in client.prompts[1]
+    assert "Do not add dummy claims" in client.prompts[1]
+
+
+@pytest.mark.parametrize(
+    "conclusion,expected",
+    [
+        ("For 2026 and 2026, total 30.", ["2026"]),
+        ("Total 30; malformed 1,00; context 2026.", ["2026"]),
+        ("Total 30; context " + "9" * 32 + ".", ["9" * 32]),
+        ("Total 30; context " + "9" * 33 + ".", []),
+        (
+            "Total 30; " + " ".join(str(i) for i in range(100, 112)),
+            [str(i) for i in range(100, 108)],
+        ),
+        ("Total 30.", []),
+    ],
+)
+def test_numeric_repair_examples_are_bounded_canonical_values(
+    conclusion: str, expected: list[str]
+) -> None:
+    parsed = StructuredInvestigationSynthesizer._parse_response(
+        json.dumps(
+            {
+                "conclusion": conclusion,
+                "claims": [_claim()],
+            }
+        )
+    )
+    assert (
+        StructuredInvestigationSynthesizer._unlinked_numeric_values(parsed) == expected
+    )
+
+
+def test_targeted_feedback_obeys_complete_repair_prompt_budget() -> None:
+    state = replace(
+        _build_state(),
+        claim_output_contract=ClaimOutputContract((ClaimOperation.VALUE,)),
+    )
+    rejected = json.dumps({"conclusion": "For 2026 total 30.", "claims": [_claim()]})
+    probe = _SequenceClient([rejected, _response([_claim()])])
+    StructuredInvestigationSynthesizer(probe).synthesize(state)
+    client = _SequenceClient([rejected])
+    synthesizer = StructuredInvestigationSynthesizer(
+        client, max_prompt_chars=len(probe.prompts[1]) - 1
+    )
+    with pytest.raises(PromptBudgetExceededError):
+        synthesizer.synthesize(state)
+    assert len(client.prompts) == 1
+
+
+def test_no_numeric_repair_examples_without_a_selected_contract() -> None:
+    rejected = json.dumps({"conclusion": "For 2026 total 30.", "claims": [_claim()]})
+    client = _SequenceClient([rejected, _response([_claim()])])
+    StructuredInvestigationSynthesizer(client).synthesize(_build_state())
+    feedback = json.loads(
+        client.prompts[1]
+        .split("FORMAT REPAIR (one attempt):\n", 1)[1]
+        .split("\n", 1)[0]
+    )
+    assert feedback == {"validation_error": "unlinked_narrative_number"}

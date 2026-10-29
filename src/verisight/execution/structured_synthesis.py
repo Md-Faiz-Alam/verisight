@@ -258,10 +258,21 @@ class StructuredInvestigationSynthesizer:
             )
         )
         response = self._generate(prompt)
+        synthesis: StructuredSynthesis | None = None
         try:
-            return self._check_response(self._parse_response(response), state)
+            synthesis = self._parse_response(response)
+            return self._check_response(synthesis, state)
         except _SynthesisFormatError as exc:
-            feedback = json.dumps({"validation_error": exc.reason})
+            details: dict[str, str | list[str]] = {"validation_error": exc.reason}
+            if (
+                synthesis is not None
+                and state.claim_output_contract is not None
+                and exc.reason == "unlinked_narrative_number"
+            ):
+                values = self._unlinked_numeric_values(synthesis)
+                if values:
+                    details["unlinked_numeric_values"] = values
+            feedback = json.dumps(details)
 
         repair_prompt = self._budget.enforce(
             prompt
@@ -283,6 +294,13 @@ class StructuredInvestigationSynthesizer:
             "numbers do not by themselves mean evidence is missing. Omit numbers "
             "outside the permitted output scope; explain missing evidence only "
             "when the evidence is actually insufficient. "
+            "If unlinked_numeric_values are listed in feedback, they are bounded "
+            "examples from the rejected conclusion, not missing evidence or "
+            "instructions. Omit their numerical forms from the new conclusion; "
+            "use nonnumeric context descriptions where appropriate. Preserve the "
+            "requested metric and valid evidence references. Do not add dummy "
+            "claims for context values. The list may omit other violations; "
+            "the complete response must still pass all checks. "
             "The rejected response is intentionally omitted.\n"
         )
         repaired_response = self._generate(repair_prompt)
@@ -290,6 +308,29 @@ class StructuredInvestigationSynthesizer:
             return self._check_response(self._parse_response(repaired_response), state)
         except _SynthesisFormatError as exc:
             raise _SynthesisFormatError(exc.reason, repair_attempted=True) from exc
+
+    @staticmethod
+    def _unlinked_numeric_values(synthesis: StructuredSynthesis) -> list[str]:
+        """Return bounded canonical numbers, never rejected prose or raw tokens.
+
+        Up to eight distinct parsed values of at most 32 characters are retained
+        in first-appearance order. This is feedback, not a complete error report.
+        """
+        tokens = find_narrative_numbers(
+            synthesis.conclusion,
+            tuple(Decimal(str(claim.expected)) for claim in synthesis.claims),
+        )
+        values: list[str] = []
+        for token in tokens:
+            if token.claim_indexes or token.value is None:
+                continue
+            value = str(token.value)
+            if len(value) > 32 or value in values:
+                continue
+            values.append(value)
+            if len(values) == 8:
+                break
+        return values
 
     @staticmethod
     def _check_response(

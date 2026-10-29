@@ -94,6 +94,33 @@ Exit code 1 includes rejected contracts and incomplete workflows; input and
 export errors retain their existing handling. Without the option, the contract
 and assessment are null and exit behavior remains workflow-based.
 
+## Targeted numerical repair feedback
+
+When a selected contract rejects a parsed conclusion for unlinked numbers, the
+existing single repair attempt can include `unlinked_numeric_values`. This field
+contains up to eight distinct parsed values, each represented as a canonical
+numeric string of at most 32 characters, in first-appearance order. Linked values,
+unparseable tokens, and oversized representations are omitted. The examples are
+not a complete list of violations and do not authorize the values as claims.
+
+Repair guidance asks the model to omit those numerical forms from the conclusion,
+use nonnumeric contextual descriptions where appropriate, preserve the requested
+metric and valid evidence references, and avoid dummy claims. The rejected prose,
+raw token text, and raw validation messages are not copied into feedback. These
+bounded generated numeric values are sent to the same synthesis provider; they
+are not added to public failure diagnostics or logs by this feature.
+
+The complete repair prompt remains subject to its existing character budget.
+Malformed responses and other validation categories retain generic error-category
+feedback. Calls without a selected output contract do not receive these numeric
+examples and retain their existing question-context allowance.
+
+Every repaired response must pass the unchanged parser, claim-shape, token-linkage,
+and digit-coverage checks. Numerical evidence verification and final output
+assessment remain separate. A failed second response still produces the existing
+terminal synthesis failure; this adds no generation loop, SQL query, automatic
+text edit, relaxed comparison, or contextual-number exemption.
+
 ## Limits
 
 The assessment scope is `claim_shape_and_numeric_evidence_only`, with
@@ -105,9 +132,9 @@ Numeric-token checks inherit the existing audit's syntax limits. Number words,
 repeated values, and semantic roles are not certified. Contextual numbers such
 as years are rejected when they are detected and not linked to claims. The
 built-in contract-mode synthesizer offers its bounded repair before returning
-such a response. Calls without a contract retain their question-context allowance.
-Do not add irrelevant claims merely to pass; keep final-only conclusions within
-the requested output scope. A contract does not prove that prose reports only
-the requested metric or that an absence of detected tokens means no assertion.
+such a response. Calls without a contract retain their question-context allowance. Do not add
+irrelevant claims merely to pass; keep final-only conclusions within the
+requested output scope. A contract does not prove that prose reports only the
+requested metric or that an absence of detected tokens means no assertion.
 
 This mechanism is domain-independent and introduces no dataset-specific rules.
