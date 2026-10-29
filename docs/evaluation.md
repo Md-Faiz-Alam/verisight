@@ -339,6 +339,120 @@ do not pool different revisions and invocation paths into a success
 rate. This successful validation alone does not justify another runtime
 correction.
 
+## Reviewed October 29 development checks
+
+The following results come from reviewed PowerShell output. Original JSON
+records and logs remain in the existing temporary validation directories.
+They are not new committed reports or a single comparable benchmark. Repeated
+read-only displays of the same saved record are not additional attempts.
+
+### Learner population and bounded synthesis repair
+
+At `9d1aa8c`, a full learner investigation generated the active-only query and
+the independently correct `37.5` result, but synthesis remained incomplete.
+Two diagnostic synthesis responses repeated the contextual year `2026`
+without a corresponding claim and failed `unlinked_narrative_number`.
+Correct SQL evidence therefore did not establish a completed answer.
+
+Revision `33b8d4e` added bounded feedback identifying unlinked numeric values
+during the existing single synthesis format-repair attempt. It did not change
+SQL execution, numerical tolerance, or the validator's acceptance rules.
+
+A separate full learner investigation at `33b8d4e` completed in `20.085`
+seconds. It used `gemini-3.1-flash-lite`, a 30-second request limit, zero
+provider retries, a 120-second shared budget, one analytical attempt, no
+caller-selected population, and a one-VALUE output contract. Manual SQL review
+confirmed cohort `2026`, explicit active-only inclusion, known outcomes, and
+distinct learner identities. Independent arithmetic was `100 * 3 / 8 = 37.5`.
+
+The final VALUE claim referenced the single `percentage completed` cell at
+zero tolerance and was supported; the output assessment was accepted. Both
+failure fields were null. Four generation calls returned text on their first
+provider attempt: investigator, SQL planning, and two structured-synthesis
+calls. The second synthesis call used the bounded format-repair path; the
+first rejected response's validation category was not retained in this run.
+
+The conclusion expressed the percentage in words. Its agreement with `37.5`
+was manually reviewed; the numeric-token audit does not verify number words.
+This is one successful unscoped development fixture, not proof that autonomous
+population interpretation is generally corrected. The original supported
+`40.0` population failures and the later synthesis failures remain failures.
+
+### Three separate transfer fixtures
+
+Offline preparation froze independent answers and discriminating incorrect
+SQL controls before generation. The manifest and original batch remain under
+the temporary directory `verisight-transfer-checks-33b8d4e`.
+
+| Case | Independent answer | Deliberately incorrect control |
+| --- | --- | --- |
+| Latest version, then eligible | `60 + 60 - 15 = 105` units | Filtering eligibility before selecting latest versions gives `145` |
+| Posted remittances with a clearance | `(1200 + 1200 - 325) / 100 = 20.75` | Multiplying repeated clearances gives `32.75`; deduplicating amounts gives `8.75` |
+| Positive-mass weighted mean with known readings | `(2 * 10 + 3 * 20 + 1 * 40) / (2 + 3 + 1) = 20` | An unweighted mean gives about `23.3333`; including missing readings' mass gives about `8.5714` |
+
+The original batch at `33b8d4e` used SDK `2.27.0`,
+`gemini-3.1-flash-lite`, a 30-second request limit, zero provider retries,
+a 120-second shared budget per case, one analytical attempt, no supplied
+population, and exactly one final VALUE claim. Each case had one whole-case
+attempt. Oracle values and control SQL were not sent to the model.
+
+| Original batch case | Retained evidence and outcome | Elapsed seconds |
+| --- | --- | --- |
+| Latest version, then eligible | Correct SQL result `105`; incomplete after synthesis HTTP `500`, with no final claims | `35.554` |
+| Membership without multiplication | Investigator provider failure before any SQL observation was retained; HTTP status unavailable | `30.430` |
+| Weighted mean with missing readings | Investigator returned text; SQL-planning provider failure, with no SQL observation retained; HTTP status unavailable | `42.232` |
+
+None of the three original cases completed. This is not a measurement of
+zero analytical accuracy: two produced no SQL evidence, and the third had
+correct SQL evidence but no completed synthesis.
+
+Later checks are separate records, not replacements for that batch:
+
+| Revision and check | Reviewed outcome | Elapsed seconds |
+| --- | --- | --- |
+| `33b8d4e`, separate full membership investigation | Complete; membership subquery avoided clearance multiplication, preserved equal-valued remittances and the negative amount, excluded missing amounts, and converted cents in SQL. One supported VALUE `20.75`; output accepted | `8.377` |
+| `33b8d4e`, separate weighted diagnostic | SQL-planning HTTP `503` after the investigator returned text; no SQL observation or final answer | `30.898` |
+| `7a91a83`, full weighted investigation with one configured provider retry | Complete; identical eligibility in numerator and denominator, supported final VALUE `20.0`, output accepted | `46.988` |
+| `7a91a83`, latest-version synthesis-only recheck | Retained `105` evidence produced one supported VALUE and accepted output; SQL was not rerun | `7.118` |
+
+The membership success used the original 30-second request limit and zero
+provider retries. Its three generation calls each returned text on the first
+attempt; neither SQL repair nor synthesis format repair was needed.
+
+The two `7a91a83` checks used a 30-second request limit, one configured
+provider retry with a one-second base delay, and a 120-second shared budget.
+The weighted run's three generation calls all succeeded on their first
+attempt. It therefore demonstrates no observed retry recovery or causal
+benefit from enabling retries.
+
+The latest-version recheck used one structured-synthesis call with two
+provider attempts and no format repair. The initial attempt's failure
+category was not retained. This was a production-synthesizer replay from
+retained evidence, with SQL execution blocked; it is not a new full
+investigation. The original latest-version batch outcome remains incomplete.
+
+For the successful checks, numerical references and output shape passed,
+while `task_semantics_verified` remained false. Task-specific acceptance also
+relied on manual SQL review and independent fixture arithmetic. These known
+development cases do not establish repeatability, held-out accuracy, or a
+controlled effect of any implementation change. Do not pool their outcomes
+across revisions, settings, or invocation paths into one success rate.
+
+### Engineering checks are a separate kind of evidence
+
+Revision `5317295` preserved datetime profiles when subtracting valid
+endpoints overflows pandas' duration range. Earliest and latest values remain
+available; the unavailable span is marked explicitly. Revision `7a91a83`
+added allowlisted provider diagnostics to early public/CLI error exports
+without changing retry policy or exposing raw provider messages.
+
+At `7a91a83`, the reviewed Windows run reported 2,422 passing tests,
+100% statement and branch coverage, clean Ruff checks, and strict mypy over
+177 files. The
+[corresponding CI run](https://github.com/Md-Faiz-Alam/verisight/actions/runs/40900013243)
+passed on Windows and Ubuntu. These checks establish tested engineering
+behavior, not analytical or narrative correctness.
+
 ## Scorer, output acceptance, and semantic review
 
 `score_result()` requires a complete result with exactly one supported VALUE

@@ -13,8 +13,12 @@ structured synthesis, numerical claim verification, narrative token and digit
 audits, expected-failure evidence recovery, query repair provenance, provider
 telemetry, shared investigation deadlines, and configurable result byte limits.
 It also includes a local CLI and optional caller-selected claim output contracts.
-CI is configured for Python 3.11 on Windows and Linux. A configured workflow is
-not evidence that a particular remote run passed.
+CI is configured for Python 3.11 on Windows and Linux. At revision `7a91a83`,
+the reviewed Windows run reported 2,422 passing tests, 100% statement and branch
+coverage, clean Ruff checks, and strict mypy over 177 files. The
+[corresponding CI run](https://github.com/Md-Faiz-Alam/verisight/actions/runs/40900013243)
+passed on Windows and Ubuntu. A passing run establishes the tested engineering
+behavior, not analytical meaning or production readiness.
 
 At the 2026-10-25 implementation checkpoint `da86f3a`, the supplied Windows
 terminal run for those changes reported 2,274 passing tests, 100% statement and
@@ -29,14 +33,23 @@ The reviewed corrections now include finite platform-bounded SQL timeouts,
 unusable-column rejection before registration, stable float summary arithmetic
 with explicit deviation overflow, shared SDK cancellation classification, a
 caller-selected claim output gate, and the `current_schemas` metadata restriction.
-These are focused engineering corrections, not proof of general analytical
-reliability. No fresh live success is inferred from passing offline gates.
+Later corrections include explicit CSV parsing choices and provenance, SQL
+planning separate from execution, bounded categorical evidence for planning
+and repair, targeted numeric feedback in synthesis repair, datetime-span
+overflow handling, and safe provider diagnostics in public/CLI error exports.
+These are focused engineering changes, not proof of general analytical
+reliability. Passing offline gates is separate from live task acceptance.
 
 Original-question propagation did not reliably correct autonomous population
 selection. A live education case still selected non-cancelled learners rather
 than active learners, returning 40% instead of 37.5%. Its claim was numerically
-supported by the wrong population's SQL cell. This remains an unresolved
-analytical interpretation failure.
+supported by the wrong population's SQL cell. This historical run remains an
+analytical interpretation failure. A later unscoped full investigation at
+`33b8d4e` used the correct active-only query and completed with one supported
+`37.5` VALUE claim in `20.085` seconds. It also used the existing synthesis
+format-repair path. That success applies to one known development fixture;
+general autonomous population interpretation remains unproven. See
+[Evaluation](evaluation.md#reviewed-october-29-development-checks).
 
 Caller-selected population enforcement is implemented separately. The public
 `execute`, `ask`, and `investigate` methods accept typed, immutable equality or
@@ -114,6 +127,11 @@ certify the whole task. Remaining acceptance work concerns interpretation,
 meaningful review of procedures, and unfamiliar-data evidence. See
 [Output contracts](output-contracts.md).
 
+At `33b8d4e`, the existing single synthesis repair attempt gained bounded
+feedback identifying unlinked numeric values. Validators and numerical
+tolerances were unchanged. This helps address demonstrated output failures;
+it does not verify number words, units, populations, or narrative truth.
+
 ## 2. Validate the implemented local workflow
 
 The local command-line workflow over the existing Python facade is implemented.
@@ -130,6 +148,8 @@ dashboards, and extra providers are not required for this milestone.
 | Inspect the answer | Separate evidence, claims, audits, and optional output acceptance | Evaluate whether users can identify supported but analytically wrong answers |
 | Export | Explicit new-file JSON export | Assess portability, sensitive content, and consumer expectations |
 
+`plan()` exposes proposed SQL without executing the analytical query. Reviewing
+a plan does not bind later execution to an immutable snapshot of the input.
 `execute()` and `ask()` currently return `QueryResult`, without investigation
 provenance. Do not imply those values contain SQL repair history or a review
 record. Use `investigate()` for the evidence-oriented workflow rather than
@@ -148,10 +168,19 @@ establish unfamiliar-data accuracy.
 
 That synthetic demonstration exists in the retained posted-transaction CLI
 validation. The fixed CLI batch and later orchard/reservoir records show both
-successes and limitations. The latest reservoir procedure recheck used two
-ordered queries but still returned extra claims. Detecting that mismatch with
-the output gate does not establish autonomous compliance or a successful new
-live run. See [Evaluation](evaluation.md) for the reports.
+successes and limitations. The historical reservoir procedure recheck at
+`5474cee` used two ordered queries but returned extra claims. A later full CLI
+run at `58e2243` completed the same known task in `75.753` seconds with two
+ordered queries and exactly one supported DIFFERENCE claim `50`. Both records
+remain relevant; the later success does not replace the earlier failure.
+
+October 29 checks separately recorded a successful full learner investigation
+at `33b8d4e`, a successful full membership investigation at that revision,
+and a successful full weighted-mean investigation at `7a91a83`. The original
+three-case transfer batch had no completed cases. A later latest-version check
+successfully synthesized retained evidence but did not rerun the full workflow.
+These are development diagnostics across different invocation paths and
+settings, not a combined accuracy rate. See [Evaluation](evaluation.md).
 
 ## 3. Establish independent release evaluation
 
@@ -200,7 +229,10 @@ wrong values, unsafe arithmetic, and unsupported conversions remain visible.
 Before release, verify installation in a fresh environment, actual remote CI
 outcomes, supported workload limits, cancellation and cleanup behavior, and
 expected recovery under provider failures. Document dependency and environment
-inputs so results can be reproduced.
+inputs so results can be reproduced. Early public/CLI failures now retain
+available allowlisted provider diagnostics. Missing HTTP status does not
+identify a transport cause; a configured retry is not evidence that a retry
+was needed or successful.
 
 Choose deployment requirements explicitly. Hosted or multi-user deployment
 requires its own isolation, authorization, upload, disclosure, and resource
