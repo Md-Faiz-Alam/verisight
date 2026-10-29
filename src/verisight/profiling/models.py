@@ -43,12 +43,17 @@ class TextStatistics:
 
 @dataclass(frozen=True, slots=True)
 class DatetimeStatistics:
-    """Descriptive statistics for a datetime column."""
+    """Descriptive statistics for a datetime column.
+
+    Endpoints retain their original precision. If their difference cannot be
+    represented as a pandas Timedelta, span is None and span_overflow is True.
+    """
 
     earliest: pd.Timestamp
     latest: pd.Timestamp
-    span: pd.Timedelta
+    span: pd.Timedelta | None
     timezone: str | None
+    span_overflow: bool = False
 
 
 @dataclass(frozen=True, slots=True)

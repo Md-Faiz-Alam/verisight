@@ -183,12 +183,26 @@ class ColumnProfiler:
         latest = pd.Timestamp(series.max())
 
         timezone = str(earliest.tz) if earliest.tz is not None else None
+        span_overflow = False
+        span: pd.Timedelta | None
+        try:
+            span = latest - earliest
+        except (
+            OverflowError,
+            pd.errors.OutOfBoundsDatetime,
+            pd.errors.OutOfBoundsTimedelta,
+        ):
+            # Valid endpoints can have an unrepresentable difference. Keep
+            # them exact rather than dropping the column or reducing precision.
+            span = None
+            span_overflow = True
 
         return DatetimeStatistics(
             earliest=earliest,
             latest=latest,
-            span=latest - earliest,
+            span=span,
             timezone=timezone,
+            span_overflow=span_overflow,
         )
 
     @staticmethod
