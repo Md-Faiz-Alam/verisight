@@ -1,28 +1,8 @@
-"""Contracts for analytical planning and execution."""
+"""Contract for provenance-aware analytical query execution."""
 
 from typing import Protocol
 
 from verisight.execution.execution import QueryExecution
-from verisight.execution.models import QueryResult
-from verisight.execution.planning import QueryPlan
-
-
-class AnalyticalQueryService(Protocol):
-    """Contract for complete analytical query services."""
-
-    def plan(self, question: str, *, original_question: str | None = None) -> QueryPlan:
-        """Plan an analytical query from a natural-language question."""
-        ...
-
-    def execute(self, query: str) -> QueryResult:
-        """Execute an analytical query."""
-        ...
-
-    def run(
-        self, question: str, *, original_question: str | None = None
-    ) -> QueryExecution:
-        """Plan and execute an analytical question with provenance."""
-        ...
 
 
 class AnalyticalQueryRunner(Protocol):
