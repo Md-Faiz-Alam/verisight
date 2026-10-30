@@ -73,7 +73,11 @@ schema and shape failures; they do not receive an additional attempt.
 Repair instructions require removing prose numbers when their claims are removed,
 unless another retained claim links them. Component cells remain referenced by
 claims without repeating their values in final-only prose. Evidence can exist
-without its numbers being permitted in the conclusion.
+without its numbers being permitted in the conclusion. Contract-mode generation
+instructions require numerical quantities to use numeric literals rather than
+number words.
+Out-of-scope quantities must be omitted entirely, not spelled out. Context and
+references may be described without stating their quantities.
 
 If evidence is insufficient, empty claims remain allowed; they cannot pass a
 nonempty output contract. The system does not force a numerical assertion to
@@ -103,10 +107,11 @@ numeric string of at most 32 characters, in first-appearance order. Linked value
 unparseable tokens, and oversized representations are omitted. The examples are
 not a complete list of violations and do not authorize the values as claims.
 
-Repair guidance asks the model to omit those numerical forms from the conclusion,
-use nonnumeric contextual descriptions where appropriate, preserve the requested
-metric and valid evidence references, and avoid dummy claims. The rejected prose,
-raw token text, and raw validation messages are not copied into feedback. These
+Repair guidance asks the model to omit those quantities entirely from the
+conclusion, including number-word forms, use nonquantitative contextual
+descriptions where appropriate, preserve the requested metric and valid evidence
+references, and avoid dummy claims. The rejected prose, raw token text, and raw
+validation messages are not copied into feedback. These
 bounded generated numeric values are sent to the same synthesis provider; they
 are not added to public failure diagnostics or logs by this feature.
 
@@ -129,7 +134,13 @@ denominators, grain, units, query order, causal meaning, or narrative truth.
 A plausible number from the wrong SQL can still pass.
 
 Numeric-token checks inherit the existing audit's syntax limits. Number words,
-repeated values, and semantic roles are not certified. Contextual numbers such
+repeated values, and semantic roles are not certified. Numeric-literal and
+omission instructions are generation guidance, not additional acceptance checks.
+A response can ignore them and pass the automatic assessment despite incorrect
+number words or direction. Offline prompt tests establish the instructions sent,
+not model compliance. Any claim of improved compliance requires a separately
+specified repeated live evaluation at fixed settings; no such effect follows
+from this wording change. Contextual numbers such
 as years are rejected when they are detected and not linked to claims. The
 built-in contract-mode synthesizer offers its bounded repair before returning
 such a response. Calls without a contract retain their question-context allowance. Do not add

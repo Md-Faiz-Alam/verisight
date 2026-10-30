@@ -1036,6 +1036,14 @@ def test_synthesis_enforces_the_exact_selected_operation_multiset(
             '"validation_error": "claim_output_contract_mismatch"' in client.prompts[1]
         )
     assert "CALLER-SELECTED CLAIM OUTPUT CONTRACT" in client.prompts[0]
+    assert (
+        "Omit out-of-scope quantities entirely, including number-word forms"
+        in (client.prompts[0])
+    )
+    assert (
+        "Use numeric literals for quantities, never number words" in client.prompts[0]
+    )
+    assert "Describe context and references in words" not in client.prompts[0]
 
 
 @pytest.mark.parametrize(
@@ -1167,6 +1175,10 @@ def test_targeted_numeric_feedback_keeps_validation_and_evidence_checks(
     }
     assert "synthetic-private-context" not in client.prompts[1]
     assert "Do not add dummy claims" in client.prompts[1]
+    assert "Do not write quantities as number words" in client.prompts[1]
+    assert "Omit these quantities entirely from the new conclusion" in client.prompts[1]
+    assert "and context in words" not in client.prompts[1]
+    assert "Omit their numerical forms" not in client.prompts[1]
 
 
 @pytest.mark.parametrize(
@@ -1226,3 +1238,50 @@ def test_no_numeric_repair_examples_without_a_selected_contract() -> None:
         .split("\n", 1)[0]
     )
     assert feedback == {"validation_error": "unlinked_narrative_number"}
+
+
+@pytest.mark.parametrize(
+    "conclusion",
+    [
+        "The difference is seventy.",
+        "Accepted totals fell by fifty.",
+    ],
+    ids=["wrong-number-words", "wrong-direction"],
+)
+def test_contract_does_not_semantically_verify_number_words(conclusion: str) -> None:
+    contract = ClaimOutputContract((ClaimOperation.DIFFERENCE,))
+    state = replace(
+        _build_state(),
+        claim_output_contract=contract,
+    ).add_observation(
+        QueryObservation(
+            question="Read before and after totals.",
+            sql="SELECT total FROM synthetic",
+            result=QueryResult(columns=("total",), rows=((100,), (150,))),
+        )
+    )
+    claim = {
+        **_claim("50"),
+        "operation": "difference",
+        "left": {"observation_index": 0, "row_index": 1, "column": "total"},
+        "right": {"observation_index": 0, "row_index": 0, "column": "total"},
+    }
+    client = _Client(json.dumps({"conclusion": conclusion, "claims": [claim]}))
+
+    synthesis = StructuredInvestigationSynthesizer(client).synthesize(state)
+    result = InvestigationResult(
+        question=state.question,
+        conclusion=synthesis.conclusion,
+        analysis=state.analysis,
+        observations=state.observations,
+        generated_claims=synthesis.claims,
+    )
+
+    assert len(client.prompts) == 1
+    assert synthesis.conclusion == conclusion
+    assert result.verified_claims[0].verification.status is VerificationStatus.SUPPORTED
+    assert result.verified_claims[0].verification.actual == 50
+    assessment = result.assess_output(contract)
+    assert assessment.accepted
+    assert assessment.task_semantics_verified is False
+    assert result.narrative_verified is False
