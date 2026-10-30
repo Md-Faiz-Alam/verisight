@@ -649,3 +649,42 @@ when an investigation export exists.
 | `round-10-education_entities` | `481218c89d6346e4bc1fba1b271740756daa4d1d7b2b2d80397ea390f6b1a889` | `bf3e3dd11b4da5ac3bbfcc6eb455a56c5283ef176fd4c6b71b994fee2fd962ea` |
 | `round-10-research_weighted` | `de7de6a094aa9519ed7f5eddad250fc006fbffb420fe046c2bd63318ffc97c29` | `9f95a0d335252dab12c2efaf807a54d01fb1823c71504998061f219395e1ee58` |
 | `round-10-energy_grain` | `4a94925bd3dc2cd6996ea3329cb5373499a02fe37402e8b0c24c2381e0d3c333` | `5c12658387895e83cfa9eaa41d6e2a7a7231d039f724abc09cce33f89a3495e3` |
+
+### Offline energy population counterexample
+
+An offline counterfactual check on October 30, 2026 replayed the
+unchanged SQL from `round-05-energy_grain` in the retained
+`17d31bb` repeatability batch. No model calls were made.
+
+The original query selected records with `record type != 'test'`.
+The original fixture contained only production and test records,
+so this broader predicate returned the expected `30.0` kWh.
+
+The probe added one generation row with reading identity
+`__nonproduction_scope_probe__`, output `10000`, and record type
+`calibration`, plus one approved review for that identity.
+Independent Python arithmetic restricted to production readings
+still gave `30.00` kWh. The unchanged generated SQL returned
+`10030.0` kWh. It therefore failed the population-robustness check.
+
+The requested production population requires
+`record type = 'production'`; excluding test records alone is
+insufficient when other record types exist. This is a planning
+weakness exposed by the fixture extension, not an SQL execution
+failure. It does not justify automatic predicate rewriting.
+
+The historical batch remains 27/30 numerically correct on its
+original fixtures. This probe is separate evidence and must not
+replace an original attempt or be pooled into that success rate.
+Future population-selection fixtures should include an additional
+non-target category to distinguish inclusion from broad exclusion.
+This now-known probe is development evidence, not held-out testing.
+
+Original result SHA-256: `da48e2458ff8069fffe530c41a7a5eeff55ceb380ca3aab3a45e0d69cbf28609`.
+
+Original investigation SHA-256: `5846912300860d6d5a7517a37a1488e659edc07bf5c6e8e0cbf7bcf3203c094a`.
+
+This entry summarizes reviewed terminal output. Modified fixtures
+were temporary; no standalone machine-readable probe record was
+retained. The hashes identify the original attempt, not the modified
+probe execution. Original batch artifacts remain unchanged.
