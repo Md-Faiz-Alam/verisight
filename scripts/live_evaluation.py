@@ -105,13 +105,14 @@ CHALLENGE_CASES = {
                 "generation.csv",
                 "reading id,output kWh,record type\n"
                 "R1,11.25,production\nR2,11.25,production\n"
-                "R3,7.5,production\nR4,100,production\nR5,999,test\n",
+                "R3,7.5,production\nR4,100,production\nR5,999,test\n"
+                "R6,10000,calibration\n",
             ),
             (
                 "reviews.csv",
                 "reading id,decision\nR1,approved\nR1,approved\n"
                 "R2,approved\nR3,approved\nR3,rejected\n"
-                "R4,rejected\nR5,approved\n",
+                "R4,rejected\nR5,approved\nR6,approved\n",
             ),
         ),
         question=(

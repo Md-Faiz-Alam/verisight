@@ -1374,3 +1374,60 @@ def test_persistent_case_never_overwrites_existing_input(tmp_path: Path) -> None
     assert report["outcome"] == "application_error"
     app.assert_not_called()
     assert path.read_bytes() == original
+
+
+def test_energy_fixture_distinguishes_production_from_non_test(
+    tmp_path: Path,
+) -> None:
+    import csv
+    import io
+
+    case = CHALLENGE_CASES["energy_grain"]
+    contents = dict(case.files)
+    generation = list(csv.DictReader(io.StringIO(contents["generation.csv"])))
+    reviews = list(csv.DictReader(io.StringIO(contents["reviews.csv"])))
+    approved = {row["reading id"] for row in reviews if row["decision"] == "approved"}
+    assert {row["record type"] for row in generation} == {
+        "production",
+        "test",
+        "calibration",
+    }
+    expected = sum(
+        (
+            Decimal(row["output kWh"])
+            for row in generation
+            if row["record type"] == "production" and row["reading id"] in approved
+        ),
+        Decimal("0"),
+    )
+    assert expected == Decimal(case.answer) == Decimal("30")
+    assert case.control_sql is not None
+    broad_sql = case.control_sql.replace(
+        "g.\"record type\" = 'production'",
+        "g.\"record type\" != 'test'",
+        1,
+    )
+    assert broad_sql != case.control_sql
+
+    paths = []
+    for filename, content in case.files:
+        path = tmp_path / filename
+        path.write_bytes(content.encode("utf-8"))
+        paths.append(path)
+
+    app = VeriSight(
+        settings=Settings(
+            gemini_api_key=None,
+            allow_llm_data_disclosure=False,
+        )
+    )
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=AssertionError("Model calls forbidden in this regression."),
+    ) as generate:
+        correct = app.execute(paths, case.control_sql)
+        broad = app.execute(paths, broad_sql)
+    generate.assert_not_called()
+
+    assert correct.rows == ((30.0,),)
+    assert broad.rows == ((10030.0,),)
