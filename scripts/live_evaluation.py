@@ -1,14 +1,17 @@
 """Opt-in live evaluation on synthetic data, with independent numerical answers."""
 
 import argparse
+import hashlib
 import json
 import platform
 import subprocess
 import sys
 from collections import Counter
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
@@ -295,16 +298,24 @@ def control_baseline(
     }
 
 
-def run_case(case: Case, settings: Settings) -> dict[str, object]:
+def run_case(
+    case: Case, settings: Settings, *, artifact_directory: Path | None = None
+) -> dict[str, object]:
     """Use temporary synthetic files and the real default investigation path."""
     baseline: dict[str, object] | None = None
     with capture_generation_calls() as calls:
         try:
-            with TemporaryDirectory(prefix="verisight-evaluation-") as directory:
+            storage = (
+                TemporaryDirectory(prefix="verisight-evaluation-")
+                if artifact_directory is None
+                else nullcontext(str(artifact_directory))
+            )
+            with storage as directory:
                 paths = []
                 for filename, content in case.files:
                     path = Path(directory) / filename
-                    path.write_text(content, encoding="utf-8")
+                    with path.open("xb") as output:
+                        output.write(content.encode("utf-8"))
                     paths.append(path)
                 app = VeriSight(settings=settings)
                 if case.control_sql is not None:
@@ -316,6 +327,12 @@ def run_case(case: Case, settings: Settings) -> dict[str, object]:
                         }
                 result = app.investigate(paths, case.question + REQUEST, max_steps=1)
                 report = score_result(result, case.answer)
+                if artifact_directory is not None:
+                    export_path = artifact_directory / "investigation.json"
+                    _save_json(export_path, result)
+                    report["investigation_sha256"] = hashlib.sha256(
+                        export_path.read_bytes()
+                    ).hexdigest()
                 report["synthetic_evidence"] = to_jsonable(
                     {
                         "question": result.question,
@@ -338,6 +355,104 @@ def run_case(case: Case, settings: Settings) -> dict[str, object]:
     if calls:
         report["generation_calls"] = [asdict(call) for call in calls]
     return report
+
+
+def _save_json(path: Path, payload: object) -> None:
+    """Create one UTF-8 LF artifact without replacing an earlier file."""
+    with path.open("x", encoding="utf-8", newline="\n") as output:
+        json.dump(to_jsonable(payload), output, indent=2, allow_nan=False)
+        output.write("\n")
+
+
+def _run_settings(settings: Settings) -> dict[str, object]:
+    """Record an explicit allowlist, never credentials or arbitrary environment."""
+    return {
+        "allow_llm_data_disclosure": settings.allow_llm_data_disclosure,
+        "request_timeout_seconds": settings.gemini_request_timeout_seconds,
+        "max_investigation_seconds": settings.max_investigation_seconds,
+        "retry_base_delay_seconds": settings.gemini_retry_base_delay_seconds,
+        "max_upload_size_mb": settings.max_upload_size_mb,
+        "max_query_execution_seconds": settings.max_query_execution_seconds,
+        "max_query_result_rows": settings.max_query_result_rows,
+        "max_query_result_bytes": settings.max_query_result_bytes,
+        "max_query_memory_mb": settings.max_query_memory_mb,
+        "max_query_temp_storage_mb": settings.max_query_temp_storage_mb,
+    }
+
+
+def _prepare_artifacts(
+    directory: Path,
+    selected: dict[str, Case],
+    settings: Settings,
+    revision: dict[str, object],
+) -> str:
+    """Record inputs and policy before generation; never resume a previous batch."""
+    if revision["commit"] is None or revision["tracked_changes"] is not False:
+        raise ValueError("Artifact batches require a known clean revision.")
+    directory.mkdir()
+    cases = []
+    for name, case in selected.items():
+        (directory / name).mkdir()
+        cases.append(
+            {
+                "id": name,
+                "question": case.question + REQUEST,
+                "independent_expected": case.answer,
+                "control_sql": case.control_sql,
+                "files": [
+                    {
+                        "name": filename,
+                        "content": content,
+                        "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                    }
+                    for filename, content in case.files
+                ],
+            }
+        )
+    manifest = {
+        "schema_version": 1,
+        "interface": "VeriSight.investigate",
+        "revision": revision,
+        "timestamp_utc": datetime.now(UTC).isoformat(),
+        "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "architecture": platform.machine(),
+        "dependencies": {
+            name: version(name)
+            for name in (
+                "verisight",
+                "duckdb",
+                "sqlglot",
+                "pandas",
+                "numpy",
+                "google-genai",
+                "httpx",
+                "pydantic",
+                "pydantic-settings",
+                "openpyxl",
+                "xlrd",
+            )
+        },
+        "model": settings.gemini_model,
+        "provider_retries": settings.gemini_max_retries,
+        "run_settings": _run_settings(settings),
+        "whole_case_attempts": 1,
+        "max_steps_per_case": 1,
+        "claim_output_contract": None,
+        "encoding": "utf-8",
+        "newlines": "LF",
+        "cases": cases,
+        "limitations": (
+            "Known development fixtures, not a held-out benchmark. "
+            "This facade runner does not implement the proposed six-case CLI "
+            "protocol or certify SQL/narrative semantics. Manifest answers and "
+            "control SQL are evaluation metadata, not generation inputs."
+        ),
+    }
+    path = directory / "manifest.json"
+    _save_json(path, manifest)
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def repository_metadata() -> dict[str, object]:
@@ -413,6 +528,11 @@ def main() -> int:
         type=Path,
         help="Save JSON to a new file; parent directory must exist.",
     )
+    parser.add_argument(
+        "--artifacts",
+        type=Path,
+        help="Retain a batch in a NEW directory; parent must exist. Replaces --output.",
+    )
     args = parser.parse_args()
     if not args.live:
         parser.error("Pass --live to authorize provider calls; API charges may apply.")
@@ -422,6 +542,16 @@ def main() -> int:
         or not args.output.parent.is_dir()
     ):
         parser.error("Output must be a new file in an existing directory.")
+
+    if args.artifacts is not None and (
+        args.output is not None
+        or args.artifacts.exists()
+        or args.artifacts.is_symlink()
+        or not args.artifacts.parent.is_dir()
+    ):
+        parser.error(
+            "Artifacts require a new directory and cannot be combined with --output."
+        )
 
     try:
         settings = Settings(
@@ -445,13 +575,47 @@ def main() -> int:
         available = {**CASES, **CHALLENGE_CASES}
         selected = {args.case: available[args.case]}
     revision = repository_metadata()
+    manifest_hash = None
+    if args.artifacts is not None:
+        try:
+            manifest_hash = _prepare_artifacts(
+                args.artifacts, selected, settings, revision
+            )
+        except Exception:
+            print(
+                "Could not prepare artifact batch. No case was started.",
+                file=sys.stderr,
+            )
+            return 2
     started_at = datetime.now(UTC).isoformat()
     started = perf_counter()
     results = {}
     for name, case in selected.items():
         case_started = perf_counter()
-        case_report = run_case(case, settings)
-        case_report["elapsed_seconds"] = round(perf_counter() - case_started, 3)
+        if args.artifacts is None:
+            case_report = run_case(case, settings)
+            case_report["elapsed_seconds"] = round(perf_counter() - case_started, 3)
+        else:
+            case_directory = args.artifacts / name
+            try:
+                _save_json(
+                    case_directory / "started.json",
+                    {
+                        "timestamp_utc": datetime.now(UTC).isoformat(),
+                        "manifest_sha256": manifest_hash,
+                        "case": name,
+                    },
+                )
+                case_report = run_case(
+                    case, settings, artifact_directory=case_directory
+                )
+                case_report["elapsed_seconds"] = round(perf_counter() - case_started, 3)
+                _save_json(case_directory / "result.json", case_report)
+            except OSError:
+                print(
+                    "Could not retain case artifacts. Batch stopped.", file=sys.stderr
+                )
+                return 2
         results[name] = case_report
     elapsed = round(perf_counter() - started, 3)
     counts = Counter(str(result["outcome"]) for result in results.values())
@@ -464,18 +628,7 @@ def main() -> int:
         "model": settings.gemini_model,
         "max_steps_per_case": 1,
         "provider_retries": settings.gemini_max_retries,
-        "run_settings": {
-            "allow_llm_data_disclosure": settings.allow_llm_data_disclosure,
-            "request_timeout_seconds": settings.gemini_request_timeout_seconds,
-            "max_investigation_seconds": settings.max_investigation_seconds,
-            "retry_base_delay_seconds": settings.gemini_retry_base_delay_seconds,
-            "max_upload_size_mb": settings.max_upload_size_mb,
-            "max_query_execution_seconds": settings.max_query_execution_seconds,
-            "max_query_result_rows": settings.max_query_result_rows,
-            "max_query_result_bytes": settings.max_query_result_bytes,
-            "max_query_memory_mb": settings.max_query_memory_mb,
-            "max_query_temp_storage_mb": settings.max_query_temp_storage_mb,
-        },
+        "run_settings": _run_settings(settings),
         "generation_telemetry_scope": "client_calls_observed_during_case",
         "scoring_scope": "single_claim_numeric_answer_only",
         "limitations": (
@@ -488,6 +641,16 @@ def main() -> int:
         "number_audit_summary": summarize_number_audits(results),
         "results": results,
     }
+    if args.artifacts is not None:
+        report["artifact_manifest_sha256"] = manifest_hash
+        try:
+            _save_json(args.artifacts / "summary.json", report)
+        except OSError:
+            print(
+                "Could not save batch summary. Case artifacts are retained.",
+                file=sys.stderr,
+            )
+            return 2
     serialized = json.dumps(report, indent=2)
     print(serialized)
     if args.output is not None:

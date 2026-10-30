@@ -13,6 +13,7 @@ import pytest
 from scripts.live_evaluation import (
     CASES,
     CHALLENGE_CASES,
+    REQUEST,
     control_baseline,
     failure_report,
     main,
@@ -1139,3 +1140,237 @@ def test_investigation_keeps_original_scope_when_subquestion_loses_inclusion(
         "Do not relabel the result with the requested population name"
         in generate.call_args_list[-1].args[0]
     )
+
+
+@pytest.mark.parametrize("outcome", ["correct_numeric", "provider_error", "incomplete"])
+def test_artifact_batch_retains_every_case_and_manifest_before_generation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], outcome: str
+) -> None:
+    import hashlib
+
+    directory = tmp_path / "batch"
+
+    def evaluate(
+        case: object, settings: Settings, *, artifact_directory: Path
+    ) -> dict[str, object]:
+        manifest = json.loads((directory / "manifest.json").read_text())
+        assert manifest["interface"] == "VeriSight.investigate"
+        assert len(manifest["cases"]) == 5
+        assert (artifact_directory / "started.json").is_file()
+        assert settings.gemini_api_key == "private-secret"
+        return {"outcome": outcome}
+
+    with (
+        patch(
+            "sys.argv",
+            [
+                "live_evaluation",
+                "--live",
+                "--case",
+                "all",
+                "--artifacts",
+                str(directory),
+            ],
+        ),
+        patch(
+            "scripts.live_evaluation.Settings",
+            return_value=Settings(gemini_api_key="private-secret"),
+        ),
+        patch("scripts.live_evaluation.run_case", side_effect=evaluate) as run,
+    ):
+        assert main() == (0 if outcome == "correct_numeric" else 1)
+    assert run.call_count == 5
+    summary = json.loads((directory / "summary.json").read_text())
+    assert summary == json.loads(capsys.readouterr().out)
+    manifest_bytes = (directory / "manifest.json").read_bytes()
+    assert b"\r" not in manifest_bytes
+    assert b"private-secret" not in manifest_bytes
+    manifest = json.loads(manifest_bytes)
+    assert manifest["claim_output_contract"] is None
+    assert manifest["whole_case_attempts"] == 1
+    assert manifest["provider_retries"] == 2
+    assert manifest["dependencies"]["google-genai"]
+    assert len(manifest["runner_sha256"]) == 64
+    digest = hashlib.sha256(manifest_bytes).hexdigest()
+    assert summary["artifact_manifest_sha256"] == digest
+    for case in manifest["cases"]:
+        for item in case["files"]:
+            assert (
+                item["sha256"] == hashlib.sha256(item["content"].encode()).hexdigest()
+            )
+        folder = directory / case["id"]
+        assert (
+            json.loads((folder / "started.json").read_text())["manifest_sha256"]
+            == digest
+        )
+        saved_result = json.loads((folder / "result.json").read_text())
+        assert saved_result["outcome"] == outcome
+        assert saved_result == summary["results"][case["id"]]
+
+
+@pytest.mark.parametrize("incomplete", [False, True])
+def test_persistent_case_keeps_inputs_and_original_investigation(
+    tmp_path: Path, result: InvestigationResult, incomplete: bool
+) -> None:
+    retained = (
+        replace(result, status=InvestigationStatus.INCOMPLETE) if incomplete else result
+    )
+    content = "value\n10\n20\n"
+    case = replace(CASES["finance"], files=(("data.csv", content),), answer="30")
+    directory = tmp_path / "retained"
+    directory.mkdir()
+    with patch("scripts.live_evaluation.VeriSight") as app:
+        app.return_value.investigate.return_value = retained
+        report = run_case(case, Settings(), artifact_directory=directory)
+    assert report["outcome"] == ("incomplete" if incomplete else "correct_numeric")
+    assert (directory / "data.csv").read_bytes() == content.encode()
+    import hashlib
+
+    export_bytes = (directory / "investigation.json").read_bytes()
+    assert report["investigation_sha256"] == hashlib.sha256(export_bytes).hexdigest()
+    original = json.loads(export_bytes)
+    assert original["observations"][0]["result"]["rows"] == [[30]]
+    assert original["status"] == ("incomplete" if incomplete else "complete")
+    assert original["verified_claims"][0]["verification"]["actual"] == "30"
+    assert app.return_value.investigate.call_args.args[1] == case.question + REQUEST
+    with pytest.raises(FileExistsError):
+        from scripts.live_evaluation import _save_json
+
+        _save_json(directory / "investigation.json", {})
+    assert json.loads((directory / "investigation.json").read_text()) == original
+
+
+@pytest.mark.parametrize("failure", ["provider", "baseline"])
+def test_persistent_case_failure_keeps_materialized_inputs(
+    tmp_path: Path, failure: str
+) -> None:
+    case = CHALLENGE_CASES["education_entities"]
+    with patch("scripts.live_evaluation.VeriSight") as app:
+        if failure == "provider":
+            app.return_value.execute.side_effect = GeminiGenerationError(
+                "private-secret"
+            )
+        else:
+            app.return_value.execute.return_value = QueryResult(
+                columns=("metric",), rows=((99,),)
+            )
+        report = run_case(case, Settings(), artifact_directory=tmp_path)
+    assert report["outcome"] == (
+        "provider_error" if failure == "provider" else "baseline_error"
+    )
+    assert (tmp_path / "enrolments.csv").read_bytes() == case.files[0][1].encode()
+    assert not (tmp_path / "investigation.json").exists()
+    app.return_value.investigate.assert_not_called()
+    assert "private-secret" not in json.dumps(report)
+
+
+@pytest.mark.parametrize("kind", ["existing", "symlink", "missing-parent", "output"])
+def test_artifacts_reject_invalid_destination_before_generation(
+    tmp_path: Path, kind: str
+) -> None:
+    directory = tmp_path / "batch"
+    arguments = ["live_evaluation", "--live", "--artifacts", str(directory)]
+    if kind == "existing":
+        directory.mkdir()
+    elif kind == "symlink":
+        # Exercise dangling-link rejection without Windows symlink privileges.
+        pass
+    elif kind == "missing-parent":
+        directory = tmp_path / "absent" / "batch"
+        arguments[-1] = str(directory)
+    else:
+        arguments += ["--output", str(tmp_path / "report.json")]
+    with (
+        patch("sys.argv", arguments),
+        patch("pathlib.Path.is_symlink", return_value=kind == "symlink"),
+        patch("scripts.live_evaluation.run_case") as run,
+        pytest.raises(SystemExit) as caught,
+    ):
+        main()
+    assert caught.value.code == 2
+    run.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "revision",
+    [
+        {"commit": None, "tracked_changes": False},
+        {"commit": "a" * 40, "tracked_changes": True},
+        {"commit": "a" * 40, "tracked_changes": None},
+    ],
+)
+def test_artifact_batch_requires_known_clean_revision(
+    tmp_path: Path, revision: dict[str, object]
+) -> None:
+    directory = tmp_path / "batch"
+    with (
+        patch("sys.argv", ["live_evaluation", "--live", "--artifacts", str(directory)]),
+        patch(
+            "scripts.live_evaluation.Settings",
+            return_value=Settings(gemini_api_key="synthetic"),
+        ),
+        patch("scripts.live_evaluation.repository_metadata", return_value=revision),
+        patch("scripts.live_evaluation.run_case") as run,
+    ):
+        assert main() == 2
+    run.assert_not_called()
+    assert not directory.exists()
+
+
+@pytest.mark.parametrize(
+    "filename", ["manifest.json", "started.json", "result.json", "summary.json"]
+)
+def test_artifact_write_failure_stops_without_additional_cases(
+    tmp_path: Path, filename: str
+) -> None:
+    from scripts.live_evaluation import _save_json
+
+    def save(path: Path, payload: object) -> None:
+        if path.name == filename:
+            raise OSError("private-path")
+        _save_json(path, payload)
+
+    directory = tmp_path / "batch"
+    with (
+        patch("sys.argv", ["live_evaluation", "--live", "--artifacts", str(directory)]),
+        patch(
+            "scripts.live_evaluation.Settings",
+            return_value=Settings(gemini_api_key="synthetic"),
+        ),
+        patch("scripts.live_evaluation._save_json", side_effect=save),
+        patch(
+            "scripts.live_evaluation.run_case",
+            return_value={"outcome": "correct_numeric"},
+        ) as run,
+    ):
+        assert main() == 2
+    assert run.call_count == (1 if filename in {"result.json", "summary.json"} else 0)
+
+
+def test_interrupted_artifact_batch_preserves_started_record(tmp_path: Path) -> None:
+    directory = tmp_path / "batch"
+    with (
+        patch("sys.argv", ["live_evaluation", "--live", "--artifacts", str(directory)]),
+        patch(
+            "scripts.live_evaluation.Settings",
+            return_value=Settings(gemini_api_key="synthetic"),
+        ),
+        patch("scripts.live_evaluation.run_case", side_effect=KeyboardInterrupt),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        main()
+    assert (directory / "manifest.json").is_file()
+    assert (directory / "finance" / "started.json").is_file()
+    assert not (directory / "finance" / "result.json").exists()
+    assert not (directory / "summary.json").exists()
+
+
+def test_persistent_case_never_overwrites_existing_input(tmp_path: Path) -> None:
+    path = tmp_path / "ledger.csv"
+    original = b"original evidence\n"
+    path.write_bytes(original)
+    with patch("scripts.live_evaluation.VeriSight") as app:
+        report = run_case(CASES["finance"], Settings(), artifact_directory=tmp_path)
+    assert report["outcome"] == "application_error"
+    app.assert_not_called()
+    assert path.read_bytes() == original

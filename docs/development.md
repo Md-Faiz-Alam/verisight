@@ -152,6 +152,60 @@ exist. Existing files are not overwritten.
 | `1` | At least one selected case had another outcome |
 | `2` | Argument, configuration, or report-save failure |
 
+### Retained evaluation batches
+
+Use the existing runner as the maintained entry point for its five default and
+three challenge cases. To retain artifacts, replace `--output` with
+`--artifacts` pointing to a new directory whose parent already exists:
+
+```powershell
+New-Item -ItemType Directory -Force reports/evaluations | Out-Null
+$evaluationStamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
+python -m scripts.live_evaluation --live --case all --request-timeout-seconds 30 --provider-retries 1 --artifacts "reports/evaluations/batch-$evaluationStamp"
+```
+
+Run only after committing the runner and intended implementation changes.
+Artifact mode requires a known Git revision with no tracked changes. Untracked
+files are not part of that check and are never selected as fixtures.
+`--case challenge` selects the three challenge cases instead of the five
+defaults. Existing commands without `--artifacts` retain temporary-input behavior.
+
+Before generation, the batch writes `manifest.json` with ordered cases,
+questions, fixture content and UTF-8 LF hashes, independent answers, supplied
+control SQL, settings, repository revision, runner hash, and allowlisted
+dependency versions. Answers and control SQL remain evaluation metadata;
+generation receives the same question and evidence as the existing runner.
+Versions are observations, not a dependency lock or proof that an installed
+package matches the repository revision.
+
+Each case directory retains its synthetic inputs and `started.json`. A returned
+investigation, including an incomplete one or a supported wrong answer, is
+serialized unchanged to `investigation.json`; its byte hash is recorded in
+`result.json`. Early failures retain available inputs and their classified
+result without inventing an investigation export. Provider failures and
+incomplete results do not trigger whole-case retries or prevent later cases
+from being attempted.
+
+The completed batch writes `summary.json` and prints that same report. Existing
+numeric scoring and exit codes are unchanged. The runner does not invoke the
+optional claim output gate or certify analytical task acceptance.
+
+Existing directories, dangling symlinks, and combining `--artifacts` with
+`--output` are rejected. Files are created without overwriting earlier artifacts.
+Preparation errors stop before any case starts; case-artifact write errors stop
+the batch. Interrupted or failed writes may leave partial files. A start record
+without a result is unfinished, and absence of an export is not zero calls,
+a justified abstention, or a completed evaluation. There is no resume mode;
+preserve partial directories and use a separate identifier for any later batch.
+
+This is the existing Python-facade evaluation path, not an installed-CLI
+subprocess test. It does not implement the proposed six-case CLI protocol,
+ordered DIFFERENCE tasks, or justified-abstention scoring. It adds no provider
+calls and does not recover old temporary artifacts. Retained files contain
+synthetic questions, source values, SQL, and conclusions; review them before
+committing. No credentials or arbitrary environment dump are included by the
+new manifest.
+
 Reports retain revision, tracked-file change status, model, settings, timings,
 all case outcomes, token counts, digit coverage, and available failure metadata.
 Observed client calls include attempts, duration, and whether text returned.
