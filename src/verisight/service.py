@@ -179,6 +179,28 @@ class VeriSight:
 
         return StructuredInvestigationSynthesizer.from_settings(settings)
 
+    def _build_execution_service(
+        self,
+        dataset: LoadedDataset,
+        *,
+        planner: QueryPlanner | None = None,
+        repairer: QueryRepairer | None = None,
+        population: tuple[PopulationFilter, ...] = (),
+    ) -> AnalyticalExecutionService:
+        """Apply configured execution limits to each execution workflow."""
+
+        return AnalyticalExecutionService(
+            dataset,
+            planner=planner,
+            repairer=repairer,
+            max_result_rows=self._settings.max_query_result_rows,
+            max_result_bytes=self._settings.max_query_result_bytes,
+            memory_limit_mb=self._settings.max_query_memory_mb,
+            execution_timeout_seconds=self._settings.max_query_execution_seconds,
+            temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,
+            population=population,
+        )
+
     def _load_dataset(
         self,
         paths: str | Path | Iterable[str | Path],
@@ -251,13 +273,8 @@ class VeriSight:
 
         dataset = self._load_dataset(paths)
 
-        execution_service = AnalyticalExecutionService(
+        execution_service = self._build_execution_service(
             dataset,
-            max_result_rows=self._settings.max_query_result_rows,
-            max_result_bytes=self._settings.max_query_result_bytes,
-            memory_limit_mb=self._settings.max_query_memory_mb,
-            execution_timeout_seconds=self._settings.max_query_execution_seconds,
-            temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,
             population=population,
         )
 
@@ -274,15 +291,10 @@ class VeriSight:
 
         dataset = self._load_dataset(paths)
 
-        execution_service = AnalyticalExecutionService(
+        execution_service = self._build_execution_service(
             dataset,
             planner=self._planner,
             repairer=self._repairer,
-            max_result_rows=self._settings.max_query_result_rows,
-            max_result_bytes=self._settings.max_query_result_bytes,
-            memory_limit_mb=self._settings.max_query_memory_mb,
-            execution_timeout_seconds=self._settings.max_query_execution_seconds,
-            temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,
             population=population,
         )
 
@@ -325,15 +337,10 @@ class VeriSight:
         if synthesizer is None:
             raise InvestigationError("No investigation synthesizer is configured.")
 
-        execution_service = AnalyticalExecutionService(
+        execution_service = self._build_execution_service(
             dataset,
             planner=planner,
             repairer=self._repairer,
-            max_result_rows=self._settings.max_query_result_rows,
-            max_result_bytes=self._settings.max_query_result_bytes,
-            memory_limit_mb=self._settings.max_query_memory_mb,
-            execution_timeout_seconds=self._settings.max_query_execution_seconds,
-            temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,
             population=population,
         )
 
