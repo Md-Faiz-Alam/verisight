@@ -297,3 +297,48 @@ Do not use `git add .` when unrelated files or local datasets are present.
 Do not stage `datasets/`. Avoid undated test-count badges and unsupported
 completion percentages. See [Architecture](architecture.md) for current
 contracts and [Roadmap](roadmap.md) for remaining acceptance work.
+
+### Tested Windows Python 3.11 environment snapshot
+
+`requirements-dev-windows-py311.txt` records the installed package versions
+successfully replayed on Windows AMD64 with CPython 3.11.9 at revision
+`3cd3ea84c8c31f635803cb2cf2ca8ed4bfd0404d`.
+
+The replay used an archived source revision and a separate environment.
+Dependency checks, Ruff formatting and lint, strict mypy, and all 2,474
+tests passed with 100% statement and branch coverage.
+
+This development snapshot includes transitive dependencies and build/test
+tools. It is not a minimal dependency specification, a cross-platform lock,
+or a hash-verified package archive. Version pins do not guarantee continued
+package availability or artifact integrity. Supported dependency ranges
+remain in `pyproject.toml`.
+
+From the repository root, replay with Windows AMD64 and CPython 3.11.9:
+
+    $replayEnvironment = Join-Path $env:TEMP (
+        "verisight-replay-" + [guid]::NewGuid().ToString("N")
+    )
+
+    py -3.11 -m venv $replayEnvironment
+    if ($LASTEXITCODE -ne 0) { throw "Environment creation failed." }
+
+    $replayPython = Join-Path $replayEnvironment "Scripts/python.exe"
+
+    & $replayPython -c "import platform; assert platform.python_version() == '3.11.9'; assert platform.system() == 'Windows'; assert platform.machine() == 'AMD64'"
+    if ($LASTEXITCODE -ne 0) { throw "Unexpected Python or platform." }
+
+    & $replayPython -m pip install -r requirements-dev-windows-py311.txt
+    if ($LASTEXITCODE -ne 0) { throw "Snapshot installation failed." }
+
+    & $replayPython -m pip install --no-deps --no-build-isolation -e .
+    if ($LASTEXITCODE -ne 0) { throw "Project installation failed." }
+
+    & $replayPython -m pip check
+    if ($LASTEXITCODE -ne 0) { throw "Dependency check failed." }
+
+Run the documented development gates with `$replayPython`.
+Editable installation imports this checkout; it does not independently
+validate an installed wheel. The historical result applies to the recorded
+revision. Later source or dependency changes require validation before
+claiming equivalent behavior. No live model calls are needed.
