@@ -4,6 +4,7 @@ import codecs
 import csv
 from dataclasses import replace
 from decimal import Decimal
+from io import StringIO
 from pathlib import Path
 
 import pandas as pd
@@ -198,7 +199,42 @@ class CsvLoader(BaseTableLoader):
             encoding=encoding,
             newline=None,
         ) as file:
-            sample = file.read(_CSV_SAMPLE_SIZE)
+            sample = file.read(_CSV_SAMPLE_SIZE + 1)
+
+        if len(sample) > _CSV_SAMPLE_SIZE:
+            # Exclude a partial physical line, then let the CSV parser identify
+            # complete logical records, including quoted multiline fields.
+            sample = sample[:_CSV_SAMPLE_SIZE]
+            sample = sample[: sample.rfind("\n") + 1]
+            candidates: list[str] = []
+            single_column = False
+            for delimiter in _CSV_DELIMITERS:
+                widths: list[int] = []
+                try:
+                    for row in csv.reader(
+                        StringIO(sample), delimiter=delimiter, strict=True
+                    ):
+                        if row:
+                            widths.append(len(row))
+                except csv.Error:
+                    # The final quoted record may extend beyond the sample.
+                    # Only records returned before it are evidence for inference.
+                    pass
+                if len(widths) >= 2 and min(widths) == max(widths):
+                    if widths[0] > 1:
+                        candidates.append(delimiter)
+                    else:
+                        single_column = True
+            if len(candidates) == 1:
+                return candidates[0]
+            if single_column and not any(
+                character in sample for character in _CSV_DELIMITERS
+            ):
+                return _DEFAULT_CSV_DELIMITER
+            raise DataLoadError(
+                "CSV delimiter detection was inconclusive. "
+                "Supply an explicit CsvReadOptions delimiter."
+            )
 
         try:
             dialect = csv.Sniffer().sniff(
@@ -206,11 +242,9 @@ class CsvLoader(BaseTableLoader):
                 delimiters=_CSV_DELIMITERS,
             )
         except csv.Error as exc:
-            # A short sample with no supported separator is a single-column CSV.
+            # A complete file with no supported separator is a single-column CSV.
             # Never reinterpret an inconclusive multi-column sample as comma CSV.
-            if len(sample) < _CSV_SAMPLE_SIZE and not any(
-                character in sample for character in _CSV_DELIMITERS
-            ):
+            if not any(character in sample for character in _CSV_DELIMITERS):
                 return _DEFAULT_CSV_DELIMITER
             raise DataLoadError(
                 "CSV delimiter detection was inconclusive. "

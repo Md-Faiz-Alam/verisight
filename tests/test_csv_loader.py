@@ -787,3 +787,109 @@ def test_loader_rejects_invalid_options_object(tmp_path: Path) -> None:
     path.write_text("name\nAlice\n", encoding="utf-8")
     with pytest.raises(DataLoadError, match="CsvReadOptions object"):
         CsvLoader(Settings()).load(path, options={})  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_csv_loader_loads_long_single_column_file(tmp_path: Path, newline: str) -> None:
+    path = tmp_path / "amounts.csv"
+    values = list(range(3000))
+    content = "amount\n" + "".join(f"{value}\n" for value in values)
+    original = content.replace("\n", newline).encode("utf-8")
+    path.write_bytes(original)
+
+    table = CsvLoader(Settings()).load(path)
+
+    pd.testing.assert_frame_equal(table.data, pd.DataFrame({"amount": values}))
+    assert table.source.csv_delimiter == ","
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("ending", ["xy\n", "xyz"], ids=["newline", "no-newline"])
+def test_csv_loader_single_column_at_exact_sample_limit(
+    tmp_path: Path, ending: str
+) -> None:
+    path = tmp_path / "names.csv"
+    content = "name\n" + "abc\n" * 2046 + ending
+    assert len(content) == 8192
+    path.write_bytes(content.encode("utf-8"))
+
+    table = CsvLoader(Settings()).load(path)
+
+    assert table.data.columns.tolist() == ["name"]
+    assert table.data["name"].tolist() == ["abc"] * 2046 + [ending.rstrip("\n")]
+
+
+@pytest.mark.parametrize("delimiter", [",", ";", "\t", "|"])
+@pytest.mark.parametrize("width", [250, 500])
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_csv_loader_loads_wide_file_across_sample_boundary(
+    tmp_path: Path, delimiter: str, width: int, newline: str
+) -> None:
+    path = tmp_path / "wide.csv"
+    columns = [f"column_{index}" for index in range(width)]
+    row = delimiter.join(str(index) for index in range(width))
+    content = delimiter.join(columns) + "\n" + (row + "\n") * 50
+    original = content.replace("\n", newline).encode("utf-8")
+    path.write_bytes(original)
+
+    table = CsvLoader(Settings()).load(path)
+
+    pd.testing.assert_frame_equal(
+        table.data,
+        pd.DataFrame([list(range(width))] * 50, columns=columns),
+    )
+    assert table.source.csv_delimiter == delimiter
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("delimiter", [",", ";", "\t", "|"])
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_csv_loader_uses_complete_records_before_cut_quoted_field(
+    tmp_path: Path, delimiter: str, newline: str
+) -> None:
+    path = tmp_path / "notes.csv"
+    value = ('He said "Hello".\n' * 800) + "literal separators: ,;\t|"
+    quoted = '"' + value.replace('"', '""') + '"'
+    content = (
+        f"id{delimiter}note\n\n1{delimiter}first\n"
+        f"2{delimiter}{quoted}\n3{delimiter}last\n"
+    )
+    original = content.replace("\n", newline).encode("utf-8")
+    path.write_bytes(original)
+
+    table = CsvLoader(Settings()).load(path)
+
+    pd.testing.assert_frame_equal(
+        table.data,
+        pd.DataFrame(
+            {"id": [1, 2, 3], "note": ["first", value.replace("\n", newline), "last"]}
+        ),
+    )
+    assert table.source.csv_delimiter == delimiter
+    assert path.read_bytes() == original
+
+
+def test_csv_loader_rejects_multiple_consistent_delimiters_in_long_sample(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "ambiguous.csv"
+    path.write_bytes(("a,b;c\n" + "1,2;3\n" * 2000).encode("utf-8"))
+
+    with pytest.raises(DataLoadError, match="delimiter detection was inconclusive"):
+        CsvLoader(Settings()).load(path)
+
+    table = CsvLoader(Settings()).load(path, options=CsvReadOptions(delimiter=","))
+    pd.testing.assert_frame_equal(
+        table.data, pd.DataFrame({"a": [1] * 2000, "b;c": ["2;3"] * 2000})
+    )
+    assert table.source.csv_delimiter == ","
+
+
+def test_csv_loader_rejects_inconsistent_record_widths_in_long_sample(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "inconsistent.csv"
+    path.write_bytes(("a,b\n" + "1,2\n3,4,5\n" * 1000).encode("utf-8"))
+
+    with pytest.raises(DataLoadError, match="delimiter detection was inconclusive"):
+        CsvLoader(Settings()).load(path)
