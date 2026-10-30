@@ -515,3 +515,137 @@ ten-question offline increment.
 
 See [Development](development.md) for the full gate and live evaluation controls,
 and [Architecture](architecture.md) for verification boundaries.
+
+## Recorded repeatability batch at revision 17d31bb
+
+On October 30, 2026, a fixed batch ran ten attempts each of the
+education, weighted-assay, and energy-grain development fixtures.
+The order was education, weighted assay, then energy in each round.
+All 30 scheduled attempts are retained; none was replaced after failure.
+The earlier education artifact-validation pilot is excluded.
+
+| Case | Correct numerical result | Provider error | Median seconds, all attempts | Maximum seconds |
+| --- | ---: | ---: | ---: | ---: |
+| `education_entities` | 9/10 | 1/10 | 16.89 | 50.32 |
+| `research_weighted` | 9/10 | 1/10 | 15.92 | 46.85 |
+| `energy_grain` | 9/10 | 1/10 | 13.90 | 48.95 |
+
+Overall numerical completion was 27/30 (90%). All three remaining
+attempts failed with HTTP 429. No incorrect numerical result,
+application error, or incomplete outcome was recorded in this batch.
+This is an observed result on known development fixtures, not a
+general accuracy estimate or a controlled implementation comparison.
+
+### Recorded execution policy
+
+The following allowlisted settings and installed versions were identical
+across the 30 manifests. Recorded versions are not a dependency lock.
+
+```json
+{
+  "runner_sha256": "f743868670877cf7b2dc61992f7459a5f6b9a7d0b248c30a99c5aedc875ea0ff",
+  "python_version": "3.11.9",
+  "dependencies": {
+    "verisight": "0.1.0",
+    "duckdb": "1.5.6",
+    "sqlglot": "28.10.1",
+    "pandas": "2.3.3",
+    "numpy": "2.3.5",
+    "google-genai": "2.27.0",
+    "httpx": "0.28.1",
+    "pydantic": "2.13.5",
+    "pydantic-settings": "2.15.0",
+    "openpyxl": "3.1.5",
+    "xlrd": "2.0.2"
+  },
+  "model": "gemini-3.1-flash-lite",
+  "provider_retries": 0,
+  "run_settings": {
+    "allow_llm_data_disclosure": true,
+    "request_timeout_seconds": 30.0,
+    "max_investigation_seconds": 300.0,
+    "retry_base_delay_seconds": 1.0,
+    "max_upload_size_mb": 100,
+    "max_query_execution_seconds": 5.0,
+    "max_query_result_rows": 20,
+    "max_query_result_bytes": 1048576,
+    "max_query_memory_mb": 512,
+    "max_query_temp_storage_mb": 1024
+  },
+  "max_steps_per_case": 1,
+  "claim_output_contract": null
+}
+```
+
+### Manual review and qualifications
+
+Review of the exported SQL found explicit active-learner filtering and
+distinct identity counts in education, matching eligible numerator and
+denominator rows in weighted assays, and membership queries that avoid
+review-row multiplication in energy. The conclusions reported the
+expected metrics without an evident numerical contradiction.
+
+Round 5 energy used `record type != 'test'` rather than
+`record type = 'production'`. These predicates agree on this fixture
+but differ if another non-test record type is introduced. That result
+is correct for the fixture and does not establish general population
+selection correctness.
+
+Some conclusions abbreviate eligibility descriptions. Numerical scoring
+does not certify narrative semantics. The manifest's explicit output
+contract is null; this batch does not test CLI claim-output acceptance.
+
+### Preserved provider failures
+
+- `round-03-energy_grain`: HTTP 429 at `text_generation`, 1 provider attempt.
+- `round-04-education_entities`: HTTP 429 at `investigator`, 1 provider attempt.
+- `round-04-research_weighted`: HTTP 429 at `investigator`, 1 provider attempt.
+
+The batch introduced no deliberate pacing between investigations.
+Rate or quota limiting may have been influenced by request cadence,
+but the retained diagnostics do not establish the specific cause.
+
+### Evidence location and fingerprints
+
+Original artifacts remain outside the repository at
+`F:\verisight-validation-artifacts\repeatability-17d31bb-first`.
+Offline checks verified manifest links, fixture bytes, investigation
+hashes, per-case results, and execution-policy consistency.
+These fingerprints identify local evidence; they do not make the raw
+reports publicly available or independently auditable from GitHub.
+
+Each result record also contains the original investigation hash
+when an investigation export exists.
+
+| Attempt | Manifest SHA-256 | Result SHA-256 |
+| --- | --- | --- |
+| `round-01-education_entities` | `0866e5cdc09f09b8df8b3d553a6ed3aece6e04839f76279f13e604e6f39c8503` | `cad8cbfa56933e1ae240424a17900138073b032ad93af0f5709d0dba26bee2ed` |
+| `round-01-research_weighted` | `83bd051cb7ddc161a751dcdc6b523433996bbe2f1f485245b98fd7677d9e838d` | `024ba9c4021a33aa022485d78feedd4d3a7ef4ccb78afe1ca4b897930e9bd4ee` |
+| `round-01-energy_grain` | `a734f6e4c3721f1c49201fd7647f8d71e6687b5b9991faee922746d36033749f` | `68e274fad65fd54afdd73a9af7f31617e82a79d02a0e7c7b3ae33b55c3c6b6b9` |
+| `round-02-education_entities` | `48f0ca1fcf3ad9e0025c39a340fc5cd0042bf8aa55e437845a4427d1c3b692f8` | `5566a91f1849b3ac52ee71d55704f93b5f80e568d7c6ebb2224a30b99a0db82a` |
+| `round-02-research_weighted` | `f717b84861f0273d92a5385130a42ead16033ab7ab0941d7dbaad778c9eb58f2` | `6f7dd6be1e99df9db5163b5d12b1d4da13d9dde778283af0087bc626a1db5958` |
+| `round-02-energy_grain` | `c4209a824907e0a45b34e93c94dc4dd7125e0df597fe334fbaad2a541bee3a79` | `220ff4a17877c6f5c68077898a1d4ea645dc0291c786d31d135ec3a0ba2befb5` |
+| `round-03-education_entities` | `76f4e7ae3de7328411f2540787688e255ccb9820f42a160de6b9712ac1aa4ae4` | `b7e4833bcd8cb440461eccbecc96ad0872907bd82afc917c0ec8a65c6ef0a0f1` |
+| `round-03-research_weighted` | `ae82dbbd8fd740702d868fb3ae92c56079a60e48f2bfdf85fd61842c8b925e94` | `bc089cfbeb4236b33d091b3cfbf8e6e61412451f2523b4c2d855ef7fabb6d3be` |
+| `round-03-energy_grain` | `81e75c2adc4b8b7402a0dc13160015328b03a8366c6fb18947260e51a4cc7656` | `9427afa4b0454ee60e6d5d7ab1e7f2ce737ad23265bd21941e66ff7e1b67b45a` |
+| `round-04-education_entities` | `bdb0a510d1053ecc5d915861a6b686e47ab1201f25a9393cf699ec54c84f4802` | `95b8f0c797f098f7f4864441669d1e2b8ad3e7aea8ed555bcb71fd7d8c1f1221` |
+| `round-04-research_weighted` | `bda5f9075dd439804e6ae04d6e7ebd0bb10a52c56ef6d8b9b658e01e36175067` | `52a0e1681af41beee932c341f2994407311a6a8870bb28a4ee170834d0d2a05b` |
+| `round-04-energy_grain` | `4e76682c713932109fc04238ed65c7ed132083ea5abd76da498aca5b9a4db0f7` | `e2b05c55205a141a384d9693a15afc10f3bd410a2be03ca79246476fe03f7a73` |
+| `round-05-education_entities` | `eda1e32705d51f7859dd7b8440a63913704080f445bf5fb3180b923430fb13c9` | `77302ba0632b00c9420f12f6c2e3997e874dce0622c31524285831f78c1d9e31` |
+| `round-05-research_weighted` | `73dd9a412a4e4208a3f6d99ed32ddb941916a6bcb44803a2c88ffd325338783b` | `aa56eb57cda14c30114e8542fe39b5deb19c94fae31584d2d609204360e40bd1` |
+| `round-05-energy_grain` | `29d3c4c95b92176658e5a99da9d67b1b37c3d5cdd1aaa2fe530718066434345a` | `da48e2458ff8069fffe530c41a7a5eeff55ceb380ca3aab3a45e0d69cbf28609` |
+| `round-06-education_entities` | `6b12280364682aa61c640cdf9c50b02fb40b6e6a79252cc2707047427301f913` | `901f6a64ff4f0ae8b6f7f9b14f82a4d77e922422923fccd793a74e05d202e32b` |
+| `round-06-research_weighted` | `581ca4980b45489865e86eed06e04bbcdc370ccb8f36d2a98ea9cb520effc2ca` | `dd41390160a409d17e9bf82e1b0494f8204788b1584f1695b39eacdd58245a8d` |
+| `round-06-energy_grain` | `0093444100b2430cfb50a52dfdda0d973654b5c41f35b2b122c287d34ccff4b7` | `7b256ee6d84c2eac2a40220c2ca9dc4be9c237072b5385d2662c21d8fda838ec` |
+| `round-07-education_entities` | `39b008013a1e450be19718e69c39523124885d03e27816a67c8c1d2ac6dbbf3d` | `42b173358412a0556589561652b5f878632e37b75b28f69cafcef3eb1ee16d48` |
+| `round-07-research_weighted` | `78bfe6a68fd9786a3d8b7734ee778c31c03d90e69f84fea505e05f8b93514ee8` | `02751faceebd8b8c4e987208d0246ca112f1c964dae57f3448b44fa1b017ca83` |
+| `round-07-energy_grain` | `9d34d9f9b107261b9f12d80606481d5765812cfced5c3e37b204e60d1dcaa19f` | `9baddacd27753a55751d76bcbff94f70b58d60e4f045731275ae011aa67d7fdf` |
+| `round-08-education_entities` | `b67442342bd7a09ca4f23ceb31cb4138550d00471a753ca49538dbc168b88b18` | `cb5379d6508ce53711e888d89e8673f2c60d91e66912a039fcbc41f16e527799` |
+| `round-08-research_weighted` | `604644a4214ec94e766aaed9fde9a2b3fc83ae9247493fd8799166f2dbd841f1` | `5680f2b895e2419d7eb22c8cfd34fb9b2343cdd321be5f0c3edfd044ec2c8e86` |
+| `round-08-energy_grain` | `1e5266bb0d7206418ed14e4f179f981787ddeb5372d6f52a753976005f1fde84` | `f18b1a3ba712fe7810bc5cc938948c52c4fb1f79e924e62182b6b69af72efc7e` |
+| `round-09-education_entities` | `5351798743463c5e1f223e95b7f92c303a390ea2cd8b9b1ba0bf8ef83364da7e` | `6ee9f49caaf8290a56ff28ebd638a34f1b8c7b42c9da97b65ad0df453c620ac1` |
+| `round-09-research_weighted` | `934810739f3643ccfdc22f633e577f3ccefb54db422f674898f417c21e67ff7e` | `2d82318f2d0ba97a76fd5fc706c753b7cf5260939f36985cccb8e275d2424fa1` |
+| `round-09-energy_grain` | `557a0e7f4f1b0146e921e222c92d6469ffe9768580e321c7f95295253b7cc03e` | `de72bc79e33b25f937df00b4e492e61d4220e1a4525278b36c31459083de1b7b` |
+| `round-10-education_entities` | `481218c89d6346e4bc1fba1b271740756daa4d1d7b2b2d80397ea390f6b1a889` | `bf3e3dd11b4da5ac3bbfcc6eb455a56c5283ef176fd4c6b71b994fee2fd962ea` |
+| `round-10-research_weighted` | `de7de6a094aa9519ed7f5eddad250fc006fbffb420fe046c2bd63318ffc97c29` | `9f95a0d335252dab12c2efaf807a54d01fb1823c71504998061f219395e1ee58` |
+| `round-10-energy_grain` | `4a94925bd3dc2cd6996ea3329cb5373499a02fe37402e8b0c24c2381e0d3c333` | `5c12658387895e83cfa9eaa41d6e2a7a7231d039f724abc09cce33f89a3495e3` |
