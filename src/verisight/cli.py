@@ -79,7 +79,12 @@ def _parser() -> argparse.ArgumentParser:
                 ),
             )
             command.add_argument(
-                "--population", type=Path, help="JSON population array."
+                "--population",
+                type=Path,
+                help=(
+                    "JSON population array restricting analytical query rows. "
+                    "Population filters do not redact model context."
+                ),
             )
             command.add_argument(
                 "--preview",
@@ -89,7 +94,13 @@ def _parser() -> argparse.ArgumentParser:
             command.add_argument(
                 "--allow-llm-data-disclosure",
                 action="store_true",
-                help="Permit analytical context to be sent to the configured model.",
+                help=(
+                    "Permit schema, profiles, questions, query observations, and "
+                    "observed categorical values to be sent to the configured model. "
+                    "Categorical values come from the original data before population "
+                    "filters, may contain sensitive strings, and are not automatically "
+                    "redacted."
+                ),
             )
             command.add_argument("--max-steps", type=_positive_int, default=3)
             command.add_argument("--max-seconds", type=_positive_seconds, default=120.0)

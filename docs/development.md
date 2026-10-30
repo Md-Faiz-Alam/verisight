@@ -208,9 +208,16 @@ digit characters but does not interpret them. Number words remain outside the
 coverage check, and `all_digits_parsed` does not certify a narrative.
 
 Built-in generation requires disclosure permission and can send schema,
-profiles, questions, and query results. Never send local datasets merely because
-they exist in the working directory. Keep credentials, private datasets, raw
-provider messages, and rejected responses out of diagnostic artifacts.
+profiles, questions, query results, and bounded observed categorical values
+used by SQL planning and repair. Those categorical values come from the original
+loaded data before caller-selected population filters and can contain raw
+identifiers or other sensitive strings. They are not automatically redacted.
+Population filters restrict analytical query relations; they do not redact model
+context. Original-data profiles can also describe excluded rows.
+
+Never send local datasets merely because they exist in the working directory.
+Keep credentials, private datasets, raw provider messages, and rejected responses
+out of diagnostic artifacts.
 Full investigation results contain evidence and may be sensitive. In particular,
 repair history can serialize failed and replacement SQL containing dataset values.
 Do not treat query provenance as content-free telemetry or publish it without

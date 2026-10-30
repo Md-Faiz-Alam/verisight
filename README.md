@@ -108,7 +108,8 @@ verisight investigate transactions.csv --question "What is the net posted amount
 Omitting `--population` runs an unscoped investigation; it does not infer or
 confirm deterministic filters from the question. Units, grain, denominators,
 time periods, and business definitions still require review. Population filtering
-does not provide privacy isolation; profiles can describe excluded rows.
+does not provide privacy isolation; profiles and observed categorical values can
+include information from excluded rows.
 
 The CLI prints readable JSON to stdout and phase messages to stderr. Live runs
 also show a preliminary profile/request before generation. Files are loaded again
@@ -234,12 +235,13 @@ legacy encodings explicitly; a successful decode cannot establish the original
 encoding. Explicit encoding names use Python's installed codecs and strict
 decoding. Incorrect caller declarations can still produce incorrect text.
 
-Delimiter detection considers comma, semicolon, tab, and pipe in an 8,192-character
-sample. An inconclusive sample containing a possible separator, or reaching the
-sample limit, is rejected rather than silently treated as comma-separated.
-A short sample without any supported separator remains a single-column input.
-Detection is a convenience, not proof of the intended CSV dialect. Declare
-known delimiters explicitly, especially for long quoted or multiline fields.
+Delimiter detection considers comma, semicolon, tab, and pipe using a bounded
+sample. For files longer than 8,192 characters, it uses complete sampled CSV
+records, including quoted multiline records, to identify a consistent delimiter.
+Reaching the sample limit alone does not reject a file. Ambiguous samples or
+samples with too little complete data require an explicit delimiter. Supported
+single-column files can load automatically. Detection is a convenience, not
+proof of the intended CSV dialect; declare known delimiters explicitly.
 
 Both CLI commands accept per-file parsing options; repeat them for other inputs:
 
@@ -287,7 +289,12 @@ VERISIGHT_ALLOW_LLM_DATA_DISCLOSURE=true
 Set `VERISIGHT_GEMINI_MODEL` to override the configured model. Check available
 models and quotas for your provider project. Disclosure permission defaults to
 false. Enabling it permits built-in generation to send analytical context,
-including schema, profiles, questions, and query observations.
+including schema, profiles, questions, query observations, and bounded observed
+categorical values used by SQL planning and repair. These categorical values
+come from the original loaded data before caller-selected population filters.
+They can include raw identifiers or other sensitive strings and are not
+automatically redacted. Population filters restrict analytical query relations;
+they do not redact model context.
 
 The API key is excluded from normal Settings serialization and representation.
 It remains a string accessible to application code. Never commit credentials
