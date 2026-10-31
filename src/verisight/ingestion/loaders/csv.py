@@ -27,7 +27,7 @@ _NUMERIC_PATTERN = (
 )
 
 _CSV_DELIMITERS = ",;\t|"
-_CSV_SAMPLE_SIZE = 8192
+_CSV_SAMPLE_SIZE = 64 * 1024
 _DEFAULT_CSV_DELIMITER = ","
 _ENCODING_CHUNK_SIZE = 64 * 1024
 
@@ -190,68 +190,60 @@ class CsvLoader(BaseTableLoader):
         *,
         encoding: str,
     ) -> str:
-        """Detect a supported delimiter or reject an inconclusive sample."""
+        """Infer a unique delimiter from bounded complete records.
 
-        # Normalize line endings only for inference. Pandas still reads the
-        # original file, preserving newlines embedded in quoted field values.
-        with path.open(
-            "r",
-            encoding=encoding,
-            newline=None,
-        ) as file:
+        Short rows may omit trailing cells. Records wider than the header
+        are not evidence for a valid delimiter. Ambiguous samples still
+        require the caller to choose explicitly.
+        """
+
+        # Normalize line endings only for inference. Pandas reads the original
+        # file so embedded newlines and the source bytes remain unchanged.
+        with path.open("r", encoding=encoding, newline=None) as file:
             sample = file.read(_CSV_SAMPLE_SIZE + 1)
 
-        if len(sample) > _CSV_SAMPLE_SIZE:
-            # Exclude a partial physical line, then let the CSV parser identify
-            # complete logical records, including quoted multiline fields.
+        truncated = len(sample) > _CSV_SAMPLE_SIZE
+        if truncated:
             sample = sample[:_CSV_SAMPLE_SIZE]
             sample = sample[: sample.rfind("\n") + 1]
-            candidates: list[str] = []
-            single_column = False
-            for delimiter in _CSV_DELIMITERS:
-                widths: list[int] = []
-                try:
-                    for row in csv.reader(
-                        StringIO(sample), delimiter=delimiter, strict=True
-                    ):
-                        if row:
-                            widths.append(len(row))
-                except csv.Error:
-                    # The final quoted record may extend beyond the sample.
-                    # Only records returned before it are evidence for inference.
-                    pass
-                if len(widths) >= 2 and min(widths) == max(widths):
-                    if widths[0] > 1:
-                        candidates.append(delimiter)
-                    else:
-                        single_column = True
-            if len(candidates) == 1:
-                return candidates[0]
-            if single_column and not any(
-                character in sample for character in _CSV_DELIMITERS
-            ):
-                return _DEFAULT_CSV_DELIMITER
-            raise DataLoadError(
-                "CSV delimiter detection was inconclusive. "
-                "Supply an explicit CsvReadOptions delimiter."
-            )
 
-        try:
-            dialect = csv.Sniffer().sniff(
-                sample,
-                delimiters=_CSV_DELIMITERS,
-            )
-        except csv.Error as exc:
-            # A complete file with no supported separator is a single-column CSV.
-            # Never reinterpret an inconclusive multi-column sample as comma CSV.
-            if not any(character in sample for character in _CSV_DELIMITERS):
-                return _DEFAULT_CSV_DELIMITER
-            raise DataLoadError(
-                "CSV delimiter detection was inconclusive. "
-                "Supply an explicit CsvReadOptions delimiter."
-            ) from exc
+        candidates: list[str] = []
+        single_column = False
+        minimum_records = 2 if truncated else 1
+        for delimiter in _CSV_DELIMITERS:
+            widths: list[int] = []
+            try:
+                for row in csv.reader(
+                    StringIO(sample), delimiter=delimiter, strict=True
+                ):
+                    if row:
+                        widths.append(len(row))
+            except csv.Error:
+                # A truncated sample can end inside a quoted logical record.
+                # Only records returned before that record are evidence.
+                if not truncated:
+                    continue
 
-        return dialect.delimiter
+            if len(widths) < minimum_records:
+                continue
+            header_width = widths[0]
+            if any(width > header_width for width in widths[1:]):
+                continue
+            if header_width > 1:
+                candidates.append(delimiter)
+            else:
+                single_column = True
+
+        if len(candidates) == 1:
+            return candidates[0]
+        if single_column and not any(
+            character in sample for character in _CSV_DELIMITERS
+        ):
+            return _DEFAULT_CSV_DELIMITER
+        raise DataLoadError(
+            "CSV delimiter detection was inconclusive. "
+            "Supply an explicit CsvReadOptions delimiter."
+        )
 
     @classmethod
     def _infer_safe_column_types(
