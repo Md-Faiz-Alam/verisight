@@ -688,3 +688,60 @@ This entry summarizes reviewed terminal output. Modified fixtures
 were temporary; no standalone machine-readable probe record was
 retained. The hashes identify the original attempt, not the modified
 probe execution. Original batch artifacts remain unchanged.
+
+### Strengthened energy fixture: live failure and caller-scoped replay
+
+A live attempt on October 30, 2026 used the strengthened energy
+fixture at revision `c3716706f12fab23cbe4246dad49894e23b57e6d`.
+The fixture includes an approved calibration reading, so excluding
+test records is no longer equivalent to selecting production.
+
+| Check | Result | Interpretation |
+| --- | ---: | --- |
+| Independent expected production output | 30 kWh | Task answer |
+| Supplied production SQL control | 30 kWh | Control agrees |
+| Live model-generated SQL | 10030 kWh | Incorrect population |
+| Offline replay with caller-enforced production population | 30 kWh | Existing scope enforcement protects this task |
+
+The live planner generated `record type != 'test'` and therefore
+included the calibration reading. Its membership subquery avoided
+duplicate-review multiplication, but did not correct the population.
+Synthesis described the resulting 10030 kWh as production output.
+
+The VALUE claim was numerically supported because it matched the
+SQL result cell. The independent scorer correctly classified the
+answer as `incorrect_numeric`; the runner returned exit 1.
+No explicit claim-output contract was selected.
+
+The recorded model was `gemini-3.1-flash-lite`. The attempt took
+`15.116` seconds. All three generation calls
+returned text on their first provider attempt, with zero configured
+provider retries. This was an analytical failure, not an observed
+provider outage.
+
+A separate offline comparison executed the unchanged saved SQL
+against the same inputs. Without a population filter it returned
+10030 kWh. With `PopulationFilter(relation='generation',
+column='record type', values=('production',))`, it returned 30 kWh,
+matching independent Python arithmetic. No model calls were made.
+This protects the caller-selected population; it does not establish
+automatic population selection or general semantic verification.
+
+The scoped replay is summarized from reviewed terminal output;
+no separate machine-readable replay record was saved. It must not
+replace the failed live attempt or count as a successful model run.
+Neither result is pooled into the earlier 27/30 batch, whose fixture
+did not contain the calibration reading.
+
+Original live artifacts remain outside the repository at
+`F:\verisight-validation-artifacts\energy-c371670-first`.
+
+Manifest SHA-256: `874581d5791e9d363276913bb094dcdb55be7e725a9dc4e7d19f63159e12b0d9`.
+
+Result SHA-256: `2c4e5f1590242360bd2750a5c268ef77151d82c7af3bea8480b5ef54e91ddb1a`.
+
+Investigation SHA-256: `0298fd38462ad80a66ab70e538e2227a18a634da337122ae3d2ac88fada5c640`.
+
+These fingerprints identify local artifacts; the raw reports are
+not independently available from the repository. Autonomous
+population interpretation remains unresolved.
