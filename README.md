@@ -184,6 +184,7 @@ Expected query result: column `net_amount`, row `(80,)`.
 | Method | Purpose | Return type |
 | --- | --- | --- |
 | `analyze(paths)` | Profile data and assess quality | `DatasetAnalysisResult` |
+| `plan(paths, question)` | Generate proposed SQL without analytical execution | `QueryPlan` |
 | `execute(paths, query)` | Execute supplied analytical SQL | `QueryResult` |
 | `ask(paths, question)` | Plan and execute a question | `QueryResult` |
 | `investigate(paths, question, max_steps=5)` | Investigate and synthesize | `InvestigationResult` |
@@ -236,13 +237,14 @@ legacy encodings explicitly; a successful decode cannot establish the original
 encoding. Explicit encoding names use Python's installed codecs and strict
 decoding. Incorrect caller declarations can still produce incorrect text.
 
-Delimiter detection considers comma, semicolon, tab, and pipe using a bounded
-sample. For files longer than 8,192 characters, it uses complete sampled CSV
-records, including quoted multiline records, to identify a consistent delimiter.
-Reaching the sample limit alone does not reject a file. Ambiguous samples or
-samples with too little complete data require an explicit delimiter. Supported
-single-column files can load automatically. Detection is a convenience, not
-proof of the intended CSV dialect; declare known delimiters explicitly.
+Delimiter detection considers comma, semicolon, tab, and pipe using a sample
+of at most 65,536 decoded characters. It uses complete sampled CSV records,
+including quoted multiline records, and permits missing trailing cells in
+short rows. A truncated sample requires at least two complete records.
+Competing delimiters, records wider than the header, or too little complete
+data require an explicit delimiter. Supported single-column files can load
+automatically. Detection is a convenience, not proof of the intended CSV
+dialect; declare known delimiters explicitly.
 
 Both CLI commands accept per-file parsing options; repeat them for other inputs:
 
@@ -442,36 +444,103 @@ Returning text does not imply valid JSON or a correct answer.
 
 ## Review SQL before execution
 
-The Python facade supports planning separately from execution:
+For questions with an explicit target population, select that population before
+planning and pass the same filters to execution. A question asking for production
+records requires production records; excluding test records can also include
+calibration records. The caller supplies this meaning. VeriSight does not infer
+or confirm it deterministically.
+
+The Python facade supports planning separately from execution. This complete
+example assumes local `generation.csv` and `reviews.csv` inputs. Their relation
+names must be `generation` and `reviews`, and the generation table must have a
+text column named `record type` whose target value is `production`. Inspect the
+schema with `analyze()` or CLI `profile` before choosing these names.
+
+Run the example as a Python script or in an interactive Python session so that
+standard input is available for the review prompt:
 
 ```python
-plan = app.plan(paths, question, population=population)
-print(plan.question)
+from hashlib import sha256
+from pathlib import Path
+
+from verisight import VeriSight
+from verisight.config import Settings
+from verisight.execution.context import PopulationFilter
+
+paths = (Path("generation.csv"), Path("reviews.csv"))
+question = (
+    "What is the total production output in kWh for readings with at least "
+    "one approved review? Count each generation row once."
+)
+population = (
+    PopulationFilter(
+        relation="generation",
+        column="record type",
+        values=("production",),
+    ),
+)
+before = {path: sha256(path.read_bytes()).hexdigest() for path in paths}
+
+planner = VeriSight(
+    settings=Settings(
+        allow_llm_data_disclosure=True,
+        gemini_request_timeout_seconds=30,
+        gemini_max_retries=0,
+    )
+)
+plan = planner.plan(paths, question, population=population)
+print("Question:", plan.question)
+print("Enforced input population:", population)
+print("Proposed SQL:")
 print(plan.sql)
+
+if input("Review the SQL; type EXECUTE to run it: ").strip() != "EXECUTE":
+    raise SystemExit("Stopped without executing analytical SQL.")
+
+after = {path: sha256(path.read_bytes()).hexdigest() for path in paths}
+if after != before:
+    raise SystemExit("Inputs changed. Plan and review again before execution.")
+
+executor = VeriSight(
+    settings=Settings(
+        _env_file=None,
+        gemini_api_key=None,
+        allow_llm_data_disclosure=False,
+    )
+)
+result = executor.execute(paths, plan.sql, population=population)
+print(result.columns)
+print(result.rows)
 ```
 
-`app` is a configured `VeriSight` instance. Model-backed planning requires
-credentials and explicit data-disclosure permission. Planning can make provider
-calls but does not execute analytical SQL or invoke SQL repair.
+Model-backed planning requires configured credentials and explicitly enables
+data disclosure in this example. It can send original-data profiles and observed
+categories, including values from rows excluded by the population. Planning does
+not execute analytical SQL or invoke SQL repair. The execution instance disables
+built-in model generation and executes the exact reviewed SQL.
 
-Inspect the proposed SQL for population, entity grain, denominator, units,
-joins, missing values, and operation order. A returned plan does not establish
-SQL validity or analytical correctness.
+Before typing `EXECUTE`, inspect the SQL for entity grain, duplicate review rows,
+approval membership, missing values, units, and calculation. A membership query
+using `EXISTS` or `IN` can avoid multiplying generation rows by repeated reviews;
+a plain join can inflate the sum. Population enforcement alone does not check
+these requirements. Stop and correct the SQL if review finds a problem.
 
-After review, execute its SQL explicitly:
+Population filters restrict input relations before SQL runs. They are not a
+substitute for conditions that must apply after an operation, such as choosing
+the latest revision before testing eligibility. A returned plan and a completed
+query do not establish general analytical correctness.
 
-```python
-result = app.execute(paths, plan.sql, population=population)
-```
+Execution applies existing SQL validation, population restrictions, and resource
+limits. It does not replan or invoke model-based SQL repair. An invalid query
+fails rather than being replaced automatically.
 
-Execution applies the existing SQL validation, population restrictions, and
-resource limits. It does not replan or invoke model-based SQL repair. An invalid
-query fails rather than being replaced automatically.
-
-Use the same files, CSV parsing options, and population for both calls.
-Execution reloads the files; this workflow does not freeze their contents.
-The caller is responsible for keeping inputs unchanged between review and
-execution. Keep the plan alongside the returned result when recording evidence.
+Use the same file paths, CSV parsing options, and population for planning and
+execution. The example uses automatic CSV parsing for both instances. If explicit
+`csv_options` are needed, pass the same mapping to both. The hash comparison
+detects changed file bytes between its two checks; it is not an atomic snapshot
+and cannot prevent concurrent changes during loading. Keep input files stable.
+Keep the reviewed SQL, population, input fingerprints, and result together when
+recording evidence.
 
 This optional Python workflow returns a `QueryResult`, not an investigation
 with generated claims or synthesis. The existing CLI preview remains offline
