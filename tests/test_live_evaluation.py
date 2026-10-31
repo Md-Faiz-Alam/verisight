@@ -30,6 +30,7 @@ from verisight.execution.claim_verification import (
     EvidenceReference,
     NumericalClaim,
 )
+from verisight.execution.context import PopulationFilter
 from verisight.execution.exceptions import InvestigationError
 from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.investigation import InvestigationState
@@ -1427,7 +1428,19 @@ def test_energy_fixture_distinguishes_production_from_non_test(
     ) as generate:
         correct = app.execute(paths, case.control_sql)
         broad = app.execute(paths, broad_sql)
+        scoped = app.execute(
+            paths,
+            broad_sql,
+            population=(
+                PopulationFilter(
+                    relation="generation",
+                    column="record type",
+                    values=("production",),
+                ),
+            ),
+        )
     generate.assert_not_called()
 
     assert correct.rows == ((30.0,),)
     assert broad.rows == ((10030.0,),)
+    assert scoped.rows == ((30.0,),)

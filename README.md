@@ -1,6 +1,7 @@
 # VeriSight
 
-An evidence-verifying autonomous investigator for structured tabular datasets.
+SQL-backed tabular analysis with inspectable queries, caller-enforced
+populations, and numerical claim checking.
 
 VeriSight loads and profiles data, executes analytical SQL, and supports
 Gemini-driven investigations. Its default synthesizer produces structured
