@@ -250,6 +250,8 @@ class StructuredInvestigationSynthesizer:
                 "Use numeric literals for quantities, never number words. "
                 "Contract mode also rejects common English cardinal words "
                 "even in context labels; use nonquantitative descriptions. "
+                "For example, write 'with an approved review' instead of "
+                "'with at least one approved review'. "
                 "Use nonquantitative context descriptions. Omit out-of-scope "
                 "quantities entirely, including number-word forms. This policy "
                 "does not establish task semantics or numerical support.\n"
@@ -269,7 +271,7 @@ class StructuredInvestigationSynthesizer:
             synthesis = self._parse_response(response)
             return self._check_response(synthesis, state)
         except _SynthesisFormatError as exc:
-            details: dict[str, str | list[str]] = {"validation_error": exc.reason}
+            details: dict[str, str | int | list[str]] = {"validation_error": exc.reason}
             if (
                 synthesis is not None
                 and state.claim_output_contract is not None
@@ -278,6 +280,18 @@ class StructuredInvestigationSynthesizer:
                 values = self._unlinked_numeric_values(synthesis)
                 if values:
                     details["unlinked_numeric_values"] = values
+                words = self._forbidden_cardinal_words(synthesis)
+                if words:
+                    details["forbidden_english_cardinal_words"] = words
+                tokens = find_narrative_numbers(
+                    synthesis.conclusion,
+                    tuple(Decimal(str(claim.expected)) for claim in synthesis.claims),
+                )
+                unparsed = audit_narrative_digit_coverage(
+                    synthesis.conclusion, tokens
+                ).unparsed_digit_count
+                if unparsed:
+                    details["unparsed_digit_count"] = unparsed
             feedback = json.dumps(details)
 
         repair_prompt = self._budget.enforce(
@@ -297,6 +311,15 @@ class StructuredInvestigationSynthesizer:
             "values in final-only prose. Use nonquantitative descriptions for "
             "components, observations, rows, and context. "
             "Do not write quantities as number words. "
+            "If forbidden_english_cardinal_words are listed, remove those words "
+            "from the new conclusion, including eligibility descriptions and "
+            "context labels. Write 'with an approved review' instead of "
+            "'with at least one approved review'. Preserve the eligibility "
+            "meaning and valid claim references. Do not change a forbidden "
+            "context word into an out-of-scope digit. A positive "
+            "unparsed_digit_count means digit characters were not covered by "
+            "parsed numeric tokens; omit out-of-scope quantities or use supported "
+            "numeric syntax for the requested metric. "
             "With a contract, all digit characters must be "
             "covered by successfully parsed, claim-linked tokens. Unlinked "
             "numbers do not by themselves mean evidence is missing. Omit numbers "
@@ -317,6 +340,18 @@ class StructuredInvestigationSynthesizer:
             return self._check_response(self._parse_response(repaired_response), state)
         except _SynthesisFormatError as exc:
             raise _SynthesisFormatError(exc.reason, repair_attempted=True) from exc
+
+    @staticmethod
+    def _forbidden_cardinal_words(synthesis: StructuredSynthesis) -> list[str]:
+        """Return at most eight distinct words from the existing forbidden set."""
+        words: list[str] = []
+        for word in re.findall(r"\w+", synthesis.conclusion.casefold()):
+            if not contains_english_cardinal_words(word) or word in words:
+                continue
+            words.append(word)
+            if len(words) == 8:
+                break
+        return words
 
     @staticmethod
     def _unlinked_numeric_values(synthesis: StructuredSynthesis) -> list[str]:

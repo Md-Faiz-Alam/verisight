@@ -1307,3 +1307,95 @@ def test_number_word_policy_is_contract_scoped(conclusion: str, mode: str) -> No
         assert '"validation_error": "unlinked_narrative_number"' in client.prompts[1]
         assert "Do not write quantities as number words" in client.prompts[1]
         assert conclusion not in client.prompts[1]
+
+
+@pytest.mark.parametrize(
+    "conclusion,expected",
+    [
+        ("One one ONE someone one_source one2 twenty-one.", ["one", "twenty"]),
+        (
+            "Zero one two three four five six seven eight nine.",
+            ["zero", "one", "two", "three", "four", "five", "six", "seven"],
+        ),
+        ("The output is 30 kWh.", []),
+    ],
+)
+def test_cardinal_repair_feedback_is_bounded(
+    conclusion: str, expected: list[str]
+) -> None:
+    synthesis = StructuredSynthesis(conclusion=conclusion, claims=())
+    assert (
+        StructuredInvestigationSynthesizer._forbidden_cardinal_words(synthesis)
+        == expected
+    )
+
+
+@pytest.mark.parametrize("recover", [True, False])
+@pytest.mark.parametrize(
+    "conclusion,extra_feedback",
+    [
+        (
+            "The production output with at least one approved review is 30.0 kWh.",
+            {"forbidden_english_cardinal_words": ["one"]},
+        ),
+        (
+            "synthetic-private-context seventy; cohort 2026; total 30; digit \u0663.",
+            {
+                "forbidden_english_cardinal_words": ["seventy"],
+                "unlinked_numeric_values": ["2026"],
+                "unparsed_digit_count": 1,
+            },
+        ),
+    ],
+)
+def test_contract_repair_identifies_cardinal_words_without_relaxing_validation(
+    conclusion: str, extra_feedback: dict[str, Any], recover: bool
+) -> None:
+    contract = ClaimOutputContract((ClaimOperation.VALUE,))
+    state = replace(_build_state(), claim_output_contract=contract).add_observation(
+        QueryObservation(
+            question="Measure production output.",
+            sql="SELECT 30 AS total",
+            result=QueryResult(columns=("total",), rows=((30,),)),
+        )
+    )
+    rejected = json.dumps({"conclusion": conclusion, "claims": [_claim()]})
+    corrected = json.dumps(
+        {
+            "conclusion": "Production output with an approved review is 30 kWh.",
+            "claims": [_claim()],
+        }
+    )
+    client = _SequenceClient([rejected, corrected if recover else rejected])
+    synthesizer = StructuredInvestigationSynthesizer(client)
+
+    if recover:
+        synthesis = synthesizer.synthesize(state)
+        result = InvestigationResult(
+            question=state.question,
+            conclusion=synthesis.conclusion,
+            analysis=state.analysis,
+            observations=state.observations,
+            generated_claims=synthesis.claims,
+        )
+        assert result.assess_output(contract).accepted
+        assert result.verified_claims[0].verification.actual == 30
+        assert result.narrative_verified is False
+    else:
+        with pytest.raises(SynthesisValidationError) as caught:
+            synthesizer.synthesize(state)
+        assert caught.value.reason == "unlinked_narrative_number"
+        assert caught.value.repair_attempted is True
+
+    assert len(client.prompts) == 2
+    feedback = json.loads(
+        client.prompts[1]
+        .split("FORMAT REPAIR (one attempt):\n", 1)[1]
+        .split("\n", 1)[0]
+    )
+    assert feedback == {
+        "validation_error": "unlinked_narrative_number",
+        **extra_feedback,
+    }
+    assert "synthetic-private-context" not in client.prompts[1]
+    assert "Preserve the eligibility meaning" in client.prompts[1]
