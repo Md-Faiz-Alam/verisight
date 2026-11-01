@@ -2,12 +2,32 @@
 
 import json
 from dataclasses import asdict, dataclass, replace
+from typing import Literal
 
 import pandas as pd
 
 from verisight.execution.exceptions import QueryValidationError
 from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.schema import DatasetSchema, LogicalType, SchemaInferer
+
+
+@dataclass(frozen=True, slots=True)
+class PopulationWarning:
+    """A lexical scope concern, not proof that a query is analytically wrong."""
+
+    relation: str
+    column: str
+    mentioned_value: str
+    code: str = "question_category_not_explicitly_selected"
+
+
+@dataclass(frozen=True, slots=True)
+class PopulationReview:
+    """Advisory only; no status certifies task semantics or changes acceptance."""
+
+    status: Literal["not_assessed", "review_required", "no_warning_detected"]
+    warnings: tuple[PopulationWarning, ...] = ()
+    task_semantics_verified: bool = False
 
 
 @dataclass(frozen=True, slots=True)

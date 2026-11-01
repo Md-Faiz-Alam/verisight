@@ -245,6 +245,7 @@ class InvestigationOrchestrator:
                         sql=execution.plan.sql,
                         result=execution.result,
                         repair_history=tuple(execution.repair_history),
+                        population_review=execution.population_review,
                     )
                 )
         except InvestigationDeadlineExceeded:

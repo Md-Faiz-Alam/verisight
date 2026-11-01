@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 
+from verisight.execution.context import PopulationReview
 from verisight.execution.execution import QueryRepairAttempt
 from verisight.execution.models import QueryResult
 
@@ -14,3 +15,4 @@ class QueryObservation:
     sql: str
     result: QueryResult
     repair_history: tuple[QueryRepairAttempt, ...] = field(default=(), kw_only=True)
+    population_review: PopulationReview | None = field(default=None, kw_only=True)

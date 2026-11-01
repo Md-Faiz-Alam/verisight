@@ -171,3 +171,40 @@ evaluation at fixed settings.
 
 The numerical checks introduce no dataset-specific rules. The additional
 cardinal-word restriction is English-specific and is not multilingual validation.
+
+
+## Advisory population review
+
+Built-in natural-language execution attaches `population_review` to each
+executed observation. CLI JSON exposes it under
+`investigation.observations[].population_review`. Custom query runners and
+manually constructed observations can leave this field null (not assessed).
+The review does not rewrite SQL, run extra SQL, call a model, change claim
+acceptance, or change the CLI exit status.
+
+The heuristic compares exact case-insensitive category mentions in the original
+question with bounded observed string values and simple SQL filters. It handles
+one directly queried outer table, aliases, conjunctions, equality, inequality,
+and literal membership. A nested membership query on another column does not
+establish a category filter on the outer table. An exact single-value caller
+filter is recognized separately from the SQL text.
+
+- `review_required`: a uniquely mentioned category lacks a recognized explicit
+  inclusion filter. Inspect the original question, SQL and caller population.
+- `no_warning_detected`: this narrow heuristic found no warning. This is not
+  semantic verification; units, grain, denominators and other filters can be wrong.
+- `not_assessed`: the wording or SQL falls outside the supported subset, or no
+  unique category was identified. This is not a successful population check.
+
+Direct negative mentions are skipped, but natural-language interpretation is
+incomplete. CTEs, joins, derived tables, OR predicates on the target column,
+conditional aggregation, functions on that column, ambiguous labels and absent
+category evidence are not assessed. False alarms and missed concerns remain
+possible. Multiple positive category mentions in the same question are ambiguous
+for this first version. No status establishes intended business meaning.
+
+Warnings contain the relation, column, mentioned category and a stable code.
+These local diagnostics can contain dataset identifiers and values. They use
+original-data category evidence, not a redacted or population-filtered vocabulary.
+They are excluded from synthesis prompts and never treated as numerical evidence.
+Existing caller-selected population enforcement remains independent.

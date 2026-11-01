@@ -845,7 +845,17 @@ def test_structured_synthesis_omits_profiles_but_preserves_complete_sql_evidence
             "issues": analysis.analysis.issues,
         }
     )
-    assert payload["observations"] == to_jsonable(state.observations)
+    assert payload["observations"] == to_jsonable(
+        [
+            {
+                "question": item.question,
+                "sql": item.sql,
+                "result": item.result,
+                "repair_history": item.repair_history,
+            }
+            for item in state.observations
+        ]
+    )
     assert payload["failed_attempts"] == to_jsonable(state.failed_attempts)
     assert (
         "statistics, the analysis summary, and deterministic insights are omitted"

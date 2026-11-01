@@ -217,7 +217,15 @@ class StructuredInvestigationSynthesizer:
                 "schema": state.analysis.analysis.schema,
                 "issues": state.analysis.analysis.issues,
             },
-            "observations": state.observations,
+            "observations": [
+                {
+                    "question": observation.question,
+                    "sql": observation.sql,
+                    "result": observation.result,
+                    "repair_history": observation.repair_history,
+                }
+                for observation in state.observations
+            ],
             "failed_attempts": state.failed_attempts,
         }
         if state.population:

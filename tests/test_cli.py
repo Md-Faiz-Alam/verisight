@@ -1027,3 +1027,80 @@ def test_nonprovider_cli_error_has_no_provider_metadata(
     report = json.loads(capsys.readouterr().out)
     assert report["kind"] == "operation_error"
     assert "provider_diagnostics" not in report
+
+
+@pytest.mark.parametrize("mode", ["unscoped", "scoped", "repaired"])
+def test_cli_exports_advisory_population_review_without_changing_acceptance(
+    source: Path,
+    population: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+) -> None:
+    with source.open("a", encoding="utf-8") as output:
+        output.write("blocked,500\n")
+    sql = "SELECT SUM(amount) AS total FROM orders WHERE state != 'blocked'"
+    expected = 30 if mode == "scoped" else 930
+    scripted = [
+        json.dumps(
+            {"action": "investigate", "reasoning": "Measure", "question": "Sum"}
+        ),
+        "SELECT missing_column FROM orders" if mode == "repaired" else sql,
+    ]
+    if mode == "repaired":
+        scripted.append(sql)
+    scripted.append(
+        json.dumps(
+            {
+                "conclusion": f"The total is {expected}.",
+                "claims": [
+                    {
+                        "operation": "value",
+                        "expected": str(expected),
+                        "left": {
+                            "observation_index": 0,
+                            "row_index": 0,
+                            "column": "total",
+                        },
+                        "right": None,
+                    }
+                ],
+            }
+        )
+    )
+    destination = tmp_path / "population-review.json"
+    arguments = [
+        "investigate",
+        str(source),
+        "--question",
+        "Sum active amounts; exclude blocked.",
+        "--max-steps",
+        "1",
+        "--require-claim",
+        "value",
+        "--allow-llm-data-disclosure",
+        "--output",
+        str(destination),
+    ]
+    if mode == "scoped":
+        arguments.extend(("--population", str(population)))
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=scripted,
+    ) as generate:
+        assert main(arguments) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert json.loads(destination.read_text(encoding="utf-8")) == report
+    observation = report["investigation"]["observations"][0]
+    review = observation["population_review"]
+    assert review["status"] == (
+        "no_warning_detected" if mode == "scoped" else "review_required"
+    )
+    assert review["task_semantics_verified"] is False
+    assert bool(review["warnings"]) == (mode != "scoped")
+    assert observation["sql"] == sql
+    assert observation["result"]["rows"] == [[expected]]
+    assert len(observation["repair_history"]) == (1 if mode == "repaired" else 0)
+    assert report["claim_output_assessment"]["accepted"] is True
+    assert generate.call_count == (4 if mode == "repaired" else 3)
+    assert "population_review" not in generate.call_args.args[0]

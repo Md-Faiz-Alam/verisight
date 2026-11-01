@@ -6,6 +6,7 @@ import pytest
 from sqlglot.errors import ParseError
 
 from verisight.error_reporting import ErrorCode
+from verisight.execution.context import QueryContext
 from verisight.execution.engine import DuckDBExecutor
 from verisight.execution.exceptions import (
     QueryExecutionError,
@@ -386,3 +387,192 @@ def test_schema_function_names_in_data_literals_and_comments_remain_queryable() 
     assert result.columns == ("current_schemas", "note")
     assert result.rows == ((7, "current_schemas(true)"),)
     pd.testing.assert_frame_equal(data, original)
+
+
+def _population_context() -> QueryContext:
+    from verisight.execution.context import ObservedCategoryValues
+
+    return QueryContext(
+        relations=(),
+        observed_categories=(
+            ObservedCategoryValues(
+                "generation", "kind", ("production", "test", "calibration")
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "sql,status",
+    [
+        ("SELECT SUM(amount) FROM generation", "review_required"),
+        ("SELECT SUM(amount) FROM generation WHERE kind != 'test'", "review_required"),
+        ("SELECT SUM(amount) FROM generation WHERE kind <> 'test'", "review_required"),
+        (
+            "SELECT SUM(amount) FROM generation WHERE kind NOT IN ('test')",
+            "review_required",
+        ),
+        (
+            "SELECT SUM(amount) FROM generation WHERE kind IN ('test', 'production')",
+            "review_required",
+        ),
+        (
+            "SELECT SUM(amount) FROM generation WHERE kind = 'production'",
+            "no_warning_detected",
+        ),
+        (
+            "SELECT SUM(amount) FROM generation WHERE 'production' = kind",
+            "no_warning_detected",
+        ),
+        (
+            "SELECT SUM(amount) FROM generation WHERE kind IN ('production')",
+            "no_warning_detected",
+        ),
+        (
+            "SELECT SUM(g.amount) FROM generation g WHERE (g.kind='production' "
+            "AND g.amount>0)",
+            "no_warning_detected",
+        ),
+        (
+            "SELECT SUM(g.amount) FROM generation g WHERE g.kind != 'test' AND "
+            "g.id IN (SELECT id FROM reviews WHERE decision='approved')",
+            "review_required",
+        ),
+        (
+            "SELECT SUM(g.amount) FROM generation g WHERE g.kind = "
+            "'production' AND EXISTS (SELECT 1 FROM reviews r WHERE r.id=g.id)",
+            "no_warning_detected",
+        ),
+        (
+            "SELECT SUM(amount) FROM generation WHERE kind='production' OR amount>0",
+            "not_assessed",
+        ),
+        (
+            "SELECT SUM(CASE WHEN kind='production' THEN amount ELSE 0 END) "
+            "FROM generation",
+            "not_assessed",
+        ),
+        (
+            "SELECT SUM(amount) FROM generation WHERE lower(kind)='production'",
+            "not_assessed",
+        ),
+        (
+            "SELECT SUM(amount) FROM generation WHERE kind IN (SELECT kind "
+            "FROM reviews)",
+            "not_assessed",
+        ),
+        ("SELECT SUM(amount) FROM generation WHERE kind=1", "not_assessed"),
+        ("SELECT SUM(amount) FROM generation WHERE kind=other", "not_assessed"),
+        ("SELECT SUM(amount) FROM generation WHERE NOT(kind='test')", "not_assessed"),
+        (
+            "SELECT SUM(amount) FROM generation WHERE x.kind='production'",
+            "review_required",
+        ),
+        ("SELECT SUM(amount) FROM generation WHERE kind IN (1)", "not_assessed"),
+        ("SELECT SUM(amount) FROM generation WHERE amount IN (1)", "review_required"),
+        ("SELECT SUM(amount) FROM generation WHERE 1=1", "review_required"),
+        ("SELECT SUM(amount) FROM generation WHERE 1<>2", "review_required"),
+        ("SELECT SUM(amount) FROM generation WHERE kind='test'", "review_required"),
+        ("SELECT SUM(amount) FROM generation WHERE amount>0", "review_required"),
+        (
+            "SELECT SUM(amount) FROM generation g WHERE EXISTS(SELECT 1 FROM "
+            "reviews r WHERE r.kind='production')",
+            "review_required",
+        ),
+        (
+            "SELECT SUM(amount) FROM generation WHERE EXISTS(SELECT 1 FROM "
+            "reviews WHERE kind='production')",
+            "not_assessed",
+        ),
+        ("SELECT SUM(amount) FROM other", "not_assessed"),
+        ("SELECT 1", "not_assessed"),
+        ("SELECT SUM(amount) FROM (SELECT * FROM generation) g", "not_assessed"),
+        (
+            "WITH g AS (SELECT * FROM generation) SELECT SUM(amount) FROM g",
+            "not_assessed",
+        ),
+        (
+            "SELECT SUM(g.amount) FROM generation g JOIN reviews r ON r.id=g.id",
+            "not_assessed",
+        ),
+        ("SELECT 1 UNION SELECT 2", "not_assessed"),
+        ("SELECT * FROM main.generation", "not_assessed"),
+        ("SELECT * FROM catalog.main.generation", "not_assessed"),
+        ("SELECT 1; SELECT 2", "not_assessed"),
+        ("SELECT (", "not_assessed"),
+    ],
+)
+def test_population_review_is_conservative(sql: str, status: str) -> None:
+    from verisight.execution.validation import review_population
+
+    result = review_population(
+        "Total production output. Exclude test records.", sql, _population_context()
+    )
+    assert result.status == status
+    assert result.task_semantics_verified is False
+    assert bool(result.warnings) == (status == "review_required")
+    if result.warnings:
+        assert result.warnings[0].mentioned_value == "production"
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Exclude production records",
+        "Excluding all production",
+        "Without production",
+        "Not production",
+        "Except 'production'",
+        "non-production readings",
+        "Sum counterproduction",
+        "Compare production and calibration",
+        "Sum all readings",
+    ],
+)
+def test_population_review_does_not_guess_negative_or_ambiguous_intent(
+    question: str,
+) -> None:
+    from verisight.execution.validation import review_population
+
+    assert (
+        review_population(
+            question, "SELECT SUM(amount) FROM generation", _population_context()
+        ).status
+        == "not_assessed"
+    )
+
+
+def test_population_review_caller_policy_and_shared_category() -> None:
+    from dataclasses import replace
+
+    from verisight.execution.context import ObservedCategoryValues, PopulationFilter
+    from verisight.execution.validation import (
+        _question_mentions_category,
+        review_population,
+    )
+
+    context = _population_context()
+    sql = "SELECT SUM(amount) FROM generation WHERE kind != 'test'"
+    scoped = replace(
+        context, population=(PopulationFilter("generation", "kind", ("production",)),)
+    )
+    assert (
+        review_population("production output", sql, scoped).status
+        == "no_warning_detected"
+    )
+    unrelated = replace(
+        context, population=(PopulationFilter("other", "kind", ("production",)),)
+    )
+    assert (
+        review_population("production output", sql, unrelated).status
+        == "review_required"
+    )
+    shared = replace(
+        context,
+        observed_categories=(
+            *context.observed_categories,
+            ObservedCategoryValues("generation", "other", ("production", "test")),
+        ),
+    )
+    assert review_population("production output", sql, shared).status == "not_assessed"
+    assert not _question_mentions_category("all values", " ")
