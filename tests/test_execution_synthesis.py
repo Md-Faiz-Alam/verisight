@@ -1245,14 +1245,16 @@ def test_no_numeric_repair_examples_without_a_selected_contract() -> None:
     [
         "The difference is seventy.",
         "Accepted totals fell by fifty.",
+        "The difference is fifty.",
     ],
-    ids=["wrong-number-words", "wrong-direction"],
+    ids=["wrong-number-words", "wrong-direction-words", "matching-number-words"],
 )
-def test_contract_does_not_semantically_verify_number_words(conclusion: str) -> None:
+@pytest.mark.parametrize("mode", ["repair", "reject", "unscoped"])
+def test_number_word_policy_is_contract_scoped(conclusion: str, mode: str) -> None:
     contract = ClaimOutputContract((ClaimOperation.DIFFERENCE,))
     state = replace(
         _build_state(),
-        claim_output_contract=contract,
+        claim_output_contract=None if mode == "unscoped" else contract,
     ).add_observation(
         QueryObservation(
             question="Read before and after totals.",
@@ -1266,22 +1268,42 @@ def test_contract_does_not_semantically_verify_number_words(conclusion: str) -> 
         "left": {"observation_index": 0, "row_index": 1, "column": "total"},
         "right": {"observation_index": 0, "row_index": 0, "column": "total"},
     }
-    client = _Client(json.dumps({"conclusion": conclusion, "claims": [claim]}))
+    rejected = json.dumps({"conclusion": conclusion, "claims": [claim]})
+    corrected = json.dumps({"conclusion": "The difference is 50.", "claims": [claim]})
+    client = _SequenceClient([rejected, corrected if mode == "repair" else rejected])
+    synthesizer = StructuredInvestigationSynthesizer(client)
 
-    synthesis = StructuredInvestigationSynthesizer(client).synthesize(state)
-    result = InvestigationResult(
-        question=state.question,
-        conclusion=synthesis.conclusion,
-        analysis=state.analysis,
-        observations=state.observations,
-        generated_claims=synthesis.claims,
-    )
-
-    assert len(client.prompts) == 1
-    assert synthesis.conclusion == conclusion
-    assert result.verified_claims[0].verification.status is VerificationStatus.SUPPORTED
-    assert result.verified_claims[0].verification.actual == 50
-    assessment = result.assess_output(contract)
-    assert assessment.accepted
-    assert assessment.task_semantics_verified is False
-    assert result.narrative_verified is False
+    if mode == "reject":
+        with pytest.raises(SynthesisValidationError) as caught:
+            synthesizer.synthesize(state)
+        assert caught.value.reason == "unlinked_narrative_number"
+        assert caught.value.repair_attempted is True
+    else:
+        synthesis = synthesizer.synthesize(state)
+        result = InvestigationResult(
+            question=state.question,
+            conclusion=synthesis.conclusion,
+            analysis=state.analysis,
+            observations=state.observations,
+            generated_claims=synthesis.claims,
+        )
+        assert (
+            result.verified_claims[0].verification.status
+            is VerificationStatus.SUPPORTED
+        )
+        assert result.verified_claims[0].verification.actual == 50
+        assessment = result.assess_output(contract)
+        if mode == "repair":
+            assert synthesis.conclusion == "The difference is 50."
+            assert assessment.accepted
+        else:
+            assert synthesis.conclusion == conclusion
+            assert assessment.violations == ("english_cardinal_words",)
+            assert not assessment.accepted
+        assert assessment.task_semantics_verified is False
+        assert result.narrative_verified is False
+    assert len(client.prompts) == (1 if mode == "unscoped" else 2)
+    if mode != "unscoped":
+        assert '"validation_error": "unlinked_narrative_number"' in client.prompts[1]
+        assert "Do not write quantities as number words" in client.prompts[1]
+        assert conclusion not in client.prompts[1]

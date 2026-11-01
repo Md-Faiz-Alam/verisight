@@ -28,6 +28,7 @@ from verisight.execution.generation import TextGenerationClient
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.narrative_audit import (
     audit_narrative_digit_coverage,
+    contains_english_cardinal_words,
     find_narrative_numbers,
 )
 from verisight.execution.prompt_budget import PromptBudget
@@ -118,7 +119,8 @@ def _reject_constant(value: str) -> None:
 class StructuredInvestigationSynthesizer:
     """Return claims for automatic numerical checking by the orchestrator.
 
-    With a contract, narrative tokens must link to claims and cover all digits.
+    With a contract, narrative tokens must link to claims and cover all digits;
+    a bounded set of English cardinal words is forbidden.
     Without a contract, parsed numbers may also match question context.
     Narrative meaning and the completeness of its claim list remain unverified.
     This component performs no queries and accepts no model-selected tolerance.
@@ -246,6 +248,8 @@ class StructuredInvestigationSynthesizer:
                 "are not exempt. Do not use dates, numeric observation or row labels, "
                 "Unicode digits, or scaled suffixes that leave digits unparsed. "
                 "Use numeric literals for quantities, never number words. "
+                "Contract mode also rejects common English cardinal words "
+                "even in context labels; use nonquantitative descriptions. "
                 "Use nonquantitative context descriptions. Omit out-of-scope "
                 "quantities entirely, including number-word forms. This policy "
                 "does not establish task semantics or numerical support.\n"
@@ -352,10 +356,14 @@ class StructuredInvestigationSynthesizer:
                 synthesis.conclusion,
                 tuple(Decimal(str(claim.expected)) for claim in synthesis.claims),
             )
-            if any(not token.claim_indexes for token in tokens) or (
-                audit_narrative_digit_coverage(
-                    synthesis.conclusion, tokens
-                ).unparsed_digit_count
+            if (
+                any(not token.claim_indexes for token in tokens)
+                or (
+                    audit_narrative_digit_coverage(
+                        synthesis.conclusion, tokens
+                    ).unparsed_digit_count
+                )
+                or contains_english_cardinal_words(synthesis.conclusion)
             ):
                 raise _SynthesisFormatError("unlinked_narrative_number")
             return synthesis

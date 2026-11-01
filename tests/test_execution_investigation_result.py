@@ -21,6 +21,7 @@ from verisight.execution.claim_verification import (
 from verisight.execution.decisions import InvestigationAction, InvestigationDecision
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import (
+    ClaimOutputContract,
     InvestigationResult,
     InvestigationStatus,
 )
@@ -667,3 +668,43 @@ def test_narrative_number_audit_handles_nontrapping_decimal_context() -> None:
 
     assert result.unlinked_numbers == ("1e999999999999999999999",)
     assert result.narrative_numbers[0].value is None
+
+
+@pytest.mark.parametrize(
+    "conclusion,rejected",
+    [
+        ("The metric is seventy.", True),
+        ("The metric is fifty.", True),
+        ("The metric is FIFTY.", True),
+        ("The metric is twenty-five.", True),
+        ("The metric is hundreds.", True),
+        ("From one source, the metric is 50.", True),
+        ("Someone measured a metric of 50.", False),
+        ("For one_source, the metric is 50.", False),
+        ("The metric fell by 50.", False),
+        ("The metric is 50.", False),
+        ("The metric is half.", False),
+        ("The metric is cincuenta.", False),
+    ],
+)
+def test_contract_rejects_bounded_cardinal_words_without_certifying_meaning(
+    conclusion: str, rejected: bool
+) -> None:
+    result = replace(
+        _audited_result(conclusion, "50"),
+        observations=(
+            QueryObservation(
+                question="Read the metric.",
+                sql="SELECT 50 AS metric",
+                result=QueryResult(columns=("metric",), rows=((50,),)),
+            ),
+        ),
+    )
+    assessment = result.assess_output(ClaimOutputContract((ClaimOperation.VALUE,)))
+
+    assert result.verified_claims[0].verification.status is VerificationStatus.SUPPORTED
+    assert assessment.accepted is not rejected
+    assert assessment.violations == (("english_cardinal_words",) if rejected else ())
+    assert assessment.task_semantics_verified is False
+    assert result.narrative_verified is False
+    assert result.conclusion == conclusion

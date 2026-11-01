@@ -18,6 +18,17 @@ _NUMBER = re.compile(
     r"(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
 )
 
+# This is a contract-format restriction, not a natural-language number parser.
+# Unicode word boundaries avoid matching inside identifiers such as someone,
+# one_source, or one2. Hyphenated cardinals contain separate matching words.
+_ENGLISH_CARDINAL_WORD = re.compile(
+    r"(?<!\w)(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|"
+    r"nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|"
+    r"hundreds?|thousands?|millions?|billions?|trillions?)(?!\w)",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class NarrativeNumberToken:
@@ -111,3 +122,13 @@ def _parse_number(raw: str) -> Decimal | None:
     except DecimalException:
         return None
     return value if value.is_finite() else None
+
+
+def contains_english_cardinal_words(text: str) -> bool:
+    """Detect a fixed set of whole-word English cardinals for contract mode.
+
+    This rejects even matching values and nonquantitative uses of these words.
+    It neither parses their values nor checks truth, direction, fractions,
+    ordinals, other number words, or other languages.
+    """
+    return _ENGLISH_CARDINAL_WORD.search(text) is not None

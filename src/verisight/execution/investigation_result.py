@@ -30,6 +30,7 @@ from verisight.execution.narrative_audit import (
     NarrativeDigitCoverage,
     NarrativeNumberToken,
     audit_narrative_digit_coverage,
+    contains_english_cardinal_words,
     find_narrative_numbers,
 )
 from verisight.execution.observations import QueryObservation
@@ -71,6 +72,7 @@ class ClaimOutputAssessment:
     """A narrow output check alongside unchanged investigation evidence.
 
     Numeric-token checks inherit the narrative audit's syntax limitations.
+    A bounded English cardinal-word restriction is a format policy only.
     Acceptance does not establish that the answer satisfies the whole task.
     """
 
@@ -252,7 +254,8 @@ class InvestigationResult:
         """Check explicit output requirements without changing the investigation.
 
         Require a complete workflow, the exact operation multiset, supported
-        claims, linked parsed numeric tokens, and no unparsed digit characters.
+        claims, linked parsed numeric tokens, no unparsed digit characters, and
+        no bounded English cardinal words.
         No claims are dropped, rewritten, rounded, or regenerated here.
         """
         operations = tuple(item.claim.operation for item in self.verified_claims)
@@ -272,6 +275,8 @@ class InvestigationResult:
             violations.append("unlinked_numeric_tokens")
         if self.narrative_digit_coverage.unparsed_digit_count:
             violations.append("unparsed_digits")
+        if contains_english_cardinal_words(self.conclusion):
+            violations.append("english_cardinal_words")
         return ClaimOutputAssessment(
             contract=contract,
             actual_operations=operations,

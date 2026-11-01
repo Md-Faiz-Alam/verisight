@@ -16,6 +16,8 @@ Acceptance requires all of the following:
 - Every returned claim has a supported numerical verification result.
 - Every parsed narrative numeric token links to a returned claim.
 - No digit characters remain unparsed by the existing narrative audit.
+- No whole-word English cardinals from the bounded contract vocabulary appear
+  in the conclusion, even if they express a supported claim value.
 
 These checks preserve the verifier's existing tolerances and rounding rules.
 An incomplete result or an empty claim list cannot satisfy a nonempty contract.
@@ -66,7 +68,8 @@ retry, or silent removal of claims.
 
 In contract mode, structured synthesis also checks the same narrative predicates
 as final assessment: every detected numeric token must link to a returned claim
-expected value, and all digit characters must be covered by parsed tokens.
+expected value, all digit characters must be covered by parsed tokens, and
+conclusions must not contain the bounded English cardinal words listed below.
 Question-context numbers are not exempt. These failures use the existing
 `unlinked_narrative_number` category and share the single repair attempt with
 schema and shape failures; they do not receive an additional attempt.
@@ -75,7 +78,8 @@ unless another retained claim links them. Component cells remain referenced by
 claims without repeating their values in final-only prose. Evidence can exist
 without its numbers being permitted in the conclusion. Contract-mode generation
 instructions require numerical quantities to use numeric literals rather than
-number words.
+number words. The bounded cardinal-word restriction is enforced locally, not
+only requested in the prompt.
 Out-of-scope quantities must be omitted entirely, not spelled out. Context and
 references may be described without stating their quantities.
 
@@ -121,7 +125,8 @@ feedback. Calls without a selected output contract do not receive these numeric
 examples and retain their existing question-context allowance.
 
 Every repaired response must pass the unchanged parser, claim-shape, token-linkage,
-and digit-coverage checks. Numerical evidence verification and final output
+digit-coverage, and contract-mode cardinal-word checks. Numerical evidence
+verification and final output
 assessment remain separate. A failed second response still produces the existing
 terminal synthesis failure; this adds no generation loop, SQL query, automatic
 text edit, relaxed comparison, or contextual-number exemption.
@@ -133,19 +138,36 @@ The assessment scope is `claim_shape_and_numeric_evidence_only`, with
 denominators, grain, units, query order, causal meaning, or narrative truth.
 A plausible number from the wrong SQL can still pass.
 
-Numeric-token checks inherit the existing audit's syntax limits. Number words,
-repeated values, and semantic roles are not certified. Numeric-literal and
-omission instructions are generation guidance, not additional acceptance checks.
-A response can ignore them and pass the automatic assessment despite incorrect
-number words or direction. Offline prompt tests establish the instructions sent,
-not model compliance. Any claim of improved compliance requires a separately
-specified repeated live evaluation at fixed settings; no such effect follows
-from this wording change. Contextual numbers such
-as years are rejected when they are detected and not linked to claims. The
-built-in contract-mode synthesizer offers its bounded repair before returning
-such a response. Calls without a contract retain their question-context allowance. Do not add
-irrelevant claims merely to pass; keep final-only conclusions within the
-requested output scope. A contract does not prove that prose reports only the
-requested metric or that an absence of detected tokens means no assertion.
+Numeric-token checks inherit the existing audit's syntax limits. Contract mode
+adds a case-insensitive whole-word restriction for `zero` through `nineteen`,
+`twenty`, `thirty`, `forty`, `fifty`, `sixty`, `seventy`, `eighty`, `ninety`,
+and singular or plural `hundred`, `thousand`, `million`, `billion`, and `trillion`.
+Hyphenated forms containing these words are rejected. Words embedded in longer
+identifiers such as `someone` or `one_source` are not matched.
 
-This mechanism is domain-independent and introduces no dataset-specific rules.
+This is a lexical output policy, not a number-word parser. It rejects a correct
+`fifty` as well as an incorrect `seventy`, and it also rejects nonquantitative
+uses such as `one source`. Use numeric literals for the permitted metric and
+context descriptions without these cardinal words. Quoted labels are not exempt.
+The assessment reports `english_cardinal_words`. Structured synthesis uses the
+existing `unlinked_narrative_number` category and the same single repair attempt;
+it does not add rejected prose or word values to repair feedback.
+
+Fractions such as `half`, ordinals, other English number words, other languages,
+repeated values, semantic roles, and direction remain unverified. For example,
+`fell by 50` can pass when a supported claim is 50, regardless of whether the
+metric actually fell. Absence of a cardinal-word violation does not establish
+absence of numerical assertions or narrative truth. Calls without a contract
+retain their existing narrative behavior; explicitly assessing any result with a
+contract applies this restriction.
+
+Contextual numbers such as years are rejected when detected and not linked to
+claims. The built-in contract-mode synthesizer offers its bounded repair before
+returning such a response. Do not add irrelevant claims merely to pass; keep
+final-only conclusions within the requested output scope. Offline tests establish
+the deterministic checks and scripted repair behavior, not live model compliance.
+Any claim of improved live completion requires a separately specified repeated
+evaluation at fixed settings.
+
+The numerical checks introduce no dataset-specific rules. The additional
+cardinal-word restriction is English-specific and is not multilingual validation.
