@@ -54,15 +54,42 @@ Include `scripts` explicitly in mypy and coverage commands. The project enables
 branch coverage. Full coverage is an engineering gate, not proof of analytical
 correctness.
 
-CI runs formatting, lint, strict mypy, full offline coverage, and whitespace
-checks on Python 3.11 with `ubuntu-latest` and `windows-latest`. It triggers on
-pushes to `main`, pull requests, and manual dispatch. Jobs have a 15-minute
-limit and fail independently. CI uses read-only repository permissions, pinned
-action commits, and no provider credentials or live evaluations.
+The quality matrix runs formatting, lint, strict mypy, full offline coverage,
+and whitespace checks on Python 3.11 with `ubuntu-latest` and `windows-latest`.
+These jobs install the editable project and resolve dependencies within the
+ranges in `pyproject.toml`. Each has a 15-minute limit.
 
-Dependencies are resolved within the ranges in `pyproject.toml`; the project
-does not yet have a committed dependency lock. Record installed versions when
-investigating differences between local and hosted runs.
+A separate Windows AMD64 job uses CPython 3.11.9 and the committed
+`requirements-dev-windows-py311.txt` snapshot. It has a 20-minute limit and:
+
+1. Creates a separate virtual environment and installs the snapshot.
+2. Installs the editable project without resolving dependencies or isolating the
+   build, then checks dependency compatibility.
+3. Runs formatting, lint, strict mypy, and the full offline coverage gate using
+   the snapshot tools.
+4. Builds the project wheel using the snapshot build tools, without dependency
+   resolution or an isolated build environment.
+5. Creates another virtual environment and installs that wheel with its runtime
+   dependencies constrained by the snapshot. It does not install the full
+   development snapshot into this runtime environment.
+6. From outside the checkout, checks that the package imports from the runtime
+   environment and includes `py.typed`, executes synthetic SQL, and invokes the
+   installed `verisight` launcher for offline profiling.
+
+The wheel check uses Python isolated mode for its test driver and removes
+`PYTHONPATH` and `PYTHONHOME` from the launcher's environment. It is a packaging
+smoke test, not the full test suite against the installed wheel. The full suite
+continues to run against editable installs. No generation or live evaluation is
+requested by these checks.
+
+CI triggers on pushes to `main`, pull requests, and manual dispatch. Jobs fail
+independently and use read-only repository permissions, pinned action commits,
+and no provider credentials. The snapshot job supplements the dependency-range
+matrix; it does not replace it.
+
+The snapshot records versions for one platform and interpreter. It is not a
+cross-platform dependency lock or a hash-verified package archive. Record installed
+versions when investigating differences between local and hosted runs.
 
 Use focused tests while changing behavior, then run the full gate for runtime
 changes. Documentation-only changes require checking accuracy, examples, links,

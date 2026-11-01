@@ -65,3 +65,165 @@ jobs:
 
       - name: Check whitespace
         run: git diff --check
+
+  snapshot-wheel:
+    name: Windows Python 3.11.9 / snapshot and wheel
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        shell: pwsh
+
+    env:
+      PYTHONUTF8: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up tested Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11.9"
+          architecture: x64
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-dev-windows-py311.txt
+
+      - name: Create isolated snapshot environment
+        run: |
+          python -c "import platform; assert platform.python_version() == '3.11.9'; assert platform.system() == 'Windows'; assert platform.machine() == 'AMD64'"
+          if ($LASTEXITCODE -ne 0) { throw "Unexpected Python or platform." }
+
+          $snapshotRoot = Join-Path $env:RUNNER_TEMP "verisight-snapshot"
+          python -m venv $snapshotRoot
+          if ($LASTEXITCODE -ne 0) { throw "Snapshot environment creation failed." }
+
+          $snapshotPython = Join-Path $snapshotRoot "Scripts/python.exe"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "SNAPSHOT_PYTHON=$snapshotPython" -Encoding utf8
+
+      - name: Install snapshot and editable project
+        run: |
+          & $env:SNAPSHOT_PYTHON -m pip install -r requirements-dev-windows-py311.txt
+          if ($LASTEXITCODE -ne 0) { throw "Snapshot installation failed." }
+
+          & $env:SNAPSHOT_PYTHON -m pip install --no-deps --no-build-isolation -e .
+          if ($LASTEXITCODE -ne 0) { throw "Project installation failed." }
+
+          & $env:SNAPSHOT_PYTHON -m pip check
+          if ($LASTEXITCODE -ne 0) { throw "Snapshot dependency check failed." }
+
+      - name: Check source with snapshot tools
+        run: |
+          & $env:SNAPSHOT_PYTHON -m ruff format --check .
+          if ($LASTEXITCODE -ne 0) { throw "Snapshot format check failed." }
+
+          & $env:SNAPSHOT_PYTHON -m ruff check .
+          if ($LASTEXITCODE -ne 0) { throw "Snapshot lint failed." }
+
+          & $env:SNAPSHOT_PYTHON -m mypy --strict src tests scripts
+          if ($LASTEXITCODE -ne 0) { throw "Snapshot type checking failed." }
+
+      - name: Run snapshot offline tests with full coverage
+        run: |
+          & $env:SNAPSHOT_PYTHON -m pytest --cov=verisight --cov=scripts --cov-report=term-missing --cov-fail-under=100
+          if ($LASTEXITCODE -ne 0) { throw "Snapshot tests or coverage failed." }
+
+      - name: Build wheel using snapshot build tools
+        run: |
+          $wheelDirectory = Join-Path $env:RUNNER_TEMP "verisight-wheel-dist"
+          New-Item -ItemType Directory -Path $wheelDirectory -ErrorAction Stop | Out-Null
+
+          & $env:SNAPSHOT_PYTHON -m pip wheel --no-deps --no-build-isolation --wheel-dir $wheelDirectory .
+          if ($LASTEXITCODE -ne 0) { throw "Wheel build failed." }
+
+          $wheels = @(Get-ChildItem -LiteralPath $wheelDirectory -Filter "*.whl" -File)
+          if ($wheels.Count -ne 1) { throw "Expected exactly one project wheel." }
+
+          $constraints = (Resolve-Path -LiteralPath "requirements-dev-windows-py311.txt").Path
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "VERISIGHT_WHEEL=$($wheels[0].FullName)" -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "SNAPSHOT_CONSTRAINTS=$constraints" -Encoding utf8
+
+      - name: Install wheel in separate runtime environment
+        run: |
+          $wheelRoot = Join-Path $env:RUNNER_TEMP "verisight-wheel-runtime"
+          python -m venv $wheelRoot
+          if ($LASTEXITCODE -ne 0) { throw "Wheel environment creation failed." }
+
+          $wheelPython = Join-Path $wheelRoot "Scripts/python.exe"
+          & $wheelPython -m pip install --constraint $env:SNAPSHOT_CONSTRAINTS $env:VERISIGHT_WHEEL
+          if ($LASTEXITCODE -ne 0) { throw "Wheel installation failed." }
+
+          & $wheelPython -m pip check
+          if ($LASTEXITCODE -ne 0) { throw "Wheel dependency check failed." }
+
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "WHEEL_PYTHON=$wheelPython" -Encoding utf8
+
+      - name: Smoke-test installed wheel outside checkout
+        working-directory: ${{ runner.temp }}
+        run: |
+          @'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+
+          import verisight
+          from verisight import VeriSight
+          from verisight.config import Settings
+
+          package = Path(verisight.__file__).resolve()
+          assert package.is_relative_to(Path(sys.prefix).resolve()), package
+          assert (package.parent / "py.typed").is_file()
+
+          launcher = Path(sys.executable).with_name(
+              "verisight.exe" if os.name == "nt" else "verisight"
+          )
+          assert launcher.is_file(), launcher
+          environment = os.environ.copy()
+          environment.pop("PYTHONPATH", None)
+          environment.pop("PYTHONHOME", None)
+
+          with TemporaryDirectory(prefix="verisight-wheel-smoke-") as directory:
+              source = Path(directory) / "transactions.csv"
+              source.write_text(
+                  "amount,state\n100,posted\n-20,posted\n50,pending\n",
+                  encoding="utf-8",
+              )
+              app = VeriSight(
+                  settings=Settings(
+                      _env_file=None,
+                      gemini_api_key=None,
+                      allow_llm_data_disclosure=False,
+                  )
+              )
+              result = app.execute(
+                  source,
+                  "SELECT SUM(amount) AS net_amount FROM transactions "
+                  "WHERE state = 'posted'",
+              )
+              assert result.columns == ("net_amount",)
+              assert result.rows == ((80,),)
+
+              completed = subprocess.run(
+                  [str(launcher), "profile", str(source)],
+                  cwd=directory,
+                  env=environment,
+                  capture_output=True,
+                  text=True,
+                  timeout=30,
+                  check=True,
+              )
+              assert json.loads(completed.stdout)["kind"] == "profile"
+
+          print("PASS: installed wheel import, py.typed, SQL, and CLI profile.")
+          print("No model calls were requested.")
+          '@ | & $env:WHEEL_PYTHON -I -
+          if ($LASTEXITCODE -ne 0) { throw "Installed wheel smoke test failed." }
