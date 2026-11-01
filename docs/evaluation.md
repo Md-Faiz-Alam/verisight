@@ -829,3 +829,48 @@ the raw reports or make them independently auditable from GitHub.
 | Synthesis-only recheck | `415c4936c26ed4e8ec3103dee23fa5e7baa8ec2c6ce683f7da88686a98b07721` |
 | Successful full CLI attempt | `47c92bf639d4d129ab284e6d4b7aef7c82b4b7db63d9db20b51053f8fa0d6807` |
 | Successful investigation export | `959d6d2adc84bd3771c317a2122816cfd37d05ad7fa5b1edc8569fae6c0ccb17` |
+
+## Offline population-warning validation at revision 2632a2e
+
+On November 1, 2026, an offline check at revision
+`2632a2edc44996494462eb1b37e2c60f61f2cf68` executed the retained incorrect energy query
+from the strengthened `c371670` development fixture.
+No new model responses were generated.
+
+| Execution | Actual output | Independent expected | Population review |
+| --- | ---: | ---: | --- |
+| Unscoped retained SQL | 10030 kWh | 30 kWh | `review_required` |
+| Same SQL with caller-enforced production scope | 30 kWh | 30 kWh | `no_warning_detected` |
+
+The original predicate excluded test records without explicitly selecting
+production. It therefore included the approved calibration reading.
+The advisory check identified the question's production category and
+reported `question_category_not_explicitly_selected` for relation
+`generation`, column `record type`, and mentioned value `production`.
+
+With the existing caller filter restricted to production, the unchanged
+query returned 30 kWh and the advisory warning was absent. Both executions
+used the built-in analytical execution service with a deterministic
+planner returning the retained SQL. Neither execution required SQL repair.
+The check made zero model calls and preserved the historical evidence.
+
+This validates detection of one known population mistake and recognition
+of the caller-selected protection. The warning itself does not correct
+the result. It does not establish autonomous population selection,
+general warning accuracy, live reliability, or semantic verification.
+`task_semantics_verified` remained false in both review records.
+
+These offline executions are separate from the original failed model
+attempt and must not replace it or count as successful new model runs.
+They are not pooled into historical evaluation success rates.
+
+The machine-readable check remains outside the repository at
+`F:\verisight-validation-artifacts\population-review-2632a2e-energy-offline-1\check.json`.
+
+Offline check SHA-256: `ed033331e2803be2d7388abaa8aec788096c10dca9a36e622552f2c7e373bf47`.
+
+Published source evidence SHA-256: `1d4e99df9d376a67fab60a096fd088cc7471929127bf84b97abcb97e83620820`.
+
+The check fingerprint identifies a local record; it does not publish
+that record. The historical source projection is available in
+`reports/evaluations/published-development-evidence-17d31bb-c371670.json`.
