@@ -745,3 +745,87 @@ Investigation SHA-256: `0298fd38462ad80a66ab70e538e2227a18a634da337122ae3d2ac88f
 These fingerprints identify local artifacts; the raw reports are
 not independently available from the repository. Autonomous
 population interpretation remains unresolved.
+
+## Caller-scoped energy validation at revision f14f255
+
+On November 1, 2026, a full CLI check at revision
+`f14f255aff76b57c7482e1ac50ef023f086e12db` completed the strengthened energy task with
+caller-selected production scope and a VALUE output contract.
+
+### Preceding failures and diagnosis
+
+The earlier full CLI attempt at `7500258` retained a correct 30 kWh
+query observation but ended incomplete after synthesis validation
+and its single bounded repair failed. The rejected responses from
+that original run were not retained; their exact wording is unknown.
+
+A separate fresh synthesis-only diagnostic at `7500258` captured
+two complete responses. Both reported 30.0 kWh but included
+`at least one approved review`. Both failed the contract's bounded
+English cardinal-word policy because of `one`. Neither response had
+an unlinked numeric token or an unparsed digit. This diagnoses those
+fresh responses, not the unavailable original rejected responses.
+
+Revision `f14f255` added bounded forbidden-word examples and
+unparsed-digit counts to repair feedback, plus guidance to preserve
+eligibility meaning without forbidden words. Validation rules and
+the single format-repair limit remained unchanged. Local Windows
+checks passed Ruff, strict mypy, and 2,536 tests with 100% statement
+and branch coverage.
+
+### Separate synthesis-only recheck
+
+The recheck at `f14f255` returned 30.0 kWh with one supported VALUE
+claim and no output violations. It used one generation call and
+completed in 3.413 seconds. No analytical SQL was rerun.
+Because its initial response passed, this recheck did not exercise
+the improved repair feedback.
+
+### Full CLI result
+
+The full CLI attempt exited 0 after 32.947 seconds.
+The exported request matched the intended policy: one analytical
+step, a 120-second investigation budget, a 30-second request timeout,
+one permitted provider retry, and production-only caller population.
+
+Manual review of the exported SQL found explicit production inclusion
+and an approved-review membership subquery. Membership avoids
+duplicate-review multiplication without deduplicating equal output
+values from distinct generation readings. The query returned 30.0 kWh,
+matching independent fixture arithmetic. No SQL repair was required.
+
+Exactly one supported VALUE claim referenced the final result cell
+at observation 0, row 0. The conclusion reported only the requested
+30.0 kWh metric. Workflow status was complete, the output assessment
+had no violations, and both failure fields were null.
+
+Telemetry recorded one investigator call, one planning text-generation
+call, and two structured-synthesis calls. Every call returned text
+on its first provider attempt. The synthesis calls are consistent
+with successful completion through the existing bounded format-repair
+path. This full run did not retain the rejected synthesis response
+or its validation category, so the specific repair reason is unknown.
+
+### Evidence and limits
+
+The automatic assessment retained `task_semantics_verified=false`.
+Task acceptance here also relies on manual SQL review and independent
+fixture arithmetic. This is one successful caller-scoped development
+task, not proof of autonomous population selection, repeatability,
+unfamiliar-data accuracy, or a causal effect of the implementation change.
+All preceding failures remain separate evidence and must not be
+replaced or pooled across revisions and invocation paths.
+
+Artifacts remain outside the repository under
+`F:\verisight-validation-artifacts\release-cli-7500258-energy-scoped`
+and `F:\verisight-validation-artifacts\release-cli-f14f255-energy-scoped`.
+The fingerprints below identify local records; they do not publish
+the raw reports or make them independently auditable from GitHub.
+
+| Record | SHA-256 |
+| --- | --- |
+| Earlier failed investigation | `17518c9ed6de35284b2c0e60b1e5455d63c5d3a7b57b955e0403b8090f05b97d` |
+| Fresh failure diagnostic | `4437a24b7528a79ad3676c7bc386cbc7e351a6edee7ee47c7d86a1ba5b55b63b` |
+| Synthesis-only recheck | `415c4936c26ed4e8ec3103dee23fa5e7baa8ec2c6ce683f7da88686a98b07721` |
+| Successful full CLI attempt | `47c92bf639d4d129ab284e6d4b7aef7c82b4b7db63d9db20b51053f8fa0d6807` |
+| Successful investigation export | `959d6d2adc84bd3771c317a2122816cfd37d05ad7fa5b1edc8569fae6c0ccb17` |
