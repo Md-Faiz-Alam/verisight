@@ -1104,3 +1104,136 @@ def test_cli_exports_advisory_population_review_without_changing_acceptance(
     assert report["claim_output_assessment"]["accepted"] is True
     assert generate.call_count == (4 if mode == "repaired" else 3)
     assert "population_review" not in generate.call_args.args[0]
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "rows",
+        "distinct",
+        "repaired_rows",
+        "deduplicated_cte",
+        "row_request",
+        "caller_scoped_rows",
+    ],
+)
+def test_cli_exposes_counting_grain_advisory_without_rewriting_sql(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], mode: str
+) -> None:
+    source = tmp_path / "accounts.csv"
+    source.write_text(
+        "account_id,cycle,state,outcome\n"
+        "A1,2026,live,renewed\nA1,2026,live,renewed\n"
+        "A2,2026,live,renewed\nA3,2026,live,declined\n"
+        "A4,2026,live,declined\nA5,2026,live,\n"
+        "A6,2026,dormant,renewed\nA7,2026,pending,renewed\n"
+        "A8,2025,live,renewed\n",
+        encoding="utf-8",
+    )
+    question = (
+        "Among distinct live accounts in cycle 2026 with a known renewal outcome "
+        "(renewed or declined), what percentage renewed? "
+        "Count account identities, not rows."
+    )
+    filters = "WHERE cycle=2026 AND state='live' AND outcome IN ('renewed','declined')"
+    sql = (
+        "SELECT 100.0*COUNT(CASE WHEN outcome='renewed' THEN 1 ELSE NULL END) "
+        "/NULLIF(COUNT(outcome),0) AS metric FROM accounts " + filters
+    )
+    expected = 60
+    review_status = "review_required"
+    if mode == "distinct":
+        sql = (
+            "SELECT 100.0*COUNT(DISTINCT CASE WHEN outcome='renewed' "
+            "THEN account_id END)/NULLIF(COUNT(DISTINCT account_id),0) "
+            "AS metric FROM accounts " + filters
+        )
+        expected = 50
+        review_status = "no_warning_detected"
+    elif mode == "deduplicated_cte":
+        sql = (
+            "WITH eligible AS (SELECT DISTINCT account_id,outcome FROM accounts "
+            + filters
+            + ") SELECT 100.0*COUNT(CASE WHEN outcome='renewed' "
+            "THEN 1 END)/NULLIF(COUNT(*),0) AS metric FROM eligible"
+        )
+        expected = 50
+        review_status = "not_assessed"
+    elif mode == "row_request":
+        question = (
+            "Among live rows in cycle 2026 with renewed or declined outcome, "
+            "what percentage renewed? Count rows, not identities."
+        )
+        review_status = "not_assessed"
+    scripted = [
+        json.dumps(
+            {"action": "investigate", "reasoning": "Measure", "question": "Sum"}
+        ),
+        "SELECT missing_column FROM accounts" if mode == "repaired_rows" else sql,
+    ]
+    if mode == "repaired_rows":
+        scripted.append(sql)
+    scripted.append(
+        json.dumps(
+            {
+                "conclusion": f"The renewal percentage is {expected}.",
+                "claims": [
+                    {
+                        "operation": "value",
+                        "expected": str(expected),
+                        "left": {
+                            "observation_index": 0,
+                            "row_index": 0,
+                            "column": "metric",
+                        },
+                        "right": None,
+                    }
+                ],
+            }
+        )
+    )
+    destination = tmp_path / "grain-review.json"
+    arguments = [
+        "investigate",
+        str(source),
+        "--question",
+        question,
+        "--max-steps",
+        "1",
+        "--require-claim",
+        "value",
+        "--allow-llm-data-disclosure",
+        "--output",
+        str(destination),
+    ]
+    if mode == "caller_scoped_rows":
+        population_path = tmp_path / "live-population.json"
+        population_path.write_text(
+            json.dumps(
+                [{"relation": "accounts", "column": "state", "values": ["live"]}]
+            ),
+            encoding="utf-8",
+        )
+        arguments.extend(("--population", str(population_path)))
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=scripted,
+    ) as generate:
+        assert main(arguments) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert json.loads(destination.read_text(encoding="utf-8")) == report
+    observation = report["investigation"]["observations"][0]
+    assert observation["sql"] == sql
+    assert observation["result"]["rows"] == [[expected]]
+    assert observation["grain_review"] == {
+        "status": review_status,
+        "warnings": ["row_counts_for_identity_request"]
+        if review_status == "review_required"
+        else [],
+        "task_semantics_verified": False,
+    }
+    assert len(observation["repair_history"]) == (1 if mode == "repaired_rows" else 0)
+    assert report["claim_output_assessment"]["accepted"] is True
+    assert report["claim_output_assessment"]["task_semantics_verified"] is False
+    assert generate.call_count == (4 if mode == "repaired_rows" else 3)
+    assert "grain_review" not in generate.call_args.args[0]

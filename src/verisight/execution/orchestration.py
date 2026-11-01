@@ -246,6 +246,7 @@ class InvestigationOrchestrator:
                         result=execution.result,
                         repair_history=tuple(execution.repair_history),
                         population_review=execution.population_review,
+                        grain_review=execution.grain_review,
                     )
                 )
         except InvestigationDeadlineExceeded:

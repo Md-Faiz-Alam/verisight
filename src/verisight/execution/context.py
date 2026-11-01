@@ -31,6 +31,15 @@ class PopulationReview:
 
 
 @dataclass(frozen=True, slots=True)
+class CountingGrainReview:
+    """A bounded counting diagnostic; no status certifies identity semantics."""
+
+    status: Literal["not_assessed", "review_required", "no_warning_detected"]
+    warnings: tuple[Literal["row_counts_for_identity_request"], ...] = ()
+    task_semantics_verified: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class PopulationFilter:
     """Caller-selected equality/membership filter; all supplied filters use AND.
 

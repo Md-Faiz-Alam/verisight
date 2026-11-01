@@ -29,7 +29,7 @@ from verisight.execution.planning import (
 )
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.repair import QueryRepairer, QueryRepairRequest
-from verisight.execution.validation import review_population
+from verisight.execution.validation import review_counting_grain, review_population
 from verisight.ingestion.models import LoadedDataset
 
 
@@ -139,6 +139,7 @@ class AnalyticalExecutionService:
             population_review=review_population(
                 original_question or question, plan.sql, self._context
             ),
+            grain_review=review_counting_grain(original_question or question, plan.sql),
         )
 
     def ask(self, question: str) -> QueryResult:
@@ -205,6 +206,9 @@ class AnalyticalExecutionService:
             repair_history=(repair,),
             population_review=review_population(
                 original_question or question, repaired_plan.sql, self._context
+            ),
+            grain_review=review_counting_grain(
+                original_question or question, repaired_plan.sql
             ),
         )
 

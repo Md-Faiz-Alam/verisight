@@ -6,7 +6,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Literal
 
-from verisight.execution.context import PopulationReview
+from verisight.execution.context import CountingGrainReview, PopulationReview
 from verisight.execution.models import QueryResult
 from verisight.execution.planning import QueryPlan
 
@@ -57,3 +57,4 @@ class QueryExecution:
     result: QueryResult
     repair_history: tuple[QueryRepairAttempt, ...] = field(default=(), kw_only=True)
     population_review: PopulationReview | None = field(default=None, kw_only=True)
+    grain_review: CountingGrainReview | None = field(default=None, kw_only=True)

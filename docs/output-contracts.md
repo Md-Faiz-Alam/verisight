@@ -208,3 +208,33 @@ These local diagnostics can contain dataset identifiers and values. They use
 original-data category evidence, not a redacted or population-filtered vocabulary.
 They are excluded from synthesis prompts and never treated as numerical evidence.
 Existing caller-selected population enforcement remains independent.
+
+
+## Advisory counting-grain review
+
+Built-in natural-language execution also attaches `grain_review` to executed
+observations. CLI JSON exposes it under
+`investigation.observations[].grain_review`. This is separate from population
+review, numerical support and output-contract acceptance. Custom runners and
+manually constructed observations may leave it null.
+
+The first version recognizes positive instructions of the form "count account
+identities, not rows" or "count entities, not source rows", with bounded
+intervening words. It does not infer an entity key or fully interpret arbitrary
+wording. For a single count-based projection over one directly queried table,
+ordinary COUNT expressions produce `review_required` with warning
+`row_counts_for_identity_request`. Distinct counts produce
+`no_warning_detected`, which does not establish that the correct identity
+columns, conditions, numerator or denominator were used.
+
+CTEs, nested queries, joins, grouped queries, window calculations, multiple
+projections, other aggregate types and unrecognized requests are `not_assessed`.
+A legitimate row-count request is not treated as an identity-count request.
+Ordinary counts can be correct when source rows are already unique; a warning
+requests review rather than proving the SQL wrong. Caller population filters
+restrict rows but do not deduplicate identities or suppress this diagnostic.
+
+The check does not rewrite SQL, run additional queries, call a model, change
+acceptance or change the CLI exit status. Its metadata is excluded from synthesis
+prompts. Every status retains `task_semantics_verified=false`. This is a narrow
+advisory, not autonomous enforcement of analytical grain.

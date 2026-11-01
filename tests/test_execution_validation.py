@@ -576,3 +576,114 @@ def test_population_review_caller_policy_and_shared_category() -> None:
     )
     assert review_population("production output", sql, shared).status == "not_assessed"
     assert not _question_mentions_category("all values", " ")
+
+
+@pytest.mark.parametrize(
+    "sql,status",
+    [
+        ("SELECT COUNT(*) FROM accounts", "review_required"),
+        ("SELECT COUNT(outcome) FROM accounts", "review_required"),
+        (
+            "SELECT 100.0*COUNT(CASE WHEN outcome='renewed' THEN 1 END) "
+            "/ NULLIF(COUNT(outcome),0) FROM accounts "
+            "WHERE cycle=2026 AND state='live' "
+            "AND outcome IN ('renewed','declined')",
+            "review_required",
+        ),
+        ("SELECT COUNT(DISTINCT account_id) FROM accounts", "no_warning_detected"),
+        (
+            "SELECT 100.0*COUNT(DISTINCT CASE WHEN outcome='renewed' "
+            "THEN account_id END)/NULLIF(COUNT(DISTINCT account_id),0) "
+            "FROM accounts WHERE cycle=2026 AND state='live' "
+            "AND outcome IN ('renewed','declined')",
+            "no_warning_detected",
+        ),
+        (
+            "SELECT COUNT(DISTINCT account_id)+COUNT(*) FROM accounts",
+            "review_required",
+        ),
+        (
+            "SELECT COUNT(DISTINCT outcome) FROM accounts",
+            "no_warning_detected",
+        ),
+        (
+            "SELECT COUNT(DISTINCT account_id) FROM accounts ORDER BY COUNT(*)",
+            "no_warning_detected",
+        ),
+        (
+            "SELECT COUNT(*) FILTER(WHERE outcome='renewed') FROM accounts",
+            "review_required",
+        ),
+        ("SELECT SUM(amount)/COUNT(*) FROM accounts", "not_assessed"),
+        ("SELECT SUM(amount) FROM accounts ORDER BY COUNT(*)", "not_assessed"),
+        ("SELECT COUNT_IF(outcome='renewed') FROM accounts", "not_assessed"),
+        ("SELECT COUNT(*) OVER() FROM accounts", "not_assessed"),
+        ("SELECT COUNT(*) FROM accounts GROUP BY state", "not_assessed"),
+        ("SELECT COUNT(*) FROM accounts HAVING COUNT(*)>0", "not_assessed"),
+        (
+            "SELECT COUNT(*) FROM accounts QUALIFY ROW_NUMBER() OVER()=1",
+            "not_assessed",
+        ),
+        ("SELECT DISTINCT COUNT(*) FROM accounts", "not_assessed"),
+        ("SELECT COUNT(*), COUNT(DISTINCT account_id) FROM accounts", "not_assessed"),
+        (
+            "WITH ids AS (SELECT DISTINCT account_id FROM accounts) "
+            "SELECT COUNT(*) FROM ids",
+            "not_assessed",
+        ),
+        (
+            "SELECT COUNT(*) FROM (SELECT DISTINCT account_id FROM accounts) a",
+            "not_assessed",
+        ),
+        (
+            "SELECT COUNT(*) FROM accounts WHERE account_id IN "
+            "(SELECT account_id FROM approved)",
+            "not_assessed",
+        ),
+        (
+            "SELECT COUNT(*) FROM accounts a JOIN approved b ON a.id=b.id",
+            "not_assessed",
+        ),
+        ("SELECT COUNT(*)", "not_assessed"),
+        (
+            "SELECT COUNT(*) FROM accounts UNION SELECT COUNT(*) FROM approved",
+            "not_assessed",
+        ),
+        ("SELECT COUNT(*) FROM accounts; SELECT 1", "not_assessed"),
+        ("SELECT (", "not_assessed"),
+    ],
+)
+def test_counting_grain_advisory_is_narrow(sql: str, status: str) -> None:
+    from verisight.execution.validation import review_counting_grain
+
+    review = review_counting_grain("Count account identities, not rows.", sql)
+    assert review.status == status
+    assert review.task_semantics_verified is False
+    assert review.warnings == (
+        ("row_counts_for_identity_request",) if status == "review_required" else ()
+    )
+
+
+@pytest.mark.parametrize(
+    "question,assessed",
+    [
+        ("Count learner identities, not enrolment rows.", True),
+        ("COUNT DISTINCT ENTITIES, NOT SOURCE ROWS.", True),
+        ("Count account identities not rows.", True),
+        ("Count identities, not rows.", True),
+        ("Count rows, not identities.", False),
+        ("Count events.", False),
+        ("Do not count identities, not rows.", False),
+        ("Never count account identities, not rows.", False),
+        ("Avoid count account identities, not rows.", False),
+        ("Don't count account identities, not rows.", False),
+        ("Do not count entities, not rows. Count identities, not rows.", True),
+    ],
+)
+def test_counting_grain_advisory_requires_positive_explicit_intent(
+    question: str, assessed: bool
+) -> None:
+    from verisight.execution.validation import review_counting_grain
+
+    review = review_counting_grain(question, "SELECT COUNT(*) FROM accounts")
+    assert review.status == ("review_required" if assessed else "not_assessed")

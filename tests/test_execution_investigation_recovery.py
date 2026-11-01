@@ -311,6 +311,7 @@ def test_orchestrator_preserves_executed_observation_on_investigator_failure(
     )
     execution_service.run.return_value.result = expected_result
     execution_service.run.return_value.population_review = None
+    execution_service.run.return_value.grain_review = None
 
     orchestrator = InvestigationOrchestrator(
         execution_service=execution_service,
@@ -379,6 +380,7 @@ def test_orchestrator_preserves_executed_observation_on_synthesis_failure(
     )
     execution_service.run.return_value.result = expected_result
     execution_service.run.return_value.population_review = None
+    execution_service.run.return_value.grain_review = None
 
     synthesizer.synthesize.side_effect = failure
 

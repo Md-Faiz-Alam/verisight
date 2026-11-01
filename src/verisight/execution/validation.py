@@ -9,6 +9,7 @@ from sqlglot.errors import OptimizeError, ParseError
 from sqlglot.optimizer.scope import Scope, ScopeType, traverse_scope
 
 from verisight.execution.context import (
+    CountingGrainReview,
     PopulationReview,
     PopulationWarning,
     QueryContext,
@@ -457,3 +458,64 @@ def review_population(
         "review_required",
         (PopulationWarning(item.relation, item.column, value),),
     )
+
+
+def _explicit_identity_count_request(question: str) -> bool:
+    """Recognize a bounded positive instruction contrasting identities and rows."""
+    pattern = (
+        r"\bcount\s+(?:[\w-]+\s+){0,4}(?:identities|entities)"
+        r"\s*,?\s*not\s+(?:[\w-]+\s+){0,2}rows\b"
+    )
+    for match in re.finditer(pattern, question, re.IGNORECASE):
+        if not re.search(
+            r"\b(?:not|never|avoid|don't)\s*$",
+            question[: match.start()],
+            re.IGNORECASE,
+        ):
+            return True
+    return False
+
+
+def review_counting_grain(question: str, sql: str) -> CountingGrainReview:
+    """Review ordinary COUNT use for explicit identity-versus-row instructions.
+
+    Only a scalar count-based projection over one direct table is assessed.
+    Distinct counts do not establish that the right identity columns were used.
+    Ordinary counts can be valid on unique input; the warning requests review.
+    No SQL is rewritten and no task semantics are certified.
+    """
+    unknown = CountingGrainReview("not_assessed")
+    if not _explicit_identity_count_request(question):
+        return unknown
+    try:
+        statements = sqlglot.parse(sql, read="duckdb")
+    except ParseError:
+        return unknown
+    if len(statements) != 1 or not isinstance(statements[0], exp.Select):
+        return unknown
+    query = statements[0]
+    source = query.args.get("from_")
+    if (
+        not isinstance(source, exp.From)
+        or not isinstance(source.this, exp.Table)
+        or len(query.expressions) != 1
+        or any(
+            query.args.get(key)
+            for key in ("with_", "joins", "group", "having", "qualify", "distinct")
+        )
+        or len(tuple(query.find_all(exp.Select))) != 1
+        or query.find(exp.Window) is not None
+    ):
+        return unknown
+    projection = query.expressions[0]
+    counts = tuple(projection.find_all(exp.Count))
+    if not counts or any(
+        not isinstance(aggregate, exp.Count)
+        for aggregate in projection.find_all(exp.AggFunc)
+    ):
+        return unknown
+    if any(not isinstance(count.this, exp.Distinct) for count in counts):
+        return CountingGrainReview(
+            "review_required", ("row_counts_for_identity_request",)
+        )
+    return CountingGrainReview("no_warning_detected")
