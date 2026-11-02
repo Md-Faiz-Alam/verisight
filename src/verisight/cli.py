@@ -19,6 +19,7 @@ from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
 )
+from verisight.execution.metric_display import MetricDescription, render_metric
 from verisight.ingestion.exceptions import DataLoadError
 from verisight.ingestion.models import CsvReadOptions
 from verisight.public_api import run_public_operation
@@ -37,6 +38,13 @@ def _positive_seconds(value: str) -> float:
     number = float(value)
     if not math.isfinite(number) or number <= 0:
         raise argparse.ArgumentTypeError("Seconds must be finite and positive.")
+    return number
+
+
+def _nonnegative_int(value: str) -> int:
+    number = int(value)
+    if number < 0:
+        raise argparse.ArgumentTypeError("Value must be a nonnegative integer.")
     return number
 
 
@@ -69,6 +77,23 @@ def _parser() -> argparse.ArgumentParser:
         )
         if name == "investigate":
             command.add_argument("--question", required=True)
+            command.add_argument(
+                "--metric-description",
+                nargs=3,
+                metavar=("LABEL", "COUNTING_UNIT", "UNIT"),
+                help=(
+                    "Display a supported VALUE cell with caller-supplied wording. "
+                    "Descriptions stay local and do not verify SQL semantics."
+                ),
+            )
+            command.add_argument(
+                "--metric-claim-index",
+                type=_nonnegative_int,
+                help=(
+                    "Zero-based claim index for --metric-description (default: 0). "
+                    "Requires --metric-description."
+                ),
+            )
             command.add_argument(
                 "--require-claim",
                 action="append",
@@ -270,6 +295,9 @@ def _run(
         request["csv_options"] = {
             str(path): choices for path, choices in args.csv_options.items()
         }
+    if args.metric_description is not None:
+        request["metric_description"] = args.metric_description
+        request["metric_claim_index"] = args.metric_claim_index
     preview: dict[str, object] = {
         "kind": "investigation_preview",
         "request": request,
@@ -310,16 +338,43 @@ def _run(
     succeeded = result.status is InvestigationStatus.COMPLETE and (
         assessment is None or assessment.accepted
     )
+    if args.metric_description is not None:
+        try:
+            report["metric_display"] = render_metric(
+                result,
+                args.metric_description,
+                claim_index=args.metric_claim_index,
+            )
+        except (ValueError, IndexError):
+            report["metric_display"] = None
+            report["metric_display_status"] = "unavailable"
+            report["metric_display_unavailable_reason"] = (
+                "A complete investigation and a supported VALUE claim "
+                "at the selected index are required."
+            )
+            succeeded = False
+        else:
+            report["metric_display_status"] = "rendered"
     return report, 0 if succeeded else 1
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Return workflow and optional output-contract status, not semantic truth."""
+    """Return workflow, contract and requested-display status, not semantic truth."""
     parser = _parser()
     args = parser.parse_args(argv)
     if args.command == "investigate":
         if not args.question.strip():
             parser.error("Question must not be blank.")
+        if args.metric_description is None:
+            if args.metric_claim_index is not None:
+                parser.error("--metric-claim-index requires --metric-description.")
+        else:
+            try:
+                args.metric_description = MetricDescription(*args.metric_description)
+            except ValueError as error:
+                parser.error(str(error))
+        if args.metric_claim_index is None:
+            args.metric_claim_index = 0
         if not args.preview and not args.allow_llm_data_disclosure:
             parser.error(
                 "Use --preview for offline inspection, or explicitly pass "

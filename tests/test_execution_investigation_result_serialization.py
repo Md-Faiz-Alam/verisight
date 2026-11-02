@@ -1,13 +1,17 @@
 """Regression tests for observation formatting and caller-described displays."""
 
+import json
 from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder
+from verisight.cli import main
 from verisight.execution.claim_verification import (
     ClaimOperation,
     EvidenceReference,
@@ -311,3 +315,228 @@ def test_metric_display_selects_evidence_without_rounding_or_unit_conversion() -
     assert display.value == value
     assert f"{value} percent" in display.text
     assert display.task_semantics_verified is False
+
+
+def _metric_cli_source(tmp_path: Path) -> Path:
+    source = tmp_path / "bank.csv"
+    source.write_text(
+        "default,y\nno,yes\nno,no\nyes,no\nunknown,yes\n", encoding="utf-8"
+    )
+    return source
+
+
+def _metric_cli_args(source: Path) -> list[str]:
+    return [
+        "investigate",
+        str(source),
+        "--question",
+        "What percentage of records with known default status subscribed?",
+        "--metric-description",
+        "Subscription percentage among eligible records",
+        "records",
+        "percent",
+        "--max-steps",
+        "1",
+    ]
+
+
+def test_cli_metric_preview_is_offline(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = _metric_cli_args(_metric_cli_source(tmp_path)) + ["--preview"]
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=AssertionError("No provider calls permitted"),
+    ) as generate:
+        assert main(args) == 0
+    generate.assert_not_called()
+    report = json.loads(capsys.readouterr().out)
+    assert report["kind"] == "investigation_preview"
+    assert report["request"]["metric_description"] == {
+        "label": "Subscription percentage among eligible records",
+        "counting_unit": "records",
+        "unit": "percent",
+    }
+    assert report["request"]["metric_claim_index"] == 0
+    assert "metric_display" not in report
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        ["--metric-description", "Label", "records"],
+        ["--metric-description", "", "records", "percent"],
+        ["--metric-description", "Label", "", "percent"],
+        ["--metric-description", "Label", "records", ""],
+        ["--metric-description", "line\nbreak", "records", "percent"],
+        ["--metric-description", "x" * 257, "records", "percent"],
+        ["--metric-claim-index", "0"],
+        ["--metric-claim-index", "-1"],
+        ["--metric-claim-index", "invalid"],
+    ],
+)
+def test_cli_rejects_invalid_metric_options_before_loading(
+    options: list[str], tmp_path: Path
+) -> None:
+    with (
+        patch(
+            "verisight.cli.VeriSight.analyze",
+            side_effect=AssertionError("No data loading permitted"),
+        ) as analyze,
+        pytest.raises(SystemExit) as caught,
+    ):
+        main(
+            [
+                "investigate",
+                str(tmp_path / "absent.csv"),
+                "--question",
+                "Measure",
+                "--preview",
+                *options,
+            ]
+        )
+    assert caught.value.code == 2
+    analyze.assert_not_called()
+
+
+def test_cli_exports_caller_display_without_changing_generation_or_narrative(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERISIGHT_GEMINI_API_KEY", "offline-key")
+    source = _metric_cli_source(tmp_path)
+    before = source.read_bytes()
+    output = tmp_path / "metric-report.json"
+    conclusion = "Among eligible records, 33.333333 percent of individuals subscribed."
+    sql = (
+        "SELECT ROUND(100.0*SUM(CASE WHEN y='yes' THEN 1 ELSE 0 END)"
+        "/COUNT(*),6) AS \"VALUE\" FROM bank WHERE \"default\" IN ('yes','no')"
+    )
+    responses = [
+        json.dumps(
+            {"action": "investigate", "reasoning": "Measure", "question": "Measure"}
+        ),
+        sql,
+        json.dumps(
+            {
+                "conclusion": conclusion,
+                "claims": [
+                    {
+                        "operation": "value",
+                        "expected": "33.333333",
+                        "left": {
+                            "observation_index": 0,
+                            "row_index": 0,
+                            "column": "VALUE",
+                        },
+                        "right": None,
+                    }
+                ],
+            }
+        ),
+    ]
+    args = _metric_cli_args(source) + [
+        "--allow-llm-data-disclosure",
+        "--require-claim",
+        "value",
+        "--output",
+        str(output),
+    ]
+    with patch(
+        "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+        side_effect=responses,
+    ) as generate:
+        assert main(args) == 0
+    assert generate.call_count == 3
+    for call in generate.call_args_list:
+        assert "Subscription percentage among eligible records" not in call.args[0]
+        assert "metric_description" not in call.args[0]
+    report = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+    assert source.read_bytes() == before
+    assert report["metric_display_status"] == "rendered"
+    display = report["metric_display"]
+    assert display["value"] == "33.333333"
+    assert display["text"] == (
+        "Subscription percentage among eligible records: 33.333333 percent. "
+        "Counting unit (caller supplied): records."
+    )
+    assert display["description_source"] == "caller"
+    assert display["task_semantics_verified"] is False
+    assert report["unverified_model_interpretation"] == conclusion
+    assert report["investigation"]["conclusion"] == conclusion
+    assert report["investigation"]["observations"][0]["sql"] == sql
+    assert report["claim_output_assessment"]["accepted"] is True
+
+
+@pytest.mark.parametrize(
+    "mode", ["contradicted", "incomplete", "difference", "missing", "out-of-range"]
+)
+def test_cli_retains_evidence_when_requested_metric_display_is_unavailable(
+    mode: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERISIGHT_GEMINI_API_KEY", "offline-key")
+    result = _metric_result()
+    args = _metric_cli_args(_metric_cli_source(tmp_path)) + [
+        "--allow-llm-data-disclosure"
+    ]
+    if mode == "contradicted":
+        claim = replace(result.generated_claims[0], expected=99)
+        result = replace(result, generated_claims=(claim,))
+    elif mode == "incomplete":
+        result = replace(result, status=InvestigationStatus.INCOMPLETE)
+    elif mode == "difference":
+        claim = replace(
+            result.generated_claims[0],
+            operation=ClaimOperation.DIFFERENCE,
+            right=EvidenceReference(0, 0, "VALUE"),
+            expected=0,
+        )
+        result = replace(result, generated_claims=(claim,))
+    elif mode == "missing":
+        result = replace(result, generated_claims=())
+    else:
+        args.extend(("--metric-claim-index", "1"))
+    output = tmp_path / "unavailable.json"
+    args.extend(("--output", str(output)))
+    with (
+        patch("verisight.cli.VeriSight.investigate", return_value=result),
+        patch(
+            "verisight.execution.gemini.GeminiTextGenerationClient.generate",
+            side_effect=AssertionError("No provider calls permitted"),
+        ) as generate,
+    ):
+        assert main(args) == 1
+    generate.assert_not_called()
+    report = json.loads(capsys.readouterr().out)
+    assert report["kind"] == "investigation"
+    assert report["metric_display_status"] == "unavailable"
+    assert report["metric_display"] is None
+    assert "supported VALUE claim" in report["metric_display_unavailable_reason"]
+    assert report["investigation"] == to_jsonable(result)
+    assert report["workflow_status"] == result.status.value
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+
+
+def test_cli_metric_claim_selection_is_explicit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VERISIGHT_GEMINI_API_KEY", "offline-key")
+    result = _metric_result()
+    bad = replace(result.generated_claims[0], expected=99)
+    result = replace(result, generated_claims=(bad, result.generated_claims[0]))
+    args = _metric_cli_args(_metric_cli_source(tmp_path)) + [
+        "--allow-llm-data-disclosure",
+        "--metric-claim-index",
+        "1",
+    ]
+    with patch("verisight.cli.VeriSight.investigate", return_value=result):
+        assert main(args) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["metric_display"]["claim_index"] == 1
+    assert report["metric_display"]["value"] == "12.877788"
+    assert report["investigation"] == to_jsonable(result)
