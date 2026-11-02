@@ -19,7 +19,12 @@ from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
 )
-from verisight.execution.metric_display import MetricDescription, render_metric
+from verisight.execution.metric_display import (
+    MetricDescription,
+    MetricReviewRequiredError,
+    render_metric,
+    summarize_advisory_reviews,
+)
 from verisight.ingestion.exceptions import DataLoadError
 from verisight.ingestion.models import CsvReadOptions
 from verisight.public_api import run_public_operation
@@ -329,6 +334,7 @@ def _run(
         "request": request,
         "workflow_status": result.status.value,
         "claim_output_assessment": assessment,
+        "advisory_reviews": summarize_advisory_reviews(result),
         "population": result.population,
         "profile": _profile_view(result.analysis),
         "numerical_statements": result.quantitative_statements,
@@ -345,6 +351,15 @@ def _run(
                 args.metric_description,
                 claim_index=args.metric_claim_index,
             )
+        except MetricReviewRequiredError:
+            report["metric_display"] = None
+            report["metric_display_status"] = "review_required"
+            report["metric_display_unavailable_reason"] = (
+                "An advisory population or counting-grain review flagged the "
+                "selected claim's evidence. Inspect the executed SQL before "
+                "presenting this value with caller-supplied wording."
+            )
+            succeeded = False
         except (ValueError, IndexError):
             report["metric_display"] = None
             report["metric_display_status"] = "unavailable"

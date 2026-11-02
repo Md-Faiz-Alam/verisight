@@ -179,8 +179,9 @@ Built-in natural-language execution attaches `population_review` to each
 executed observation. CLI JSON exposes it under
 `investigation.observations[].population_review`. Custom query runners and
 manually constructed observations can leave this field null (not assessed).
-The review does not rewrite SQL, run extra SQL, call a model, change claim
-acceptance, or change the CLI exit status.
+The review does not rewrite SQL, run extra SQL, call a model, or change claim
+acceptance. It changes the CLI exit status only when a requested metric display
+is withheld; see [Metric displays and advisory reviews](#metric-displays-and-advisory-reviews).
 
 The heuristic compares exact case-insensitive category mentions in the original
 question with bounded observed string values and simple SQL filters. It handles
@@ -234,7 +235,30 @@ Ordinary counts can be correct when source rows are already unique; a warning
 requests review rather than proving the SQL wrong. Caller population filters
 restrict rows but do not deduplicate identities or suppress this diagnostic.
 
-The check does not rewrite SQL, run additional queries, call a model, change
-acceptance or change the CLI exit status. Its metadata is excluded from synthesis
+The check does not rewrite SQL, run additional queries, call a model or change
+acceptance. Like population review, it withholds a requested metric display.
+Its metadata is excluded from synthesis
 prompts. Every status retains `task_semantics_verified=false`. This is a narrow
 advisory, not autonomous enforcement of analytical grain.
+
+
+## Metric displays and advisory reviews
+
+`--metric-description LABEL COUNTING_UNIT UNIT` (Python: `render_metric`)
+prints one supported VALUE cell with caller-supplied wording. Select another
+claim with `--metric-claim-index`. The wording stays local; it is never sent to a
+provider and is not checked against the executed SQL.
+
+Every investigation report includes `advisory_reviews`, listing the zero-based
+observations whose population or counting-grain review is `review_required`.
+An empty list means no built-in heuristic raised a warning; unassessed queries
+also produce no warning, so this is not a verification of population or grain.
+
+A caller-worded display would present a value with more authority than its
+evidence supports when the selected claim's observation is flagged. In that case
+`render_metric` raises `MetricReviewRequiredError` and the CLI reports
+`metric_display: null`, `metric_display_status: "review_required"` and exits 1.
+Workflow status, numerical verdicts, output-contract acceptance and the retained
+evidence are unchanged. Without `--metric-description`, advisory reviews do not
+change the exit status. Flags on other observations do not block a display of
+an unflagged claim, but they remain listed in `advisory_reviews`.

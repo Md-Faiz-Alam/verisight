@@ -2,6 +2,8 @@
 
 Descriptions are application input, never inferred from generated prose or SQL.
 They are not sent to a provider and do not certify analytical semantics.
+Advisory population and counting-grain reviews on the selected evidence are
+respected: a display is refused when either review requires inspection.
 """
 
 from dataclasses import dataclass, field
@@ -18,6 +20,15 @@ from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
 )
+from verisight.execution.observations import QueryObservation
+
+
+class MetricReviewRequiredError(ValueError):
+    """The selected claim's evidence has an advisory review requiring inspection.
+
+    This is not proof that the SQL is wrong. It means a caller-worded display
+    would present the value with more authority than its evidence supports.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +77,55 @@ class MetricDisplay:
     task_semantics_verified: bool = field(default=False, init=False)
 
 
+@dataclass(frozen=True, slots=True)
+class AdvisoryReviewSummary:
+    """Zero-based observation indexes whose advisory reviews require inspection.
+
+    An empty summary means no built-in heuristic raised a warning. It does not
+    mean the population or counting grain was verified: unassessed and
+    unsupported query shapes also produce no warning.
+    """
+
+    review_required: bool
+    population_review_required_observations: tuple[int, ...]
+    grain_review_required_observations: tuple[int, ...]
+    scope: str = field(default="advisory_heuristics_only", init=False)
+    task_semantics_verified: bool = field(default=False, init=False)
+
+
+def _population_review_required(observation: QueryObservation) -> bool:
+    review = observation.population_review
+    return review is not None and review.status == "review_required"
+
+
+def _grain_review_required(observation: QueryObservation) -> bool:
+    review = observation.grain_review
+    return review is not None and review.status == "review_required"
+
+
+def summarize_advisory_reviews(
+    investigation: InvestigationResult,
+) -> AdvisoryReviewSummary:
+    """Collect advisory warnings without changing the investigation or its verdicts."""
+    if not isinstance(investigation, InvestigationResult):
+        raise TypeError("Investigation must be an InvestigationResult.")
+    population = tuple(
+        index
+        for index, observation in enumerate(investigation.observations)
+        if _population_review_required(observation)
+    )
+    grain = tuple(
+        index
+        for index, observation in enumerate(investigation.observations)
+        if _grain_review_required(observation)
+    )
+    return AdvisoryReviewSummary(
+        review_required=bool(population or grain),
+        population_review_required_observations=population,
+        grain_review_required_observations=grain,
+    )
+
+
 def render_metric(
     investigation: InvestigationResult,
     description: MetricDescription,
@@ -75,10 +135,12 @@ def render_metric(
     """Render one supported VALUE cell without using the generated conclusion.
 
     Require a complete workflow and recheck the selected claim against its
-    evidence. Display the actual SQL cell even if a nonzero claim tolerance
-    permits a different expected value. Do not round, rescale, deduplicate or
-    infer units. Other claims and the narrative are outside this check.
-    The original result, acceptance and provider-call counts are unchanged.
+    evidence. Refuse the display when the referenced observation has an
+    advisory population or counting-grain review requiring inspection.
+    Display the actual SQL cell even if a nonzero claim tolerance permits a
+    different expected value. Do not round, rescale, deduplicate or infer units.
+    Other claims and the narrative are outside this check. The original result,
+    acceptance and provider-call counts are unchanged.
     """
     if not isinstance(investigation, InvestigationResult):
         raise TypeError("Investigation must be an InvestigationResult.")
@@ -96,6 +158,13 @@ def render_metric(
     verification = NumericalClaimVerifier().verify(claim, investigation.observations)
     if verification.status is not VerificationStatus.SUPPORTED:
         raise ValueError("Metric display requires supported numerical evidence.")
+    # A supported verdict guarantees the referenced observation exists.
+    observation = investigation.observations[claim.left.observation_index]
+    if _population_review_required(observation) or _grain_review_required(observation):
+        raise MetricReviewRequiredError(
+            "Metric display requires inspection of an advisory review "
+            "on the referenced evidence."
+        )
     value = verification.actual
     assert value is not None
     return MetricDisplay(
