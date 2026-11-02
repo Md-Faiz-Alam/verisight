@@ -89,15 +89,40 @@ must reference two different cells. A claim citing a missing column, missing
 row, missing observation or non-numeric cell, or subtracting a cell from itself,
 can never pass the contract. It uses the existing single repair attempt with the
 safe `invalid_claim_reference` category; feedback does not include the rejected
-values. This structural check does not compare expected values, so numerical
-contradictions still reach verification unchanged. Without a contract, such
-claims are returned and verified as `unverifiable`, as before.
+values. Without a contract, such claims are returned and verified as
+`unverifiable`, as before.
+
+A contract-mode claim whose expected value is not even a rounding of the cited
+evidence, such as a percentage that cites a count cell, uses the same single
+repair attempt with the `claim_value_mismatch` category. A value that equals the
+evidence rounded to the claim's own decimal places is not rejected here; it
+reaches verification unchanged, so rounding policies apply and genuine
+contradictions are still reported.
+
+### Final-value recovery query
+
+In contract mode, a finished synthesis whose evidence lacks the requested final
+value gets one recovery query, if an analytical step remains. The triggers are a
+terminal `invalid_claim_reference` or `claim_value_mismatch` failure, or a
+complete synthesis with empty claims. The recovery query plans the original
+question, asking for each value the claim needs as its own numeric result
+column. Synthesis then runs once more on all observations, without another
+investigator decision. Recovery happens at most once per investigation.
+
+The result records it as `synthesis_recovery`, with `trigger`,
+`repair_attempted` from the first synthesis, and `query_succeeded`. If the
+recovery query fails, the first outcome is returned with the failed attempt
+added to its history. If it succeeds, the new synthesis replaces the first one,
+and only the safe categories above describe the replaced outcome. Recovery
+uses the normal step budget and shared deadline, and the final claims are
+verified exactly as before.
 
 If evidence is insufficient, empty claims remain allowed; they cannot pass a
 nonempty output contract. The system does not force a numerical assertion to
 fill the required count. Repeated shape failure produces an incomplete result
 with SQL observations retained and synthesis failure metadata. Numerical
-contradictions do not trigger shape repair. Provider failures and the shared
+contradictions that are a rounding of the cited evidence do not trigger
+shape repair. Provider failures and the shared
 deadline retain their existing handling.
 
 Final `assess_output()` remains a separate deterministic check with no model

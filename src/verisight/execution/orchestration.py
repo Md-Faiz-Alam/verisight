@@ -1,5 +1,8 @@
 """Orchestration for autonomous analytical investigations."""
 
+from dataclasses import dataclass, replace
+from typing import Literal
+
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.error_reporting import to_public_error
 from verisight.execution.analytical import AnalyticalQueryRunner
@@ -26,11 +29,31 @@ from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
     SynthesisFailure,
+    SynthesisRecovery,
 )
 from verisight.execution.investigator import Investigator
 from verisight.execution.observations import QueryObservation
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.synthesis import InvestigationSynthesizer, StructuredSynthesis
+
+RecoveryTrigger = Literal[
+    "invalid_claim_reference", "claim_value_mismatch", "empty_claims"
+]
+
+_RECOVERY_INSTRUCTION = (
+    "The evidence collected so far does not contain the requested final value "
+    "as a numeric SQL result cell. Compute each value the requested claim needs "
+    "directly in SQL, each as its own numeric result column, instead of only "
+    "counts or other components."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingRecovery:
+    trigger: RecoveryTrigger
+    repair_attempted: bool | None
+    baseline_observations: int
+    fallback: InvestigationResult
 
 
 class InvestigationOrchestrator:
@@ -41,6 +64,12 @@ class InvestigationOrchestrator:
     investigator controls whether to query. After a successful one-attempt
     query, synthesis runs directly; multi-step investigations still require
     a finish decision. Neither path establishes full task acceptance.
+
+    With a claim output contract, a finished synthesis that cites a missing
+    or inconsistent cell, or returns no claims, may use one remaining step
+    for a recovery query that asks for the final value as its own result
+    cell. Synthesis then runs once more on all evidence; this happens at
+    most once per investigation and is recorded as ``synthesis_recovery``.
     """
 
     def __init__(
@@ -94,6 +123,28 @@ class InvestigationOrchestrator:
         question: str,
         analysis: DatasetAnalysisResult,
     ) -> InvestigationResult:
+        """Attach the recovery record to whichever result ends the run."""
+
+        pending: list[_PendingRecovery] = []
+        result = self._run(question=question, analysis=analysis, pending=pending)
+        if pending and result.synthesis_recovery is None:
+            result = replace(
+                result,
+                synthesis_recovery=SynthesisRecovery(
+                    trigger=pending[0].trigger,
+                    repair_attempted=pending[0].repair_attempted,
+                    query_succeeded=False,
+                ),
+            )
+        return result
+
+    def _run(
+        self,
+        *,
+        question: str,
+        analysis: DatasetAnalysisResult,
+        pending: list[_PendingRecovery],
+    ) -> InvestigationResult:
         """Keep the latest state available if any stage exhausts the budget."""
 
         state = InvestigationState(
@@ -109,6 +160,21 @@ class InvestigationOrchestrator:
         try:
             while True:
                 check_deadline()
+                if pending:
+                    recovery = pending[0]
+                    if state.observation_count == recovery.baseline_observations:
+                        # Keep the failed recovery attempt in the reported history.
+                        return replace(
+                            recovery.fallback, failed_attempts=state.failed_attempts
+                        )
+                    return replace(
+                        self._synthesize(state),
+                        synthesis_recovery=SynthesisRecovery(
+                            trigger=recovery.trigger,
+                            repair_attempted=recovery.repair_attempted,
+                            query_succeeded=True,
+                        ),
+                    )
                 if self._max_steps == 1 and state.observation_count == 1:
                     return self._synthesize(state)
 
@@ -140,25 +206,44 @@ class InvestigationOrchestrator:
                         )
                         return self._incomplete(state, reason=reason)
 
-                    return self._synthesize(state)
-
-                if attempt_count >= self._max_steps:
-                    return self._incomplete(
-                        state,
-                        reason="the maximum number of analytical steps was reached",
+                    result = self._synthesize(state)
+                    trigger = self._recovery_trigger(result)
+                    if trigger is None or attempt_count >= self._max_steps:
+                        return result
+                    pending.append(
+                        _PendingRecovery(
+                            trigger=trigger,
+                            repair_attempted=(
+                                None
+                                if result.synthesis_failure is None
+                                else result.synthesis_failure.repair_attempted
+                            ),
+                            baseline_observations=state.observation_count,
+                            fallback=result,
+                        )
                     )
-
-                investigation_question = decision.question
-                if investigation_question is None:
-                    raise InvestigationError(
-                        "Investigator did not provide an analytical question."
+                    investigation_question = (
+                        f"{state.question}\n\n{_RECOVERY_INSTRUCTION}"
                     )
+                else:
+                    if attempt_count >= self._max_steps:
+                        return self._incomplete(
+                            state,
+                            reason="the maximum number of analytical steps was reached",
+                        )
 
-                # With one attempt, a rewritten subquestion cannot be followed
-                # by a query for the actual requested metric. Plan the caller's
-                # task directly; multi-step investigations retain subquestions.
-                if self._max_steps == 1:
-                    investigation_question = state.question
+                    planned_question = decision.question
+                    if planned_question is None:
+                        raise InvestigationError(
+                            "Investigator did not provide an analytical question."
+                        )
+
+                    # With one attempt, a rewritten subquestion cannot be followed
+                    # by a query for the actual requested metric. Plan the caller's
+                    # task directly; multi-step investigations retain subquestions.
+                    investigation_question = (
+                        state.question if self._max_steps == 1 else planned_question
+                    )
 
                 normalized_question = self._normalize_question(investigation_question)
                 if normalized_question in attempted_questions:
@@ -254,6 +339,24 @@ class InvestigationOrchestrator:
                 state,
                 reason="the investigation time budget was exhausted",
             )
+
+    def _recovery_trigger(self, result: InvestigationResult) -> RecoveryTrigger | None:
+        """Identify a contract result whose evidence lacks the final value."""
+
+        if self._claim_output_contract is None:
+            return None
+        failure = result.synthesis_failure
+        if failure is not None:
+            if failure.validation_reason == "invalid_claim_reference":
+                return "invalid_claim_reference"
+            if failure.validation_reason == "claim_value_mismatch":
+                return "claim_value_mismatch"
+            return None
+        if result.status is InvestigationStatus.COMPLETE and not (
+            result.generated_claims
+        ):
+            return "empty_claims"
+        return None
 
     def _synthesize(self, state: InvestigationState) -> InvestigationResult:
         """Evaluate collected evidence through the existing synthesis boundary."""

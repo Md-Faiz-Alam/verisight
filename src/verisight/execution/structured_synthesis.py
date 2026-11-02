@@ -12,9 +12,11 @@ from verisight.config import Settings
 from verisight.exceptions import ConfigurationError
 from verisight.execution.claim_verification import (
     ClaimOperation,
+    DecimalRoundingPolicy,
     EvidenceReference,
     NumericalClaim,
     NumericalClaimVerifier,
+    VerificationStatus,
 )
 from verisight.execution.exceptions import InvestigationError
 from verisight.execution.exceptions import (
@@ -341,7 +343,9 @@ class StructuredInvestigationSynthesizer:
             "where appropriate. Preserve the "
             "requested metric and valid evidence references. Every claim "
             "reference must name an existing numeric result cell by exact column "
-            "name, and a difference must reference two different cells. If the "
+            "name, and a difference must reference two different cells. Each "
+            "expected value must equal the referenced cell, or left minus right for "
+            "a difference, copied exactly with all available digits. If the "
             "requested final value is not an existing SQL result cell, do not claim "
             "or calculate it; explain that limitation instead. Do not add dummy "
             "claims for context values. The list may omit other violations; "
@@ -397,10 +401,14 @@ class StructuredInvestigationSynthesizer:
 
         Each reference must resolve to an existing numeric SQL cell, and a
         difference must use two distinct cells. Such claims can never pass the
-        output contract, so they use the existing single repair attempt. This
-        is a structural check: it does not compare expected values, so
-        contradictions still reach numerical verification unchanged. Without
-        a contract, unverifiable claims are returned as before.
+        output contract, so they use the existing single repair attempt.
+
+        An expected value that is not even a rounding of the cited evidence,
+        such as a percentage citing a count cell, is rejected as
+        ``claim_value_mismatch``. A value that equals the evidence rounded to
+        the claim's own decimal places still reaches numerical verification
+        unchanged, so rounding policies and genuine contradictions are kept.
+        Without a contract, unverifiable claims are returned as before.
         """
         verifier = NumericalClaimVerifier()
         for claim in synthesis.claims:
@@ -422,6 +430,29 @@ class StructuredInvestigationSynthesizer:
                 )
                 if verifier.verify(probe, state.observations).actual is None:
                     raise _SynthesisFormatError("invalid_claim_reference")
+            if not StructuredInvestigationSynthesizer._consistent(
+                claim, state, verifier
+            ):
+                raise _SynthesisFormatError("claim_value_mismatch")
+
+    @staticmethod
+    def _consistent(
+        claim: NumericalClaim,
+        state: InvestigationState,
+        verifier: NumericalClaimVerifier,
+    ) -> bool:
+        """Accept support, or a rounding of the evidence to the claim's places."""
+        result = verifier.verify(claim, state.observations)
+        if result.status is not VerificationStatus.CONTRADICTED:
+            return True
+        exponent = result.expected.normalize().as_tuple().exponent
+        places = -exponent if isinstance(exponent, int) and exponent < 0 else 0
+        if places > 12:
+            return False
+        rounded = NumericalClaimVerifier(
+            rounding_policy=DecimalRoundingPolicy(places)
+        ).verify(claim, state.observations)
+        return rounded.status is VerificationStatus.SUPPORTED_ROUNDED
 
     @staticmethod
     def _check_response(

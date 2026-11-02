@@ -46,6 +46,7 @@ SynthesisValidationReason = Literal[
     "unlinked_narrative_number",
     "claim_output_contract_mismatch",
     "invalid_claim_reference",
+    "claim_value_mismatch",
 ]
 
 
@@ -65,6 +66,7 @@ class SynthesisValidationError(InvestigationError):
             "unlinked_narrative_number",
             "claim_output_contract_mismatch",
             "invalid_claim_reference",
+            "claim_value_mismatch",
         ):
             raise ValueError("Unsupported synthesis validation category.")
         if type(repair_attempted) is not bool:

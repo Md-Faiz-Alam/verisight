@@ -639,14 +639,20 @@ def test_cli_enforces_selected_output_contract_with_bounded_shape_repair(
                 "claims": [],
             }
         )
+    # A contradicted claim is repaired once; an empty or still-inconsistent
+    # synthesis then uses one recovery query and one final synthesis.
+    recovery_sql = "SELECT SUM(amount) AS total FROM orders"
+    synthesis = generation_responses[-1]
+    if mode == "contradicted":
+        generation_responses.extend([synthesis, recovery_sql, synthesis, synthesis])
+    if mode == "empty":
+        generation_responses.extend([recovery_sql, synthesis])
     with patch(
         "verisight.execution.gemini.GeminiTextGenerationClient.generate",
         side_effect=generation_responses,
     ) as generate:
         assert main(arguments) == expected_code
-    assert generate.call_count == (
-        3 if mode == "incomplete" else 4 + int(shape_mismatch)
-    )
+    assert generate.call_count == len(generation_responses) - int(mode == "incomplete")
     if mode != "incomplete":
         assert (
             "CALLER-SELECTED CLAIM OUTPUT CONTRACT"
@@ -659,10 +665,23 @@ def test_cli_enforces_selected_output_contract_with_bounded_shape_repair(
         )
     report = json.loads(capsys.readouterr().out)
     assert report["request"]["claim_output_contract"]["operations"] == required
+    recovery = report["investigation"]["synthesis_recovery"]
+    if mode in {"contradicted", "empty"}:
+        assert recovery == {
+            "trigger": (
+                "claim_value_mismatch" if mode == "contradicted" else "empty_claims"
+            ),
+            "repair_attempted": True if mode == "contradicted" else None,
+            "query_succeeded": True,
+        }
+    else:
+        assert recovery is None
     assert report["claim_output_assessment"]["accepted"] is (expected_code == 0)
     assert report["claim_output_assessment"]["task_semantics_verified"] is False
     assert report["workflow_status"] == (
-        "incomplete" if mode == "incomplete" or shape_mismatch else "complete"
+        "incomplete"
+        if mode in {"incomplete", "contradicted"} or shape_mismatch
+        else "complete"
     )
     assert report["investigation"]["observations"][0]["result"]["rows"] == [[30]]
     assert json.loads(output.read_text(encoding="utf-8")) == report

@@ -126,8 +126,8 @@ def test_contract_mode_rejects_a_difference_of_one_cell_with_itself() -> None:
     assert len(client.prompts) == 2
 
 
-def test_contract_mode_keeps_valid_differences_and_contradictions() -> None:
-    contradicted = _response(
+def test_contract_mode_repairs_values_that_are_not_the_cited_evidence() -> None:
+    inconsistent = _response(
         "The difference is 1.",
         [
             {
@@ -138,7 +138,18 @@ def test_contract_mode_keeps_valid_differences_and_contradictions() -> None:
             }
         ],
     )
-    client = _Sequence([contradicted])
+    valid = _response(
+        "The difference is 2879.",
+        [
+            {
+                "operation": "difference",
+                "expected": "2879",
+                "left": _ref("failure_count"),
+                "right": _ref("success_count"),
+            }
+        ],
+    )
+    client = _Sequence([inconsistent, valid])
     state = replace(
         _state(),
         claim_output_contract=ClaimOutputContract((ClaimOperation.DIFFERENCE,)),
@@ -146,8 +157,10 @@ def test_contract_mode_keeps_valid_differences_and_contradictions() -> None:
 
     synthesis = StructuredInvestigationSynthesizer(client).synthesize(state)
 
-    assert len(synthesis.claims) == 1
-    assert len(client.prompts) == 1
+    assert synthesis.claims[0].expected == 2879
+    assert len(client.prompts) == 2
+    assert '"validation_error": "claim_value_mismatch"' in client.prompts[1]
+    assert "copied exactly with all available digits" in client.prompts[1]
 
 
 def test_without_a_contract_unresolvable_claims_are_returned_unchanged() -> None:

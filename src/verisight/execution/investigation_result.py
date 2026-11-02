@@ -130,6 +130,19 @@ class SynthesisFailure:
         return cls(kind=SynthesisFailureKind.SYNTHESIS_ERROR)
 
 
+@dataclass(frozen=True, slots=True)
+class SynthesisRecovery:
+    """Record of the single contract-mode query for a missing final value.
+
+    The first synthesis is replaced by the synthesis after the recovery query.
+    Its outcome is kept here as a safe category; rejected content is not kept.
+    """
+
+    trigger: Literal["invalid_claim_reference", "claim_value_mismatch", "empty_claims"]
+    repair_attempted: bool | None
+    query_succeeded: bool
+
+
 InvestigationFailureStage = Literal["investigator", "query_execution"]
 
 
@@ -182,6 +195,7 @@ class InvestigationResult:
     synthesis_failure: SynthesisFailure | None = None
     investigation_failure: InvestigationFailure | None = None
     failed_attempts: tuple[FailedQueryAttempt, ...] = field(default=(), kw_only=True)
+    synthesis_recovery: SynthesisRecovery | None = field(default=None, kw_only=True)
     narrative_verified: bool = field(default=False, init=False)
     verified_claims: tuple["VerifiedNumericalClaim", ...] = field(init=False)
     quantitative_statements: tuple["ClaimLinkedStatement", ...] = field(init=False)

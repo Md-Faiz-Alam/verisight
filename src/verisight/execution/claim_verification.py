@@ -251,6 +251,19 @@ class NumericalClaimVerifier:
                 reason="The numerical evidence supports the claimed value.",
             )
 
+        floating = self._floating_difference(claim, observations)
+        if floating is not None and abs(floating - expected) <= tolerance:
+            return ClaimVerificationResult(
+                status=VerificationStatus.SUPPORTED,
+                actual=floating,
+                expected=expected,
+                absolute_tolerance=tolerance,
+                reason=(
+                    "The claimed value equals the double-precision difference "
+                    "of the floating-point evidence cells."
+                ),
+            )
+
         return ClaimVerificationResult(
             status=VerificationStatus.CONTRADICTED,
             actual=actual,
@@ -259,12 +272,52 @@ class NumericalClaimVerifier:
             reason="The numerical evidence contradicts the claimed value.",
         )
 
-    @staticmethod
+    @classmethod
+    def _floating_difference(
+        cls,
+        claim: NumericalClaim,
+        observations: tuple[QueryObservation, ...],
+    ) -> Decimal | None:
+        """Return SQL's own double subtraction when both cells are floats.
+
+        SQL computes a difference of two DOUBLE cells in binary floating point,
+        so its result can differ from the exact decimal difference in the last
+        significant digit. Only that one IEEE-754 result is accepted in
+        addition to the exact difference; no tolerance is introduced.
+        """
+        if claim.operation is not ClaimOperation.DIFFERENCE:
+            return None
+        left = cls._resolve_cell(claim.left, observations)
+        right = cls._resolve_cell(cast(EvidenceReference, claim.right), observations)
+        if type(left) is not float or type(right) is not float:
+            return None
+        result = left - right
+        if not math.isfinite(result):
+            return None
+        return Decimal(repr(result))
+
+    @classmethod
     def _resolve(
+        cls,
         reference: EvidenceReference,
         observations: tuple[QueryObservation, ...],
     ) -> Decimal | None:
         """Resolve one reference, rejecting missing or ambiguous values."""
+
+        value = cls._resolve_cell(reference, observations)
+        if value is None:
+            return None
+        try:
+            return _decimal_number(value, name="Evidence value")
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _resolve_cell(
+        reference: EvidenceReference,
+        observations: tuple[QueryObservation, ...],
+    ) -> int | float | Decimal | None:
+        """Return the referenced numeric cell exactly as SQL produced it."""
 
         if not 0 <= reference.observation_index < len(observations):
             return None
@@ -294,10 +347,7 @@ class NumericalClaimVerifier:
         if type(value) not in (int, float, Decimal):
             return None
 
-        try:
-            return _decimal_number(value, name="Evidence value")
-        except (TypeError, ValueError):
-            return None
+        return cast(int | float | Decimal, value)
 
 
 def _decimal_number(value: object, *, name: str) -> Decimal:

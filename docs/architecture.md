@@ -125,6 +125,9 @@ The investigator decides whether to request the initial query. After a successfu
 one-attempt query, the orchestrator checks the shared deadline and proceeds
 directly to the configured synthesizer without another investigator decision.
 Multi-step investigations still require a finish decision before synthesis.
+In contract mode, a finished synthesis that lacks the requested final value may
+use one remaining step for a recovery query; see
+[Final-value recovery query](output-contracts.md#final-value-recovery-query).
 This policy removes a task-narrowing step and a post-query provider dependency
 from successful one-attempt runs; it does not guarantee correct SQL, sufficient
 evidence, provider availability, or successful synthesis. Observation and failure
@@ -330,6 +333,14 @@ Default verdicts are `supported`, `contradicted`, and `unverifiable`. The direct
 claim API accepts an absolute tolerance. Structured model-generated claims
 use zero tolerance and cannot supply their own comparison policy.
 
+For a `difference` whose two cells are both binary floating-point values, the
+verifier also accepts SQL's own double-precision subtraction result. That result
+can differ from the exact decimal difference in the last significant digit;
+for example, `25.232558139534884 - 6.894315971471796` is `18.33824216806309` in
+SQL and `18.338242168063088` exactly. Only these two values are accepted; no
+tolerance is introduced, and integer or decimal cells use the exact difference
+alone.
+
 `DecimalRoundingPolicy` is an opt-in application policy with 0–12 decimal places
 and fixed `ROUND_HALF_UP`: round to nearest, with exact ties away from zero.
 This matches DuckDB `ROUND` for exact decimal inputs; binary floating-point
@@ -497,8 +508,9 @@ planner-versus-repair trace.
 For terminal local structured-synthesis validation failures, `synthesis_failure`
 also retains `validation_reason` and `repair_attempted`. Approved reasons are
 `response_too_large`, `invalid_json`, `invalid_schema_or_claim`,
-`unlinked_narrative_number`, `claim_output_contract_mismatch`, and
-`invalid_claim_reference` (contract mode only). The reason
+`unlinked_narrative_number`, `claim_output_contract_mismatch`,
+`invalid_claim_reference`, and `claim_value_mismatch` (the last two in contract
+mode only). The reason
 identifies the terminal local check, not every failure earlier in the run.
 `repair_attempted=True` records that the repair response reached local validation
 and failed; it does not imply repair succeeded. For other failure types these
