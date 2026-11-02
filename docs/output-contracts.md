@@ -83,6 +83,16 @@ only requested in the prompt.
 Out-of-scope quantities must be omitted entirely, not spelled out. Context and
 references may be described without stating their quantities.
 
+In contract mode, every claim reference must also resolve to an existing
+numeric SQL result cell (observation, row and exact column), and a difference
+must reference two different cells. A claim citing a missing column, missing
+row, missing observation or non-numeric cell, or subtracting a cell from itself,
+can never pass the contract. It uses the existing single repair attempt with the
+safe `invalid_claim_reference` category; feedback does not include the rejected
+values. This structural check does not compare expected values, so numerical
+contradictions still reach verification unchanged. Without a contract, such
+claims are returned and verified as `unverifiable`, as before.
+
 If evidence is insufficient, empty claims remain allowed; they cannot pass a
 nonempty output contract. The system does not force a numerical assertion to
 fill the required count. Repeated shape failure produces an incomplete result

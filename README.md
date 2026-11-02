@@ -440,6 +440,9 @@ as strings.
 Safe provider diagnostics include HTTP status, retryability, attempts, a coarse
 stage, and a per-client call number. Evaluation telemetry records generation
 attempts, elapsed time, and whether text returned, without prompts or responses.
+CLI investigation reports include the same allowlisted metadata as
+`generation_calls`, including for operation errors, so time-budget failures can
+be attributed to individual calls. Previews make no calls and omit the field.
 Returning text does not imply valid JSON or a correct answer.
 
 ## Review SQL before execution

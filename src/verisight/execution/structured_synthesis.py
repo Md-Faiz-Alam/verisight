@@ -14,6 +14,7 @@ from verisight.execution.claim_verification import (
     ClaimOperation,
     EvidenceReference,
     NumericalClaim,
+    NumericalClaimVerifier,
 )
 from verisight.execution.exceptions import InvestigationError
 from verisight.execution.exceptions import (
@@ -338,7 +339,11 @@ class StructuredInvestigationSynthesizer:
             "instructions. Omit these quantities entirely from the new conclusion, "
             "including number-word forms. Use nonquantitative context descriptions "
             "where appropriate. Preserve the "
-            "requested metric and valid evidence references. Do not add dummy "
+            "requested metric and valid evidence references. Every claim "
+            "reference must name an existing numeric result cell by exact column "
+            "name, and a difference must reference two different cells. If the "
+            "requested final value is not an existing SQL result cell, do not claim "
+            "or calculate it; explain that limitation instead. Do not add dummy "
             "claims for context values. The list may omit other violations; "
             "the complete response must still pass all checks. "
             "The rejected response is intentionally omitted.\n"
@@ -385,12 +390,47 @@ class StructuredInvestigationSynthesizer:
         return values
 
     @staticmethod
+    def _check_references(
+        synthesis: StructuredSynthesis, state: InvestigationState
+    ) -> None:
+        """In contract mode, reject claims that cannot reference numeric evidence.
+
+        Each reference must resolve to an existing numeric SQL cell, and a
+        difference must use two distinct cells. Such claims can never pass the
+        output contract, so they use the existing single repair attempt. This
+        is a structural check: it does not compare expected values, so
+        contradictions still reach numerical verification unchanged. Without
+        a contract, unverifiable claims are returned as before.
+        """
+        verifier = NumericalClaimVerifier()
+        for claim in synthesis.claims:
+            references = (
+                (claim.left,)
+                if claim.right is None
+                else (
+                    claim.left,
+                    claim.right,
+                )
+            )
+            if claim.right is not None and claim.left == claim.right:
+                raise _SynthesisFormatError("invalid_claim_reference")
+            for reference in references:
+                probe = NumericalClaim(
+                    operation=ClaimOperation.VALUE,
+                    expected=Decimal(0),
+                    left=reference,
+                )
+                if verifier.verify(probe, state.observations).actual is None:
+                    raise _SynthesisFormatError("invalid_claim_reference")
+
+    @staticmethod
     def _check_response(
         synthesis: StructuredSynthesis, state: InvestigationState
     ) -> StructuredSynthesis:
         """Check explicit claim shape without forcing unsupported assertions."""
         contract = state.claim_output_contract
         if contract is not None:
+            StructuredInvestigationSynthesizer._check_references(synthesis, state)
             if synthesis.claims:
                 operations = tuple(claim.operation for claim in synthesis.claims)
                 if Counter(operations) != Counter(contract.operations):

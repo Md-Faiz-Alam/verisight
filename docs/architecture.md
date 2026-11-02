@@ -497,7 +497,8 @@ planner-versus-repair trace.
 For terminal local structured-synthesis validation failures, `synthesis_failure`
 also retains `validation_reason` and `repair_attempted`. Approved reasons are
 `response_too_large`, `invalid_json`, `invalid_schema_or_claim`,
-`unlinked_narrative_number`, and `claim_output_contract_mismatch`. The reason
+`unlinked_narrative_number`, `claim_output_contract_mismatch`, and
+`invalid_claim_reference` (contract mode only). The reason
 identifies the terminal local check, not every failure earlier in the run.
 `repair_attempted=True` records that the repair response reached local validation
 and failed; it does not imply repair succeeded. For other failure types these

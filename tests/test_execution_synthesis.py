@@ -60,6 +60,17 @@ def _build_state() -> InvestigationState:
     )
 
 
+def _evidenced_state() -> InvestigationState:
+    """A state with numeric cells that contract-mode claim references can resolve."""
+    return _build_state().add_observation(
+        QueryObservation(
+            question="Measure the totals.",
+            sql="SELECT 30 AS total, 30 AS previous",
+            result=QueryResult(columns=("total", "previous"), rows=((30, 30),)),
+        )
+    )
+
+
 def _synthesize(
     synthesizer: InvestigationSynthesizer,
     state: InvestigationState,
@@ -1020,7 +1031,7 @@ def test_synthesis_enforces_the_exact_selected_operation_multiset(
     required: tuple[str, ...], returned: tuple[str, ...], matches: bool
 ) -> None:
     contract = ClaimOutputContract(tuple(ClaimOperation(item) for item in required))
-    state = replace(_build_state(), claim_output_contract=contract)
+    state = replace(_evidenced_state(), claim_output_contract=contract)
     claims = []
     for operation in returned:
         claim = _claim()
@@ -1029,7 +1040,7 @@ def test_synthesis_enforces_the_exact_selected_operation_multiset(
                 **claim,
                 "operation": "difference",
                 "expected": "0",
-                "right": claim["left"],
+                "right": {**claim["left"], "column": "previous"},
             }
         claims.append(claim)
     client = _Client(_response(claims))
@@ -1223,7 +1234,7 @@ def test_numeric_repair_examples_are_bounded_canonical_values(
 
 def test_targeted_feedback_obeys_complete_repair_prompt_budget() -> None:
     state = replace(
-        _build_state(),
+        _evidenced_state(),
         claim_output_contract=ClaimOutputContract((ClaimOperation.VALUE,)),
     )
     rejected = json.dumps({"conclusion": "For 2026 total 30.", "claims": [_claim()]})

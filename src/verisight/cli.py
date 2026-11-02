@@ -14,6 +14,7 @@ from verisight.exceptions import ConfigurationError
 from verisight.execution.claim_verification import ClaimOperation
 from verisight.execution.context import PopulationFilter, QueryContextBuilder
 from verisight.execution.exceptions import QueryValidationError
+from verisight.execution.generation_telemetry import capture_generation_calls
 from verisight.execution.investigation_result import (
     ClaimOutputContract,
     InvestigationResult,
@@ -409,7 +410,8 @@ def main(argv: list[str] | None = None) -> int:
     except argparse.ArgumentTypeError as error:
         parser.error(str(error))
     try:
-        operation = run_public_operation(lambda: _run(args, population))
+        with capture_generation_calls() as generation_calls:
+            operation = run_public_operation(lambda: _run(args, population))
     except KeyboardInterrupt:
         print(
             "Operation interrupted; no completed report was produced.", file=sys.stderr
@@ -426,6 +428,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         assert operation.value is not None
         payload, exit_code = operation.value
+    if args.command == "investigate" and not args.preview:
+        # Allowlisted call metadata only: stage, attempts, timing, returned_text.
+        payload["generation_calls"] = tuple(generation_calls)
     report: dict[str, object] = {
         "schema_version": 1,
         "report_type": "local_cli",

@@ -362,6 +362,12 @@ def main() -> int:
     )
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--max-steps", type=int, default=3)
+    parser.add_argument(
+        "--max-seconds",
+        type=float,
+        default=300.0,
+        help="Shared investigation time budget passed to the CLI.",
+    )
     parser.add_argument("--pause-seconds", type=float, default=15.0)
     parser.add_argument("--timeout-seconds", type=float, default=600.0)
     parser.add_argument("--preflight-only", action="store_true")
@@ -402,6 +408,7 @@ def main() -> int:
             "dataset_sha256": DATASET_SHA256,
             "repeats": args.repeats,
             "max_steps": args.max_steps,
+            "max_seconds": args.max_seconds,
             "pause_seconds": args.pause_seconds,
             "tolerance": str(TOLERANCE),
             "cases": [
@@ -439,6 +446,8 @@ def main() -> int:
                     case.operation,
                     "--max-steps",
                     str(args.max_steps),
+                    "--max-seconds",
+                    str(args.max_seconds),
                     "--allow-llm-data-disclosure",
                     "--output",
                     str(report_path),
@@ -475,6 +484,9 @@ def main() -> int:
                     "elapsed_seconds": elapsed,
                     "expected": oracles[case.case_id]["expected"],
                     **scored,
+                    "generation_calls": (
+                        report.get("generation_calls") if report else None
+                    ),
                 }
                 if scored.get("actual") is not None and _close(
                     Decimal(str(scored["actual"])),
