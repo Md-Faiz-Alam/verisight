@@ -311,13 +311,14 @@ def classify(
     investigation = report.get("investigation") or {}
     assert isinstance(investigation, dict)
     sql = [item.get("sql") for item in investigation.get("observations", [])]
-    reviews = report.get("advisory_reviews") or {}
+    reviews = report.get("advisory_reviews")
+    assessment = report.get("claim_output_assessment")
     base: dict[str, object] = {
         "sql": sql,
         "review_required": reviews.get("review_required")
         if isinstance(reviews, dict)
         else None,
-        "contract_accepted": (report.get("claim_output_assessment") or {}).get(
+        "contract_accepted": (assessment if isinstance(assessment, dict) else {}).get(
             "accepted"
         ),
     }
@@ -476,7 +477,7 @@ def main() -> int:
                     **scored,
                 }
                 if scored.get("actual") is not None and _close(
-                    Decimal(scored["actual"]),
+                    Decimal(str(scored["actual"])),
                     Decimal(oracles[case.case_id]["trap"]),
                     case.integer,
                 ):
