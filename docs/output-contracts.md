@@ -212,7 +212,13 @@ incomplete. CTEs, joins, derived tables, OR predicates on the target column,
 conditional aggregation, functions on that column, ambiguous labels and absent
 category evidence are not assessed. False alarms and missed concerns remain
 possible. Multiple positive category mentions in the same question are ambiguous
-for this first version. No status establishes intended business meaning.
+for this first version. Two narrow refinements apply. Words in the `as ...`
+complement of a reporting instruction, such as `Report it as a single number`,
+describe the answer's form and are not category mentions. When one mentioned
+value is shared by several columns, it is attributed to a single column only if
+the question names that column for it, as in `loan is yes`,
+`default status is no` or `loan = 'yes'`. No status establishes intended business
+meaning.
 
 Warnings contain the relation, column, mentioned category and a stable code.
 These local diagnostics can contain dataset identifiers and values. They use

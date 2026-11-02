@@ -315,10 +315,34 @@ def validate_dataset_relations(
                 )
 
 
+# A reporting instruction's "as ..." complement describes the answer's form
+# ("Report it as a single number"), not the population being measured.
+_FORMAT_COMPLEMENT = re.compile(
+    r"\b(?:report|return|give|express|present|provide|answer)\b[^.?!;]*?"
+    r"(\bas\b[^.?!;]*)",
+    re.IGNORECASE,
+)
+
+
+def _without_format_complements(question: str) -> str:
+    """Blank reporting-format complements while keeping character offsets."""
+    return _FORMAT_COMPLEMENT.sub(
+        lambda match: (
+            match.group(0)[: match.start(1) - match.start(0)]
+            + " " * len(match.group(1))
+        ),
+        question,
+    )
+
+
 def _question_mentions_category(question: str, value: str) -> bool:
-    """Exact case-insensitive words only; direct negative mentions are skipped."""
+    """Exact case-insensitive words only; direct negative mentions are skipped.
+
+    Words inside a reporting-format complement are not category mentions.
+    """
     if not value.strip():
         return False
+    question = _without_format_complements(question)
     literal = re.escape(value)
     if not re.search(rf"(?<!\w){literal}(?!\w)", question, re.IGNORECASE):
         return False
@@ -327,6 +351,27 @@ def _question_mentions_category(question: str, value: str) -> bool:
         rf"(?:all\s+)?['\"]?{literal}(?!\w)"
     )
     return not re.search(negative, question, re.IGNORECASE)
+
+
+def _question_assigns_category(question: str, column: str, value: str) -> bool:
+    """Recognize an explicit column/value statement such as ``loan is yes``.
+
+    Up to two words may separate the column name from the verb, as in
+    ``default status is no``. Underscores in the column name match spaces.
+    """
+    parts = [part for part in re.split(r"[\s_]+", column) if part]
+    if not parts or not value.strip():
+        return False
+    name = r"[\s_]+".join(re.escape(part) for part in parts)
+    pattern = (
+        rf"(?<!\w){name}(?!\w)(?:\s+\w+){{0,2}}?"
+        rf"(?:\s+(?:is|equals|equal\s+to)\s+|\s*==?\s*)"
+        rf"['\"]?{re.escape(value)}(?!\w)"
+    )
+    return (
+        re.search(pattern, _without_format_complements(question), re.IGNORECASE)
+        is not None
+    )
 
 
 def _population_terms(expression: exp.Expression) -> list[exp.Expression]:
@@ -384,6 +429,16 @@ def review_population(
         for value in item.observed_nonmissing_values
         if _question_mentions_category(question, value)
     ]
+    # One value shared by several columns is attributed only when the question
+    # names exactly one of those columns for it, as in "housing is yes".
+    if len({value.casefold() for _, value in candidates}) == 1:
+        anchored = [
+            (item, value)
+            for item, value in candidates
+            if _question_assigns_category(question, item.column, value)
+        ]
+        if anchored:
+            candidates = anchored
     # Multiple matches can be comparisons, overlapping labels or shared values.
     if len(candidates) != 1:
         return unknown
