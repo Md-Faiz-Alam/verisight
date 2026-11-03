@@ -58,6 +58,7 @@ class SynthesisValidationError(InvestigationError):
         reason: SynthesisValidationReason,
         *,
         repair_attempted: bool = False,
+        unlinked_numeric_values: tuple[str, ...] = (),
     ) -> None:
         if reason not in (
             "response_too_large",
@@ -73,6 +74,8 @@ class SynthesisValidationError(InvestigationError):
             raise ValueError("Synthesis repair flag must be a boolean.")
         self.reason: SynthesisValidationReason = reason
         self.repair_attempted: bool = repair_attempted
+        # Bounded canonical numbers only, never rejected prose.
+        self.unlinked_numeric_values: tuple[str, ...] = unlinked_numeric_values[:8]
         message = (
             "Structured synthesis response is too large."
             if reason == "response_too_large"

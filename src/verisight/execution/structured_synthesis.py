@@ -30,10 +30,10 @@ from verisight.execution.gemini import (
 from verisight.execution.generation import TextGenerationClient
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.narrative_audit import (
-    audit_narrative_digit_coverage,
     contains_english_cardinal_words,
     find_narrative_numbers,
 )
+from verisight.execution.narrative_context import NarrativeAudit, audit_conclusion
 from verisight.execution.prompt_budget import PromptBudget
 from verisight.execution.prompting import ANALYTICAL_SCOPE_RULES, METRIC_SCALE_RULES
 from verisight.execution.synthesis import StructuredSynthesis
@@ -288,19 +288,13 @@ class StructuredInvestigationSynthesizer:
                 and state.claim_output_contract is not None
                 and exc.reason == "unlinked_narrative_number"
             ):
-                values = self._unlinked_numeric_values(synthesis)
+                values = self._unlinked_numeric_values(synthesis, state)
                 if values:
                     details["unlinked_numeric_values"] = values
                 words = self._forbidden_cardinal_words(synthesis)
                 if words:
                     details["forbidden_english_cardinal_words"] = words
-                tokens = find_narrative_numbers(
-                    synthesis.conclusion,
-                    tuple(Decimal(str(claim.expected)) for claim in synthesis.claims),
-                )
-                unparsed = audit_narrative_digit_coverage(
-                    synthesis.conclusion, tokens
-                ).unparsed_digit_count
+                unparsed = self._audit(synthesis, state).coverage.unparsed_digit_count
                 if unparsed:
                     details["unparsed_digit_count"] = unparsed
             feedback = json.dumps(details)
@@ -353,10 +347,19 @@ class StructuredInvestigationSynthesizer:
             "The rejected response is intentionally omitted.\n"
         )
         repaired_response = self._generate(repair_prompt)
+        repaired: StructuredSynthesis | None = None
         try:
-            return self._check_response(self._parse_response(repaired_response), state)
+            repaired = self._parse_response(repaired_response)
+            return self._check_response(repaired, state)
         except _SynthesisFormatError as exc:
-            raise _SynthesisFormatError(exc.reason, repair_attempted=True) from exc
+            rejected_values: tuple[str, ...] = ()
+            if repaired is not None and exc.reason == "unlinked_narrative_number":
+                rejected_values = tuple(self._unlinked_numeric_values(repaired, state))
+            raise _SynthesisFormatError(
+                exc.reason,
+                repair_attempted=True,
+                unlinked_numeric_values=rejected_values,
+            ) from exc
 
     @staticmethod
     def _forbidden_cardinal_words(synthesis: StructuredSynthesis) -> list[str]:
@@ -371,19 +374,42 @@ class StructuredInvestigationSynthesizer:
         return words
 
     @staticmethod
-    def _unlinked_numeric_values(synthesis: StructuredSynthesis) -> list[str]:
+    def _audit(
+        synthesis: StructuredSynthesis, state: InvestigationState
+    ) -> NarrativeAudit:
+        """Audit conclusion numbers exactly as the final report will.
+
+        Outside contract mode, numbers from the question may be repeated.
+        """
+        extra: tuple[Decimal, ...] = ()
+        if state.claim_output_contract is None:
+            extra = tuple(
+                token.value
+                for token in find_narrative_numbers(state.question, ())
+                if token.value is not None
+            )
+        return audit_conclusion(
+            synthesis.conclusion,
+            synthesis.claims,
+            state.observations,
+            state.question,
+            extra_values=extra,
+        )
+
+    @staticmethod
+    def _unlinked_numeric_values(
+        synthesis: StructuredSynthesis, state: InvestigationState
+    ) -> list[str]:
         """Return bounded canonical numbers, never rejected prose or raw tokens.
 
         Up to eight distinct parsed values of at most 32 characters are retained
         in first-appearance order. This is feedback, not a complete error report.
         """
-        tokens = find_narrative_numbers(
-            synthesis.conclusion,
-            tuple(Decimal(str(claim.expected)) for claim in synthesis.claims),
-        )
         values: list[str] = []
-        for token in tokens:
-            if token.claim_indexes or token.value is None:
+        for token in StructuredInvestigationSynthesizer._audit(
+            synthesis, state
+        ).unlinked:
+            if token.value is None:
                 continue
             value = str(token.value)
             if len(value) > 32 or value in values:
@@ -466,28 +492,19 @@ class StructuredInvestigationSynthesizer:
                 operations = tuple(claim.operation for claim in synthesis.claims)
                 if Counter(operations) != Counter(contract.operations):
                     raise _SynthesisFormatError("claim_output_contract_mismatch")
-            tokens = find_narrative_numbers(
-                synthesis.conclusion,
-                tuple(Decimal(str(claim.expected)) for claim in synthesis.claims),
-            )
+            audit = StructuredInvestigationSynthesizer._audit(synthesis, state)
             if (
-                any(not token.claim_indexes for token in tokens)
-                or (
-                    audit_narrative_digit_coverage(
-                        synthesis.conclusion, tokens
-                    ).unparsed_digit_count
-                )
+                audit.unlinked
+                or audit.coverage.unparsed_digit_count
                 or contains_english_cardinal_words(synthesis.conclusion)
             ):
                 raise _SynthesisFormatError("unlinked_narrative_number")
             return synthesis
-        return StructuredInvestigationSynthesizer._check_narrative(
-            synthesis, state.question
-        )
+        return StructuredInvestigationSynthesizer._check_narrative(synthesis, state)
 
     @staticmethod
     def _check_narrative(
-        synthesis: StructuredSynthesis, question: str
+        synthesis: StructuredSynthesis, state: InvestigationState
     ) -> StructuredSynthesis:
         """Enforce limited token linkage, not numerical support or semantics.
 
@@ -495,16 +512,9 @@ class StructuredInvestigationSynthesizer:
         Matching a value does not establish that its use is justified. Unsupported
         token syntax and number words retain the existing audit limitations.
         """
-        allowed_values = tuple(
-            Decimal(str(claim.expected)) for claim in synthesis.claims
-        ) + tuple(
-            token.value
-            for token in find_narrative_numbers(question, ())
-            if token.value is not None
-        )
-        for token in find_narrative_numbers(synthesis.conclusion, allowed_values):
-            if token.value is not None and not token.claim_indexes:
-                raise _SynthesisFormatError("unlinked_narrative_number")
+        audit = StructuredInvestigationSynthesizer._audit(synthesis, state)
+        if any(token.value is not None for token in audit.unlinked):
+            raise _SynthesisFormatError("unlinked_narrative_number")
         return synthesis
 
     def _generate(self, prompt: str) -> str:

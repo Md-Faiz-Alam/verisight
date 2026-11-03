@@ -226,7 +226,7 @@ def test_synthesis_failure_metadata_survives_investigation_and_evaluation(
     assert client.calls == (2 if kind is SynthesisFailureKind.SYNTHESIS_ERROR else 1)
 
     payload = json.loads(json.dumps(to_jsonable(result)))
-    expected_failure = {
+    expected_failure: dict[str, object] = {
         "kind": kind.value,
         "validation_reason": (
             "invalid_json" if kind is SynthesisFailureKind.SYNTHESIS_ERROR else None
@@ -237,12 +237,17 @@ def test_synthesis_failure_metadata_survives_investigation_and_evaluation(
         "diagnostics": (
             asdict(expected_diagnostics) if expected_diagnostics is not None else None
         ),
+        "unlinked_numeric_values": [],
     }
     assert payload["synthesis_failure"] == expected_failure
     assert secret not in json.dumps(payload)
     report = score_result(result, "30")
     assert report["outcome"] == "incomplete"
-    assert report["synthesis_failure"] == expected_failure
+    # The evaluation report keeps dataclass fields; JSON turns tuples into lists.
+    assert report["synthesis_failure"] == {
+        **expected_failure,
+        "unlinked_numeric_values": (),
+    }
     assert secret not in json.dumps(report)
 
     with pytest.raises(ValueError, match="requires an incomplete investigation"):
@@ -305,6 +310,7 @@ def test_synthesis_validation_metadata_exposes_only_approved_categories(
         "diagnostics": None,
         "validation_reason": reason,
         "repair_attempted": repair_attempted,
+        "unlinked_numeric_values": [],
     }
     assert "synthetic-private" not in json.dumps(payload)
     assert "synthetic-private" not in repr(failure)

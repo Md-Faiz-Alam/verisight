@@ -396,8 +396,14 @@ suffix. Percentages compare the printed value: `25%` can match `25`, not `0.25`.
 
 Each `NarrativeNumberToken` stores original text, Python string offsets
 (`start` inclusive, `end` exclusive), a parsed Decimal or null, and matching
-zero-based claim indexes. Matching uses exact expected claim values, independent
-of verdict or tolerance. Repeated occurrences remain separate.
+zero-based claim indexes. A token links to a claim, independent of verdict or
+tolerance, when it equals the claim's expected value; for a `difference`, when
+it equals one of the two numeric cells the claim subtracts; or when either value
+rounded half up to the token's own decimal places equals the token. Only tokens
+written with at least one decimal place link by rounding, so integers, years and
+question numbers never do. `link` records the strongest match: `claim_value`,
+`cited_cell`, `rounded_claim_value`, or `rounded_cited_cell`. A `value` claim
+links only through its expected value. Repeated occurrences remain separate.
 
 `unlinked_numbers` contains detected tokens without matching submitted claims.
 Tokens with rejected syntax or conversion limits remain unlinked. The lexer
@@ -407,7 +413,10 @@ Standalone years and numbered headings can still be detected.
 
 `narrative_digit_coverage` provides a separate backstop. It counts characters
 recognized by `str.isdigit()`, including Unicode digits, and checks whether
-they fall inside successfully parsed tokens from that same conclusion.
+they fall inside successfully parsed tokens from that same conclusion. Digits
+inside a word that mixes letters and digits and also appears in the question,
+an observation's column names, or its text result cells, such as `VVS1` or
+`Q4`, are data labels and are not counted. Unknown mixed words still count.
 
 | Field | Meaning |
 | --- | --- |

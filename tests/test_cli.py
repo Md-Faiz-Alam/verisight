@@ -726,7 +726,8 @@ def test_cli_repairs_extra_claims_using_the_selected_difference_contract(
     rejected = json.dumps(
         {
             "conclusion": (
-                "Private rejected output: before 100, after 150, difference 50."
+                "Private rejected output: rejected 999, before 100, after 150, "
+                "difference 50."
             ),
             "claims": [
                 {

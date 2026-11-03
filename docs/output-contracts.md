@@ -146,6 +146,18 @@ numeric string of at most 32 characters, in first-appearance order. Linked value
 unparseable tokens, and oversized representations are omitted. The examples are
 not a complete list of violations and do not authorize the values as claims.
 
+If the repair attempt also fails for unlinked numbers, the terminal
+`synthesis_failure` keeps the same bounded `unlinked_numeric_values`, so the
+rejected quantities can be diagnosed without storing the rejected conclusion.
+It is empty for other failure reasons.
+
+A conclusion number is linked when it equals a claim's expected value, one of
+the two cells a `difference` claim subtracts, or either of those rounded to the
+number's own decimal places, such as `3851.41` for `3851.4105577…`. Data labels
+that mix letters and digits and come from the question or the evidence, such as
+`VVS1`, are not treated as numbers. Every accepted number still traces to a
+claim or the evidence cells it cites.
+
 Repair guidance asks the model to omit those quantities entirely from the
 conclusion, including number-word forms, use nonquantitative contextual
 descriptions where appropriate, preserve the requested metric and valid evidence

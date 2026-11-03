@@ -406,6 +406,7 @@ def test_structured_budget_failure_preserves_incomplete_investigation(
         "diagnostics": None,
         "validation_reason": None,
         "repair_attempted": None,
+        "unlinked_numeric_values": [],
     }
     from scripts.live_evaluation import score_result
 
@@ -1227,8 +1228,13 @@ def test_numeric_repair_examples_are_bounded_canonical_values(
             }
         )
     )
+    state = replace(
+        _evidenced_state(),
+        claim_output_contract=ClaimOutputContract((ClaimOperation.VALUE,)),
+    )
     assert (
-        StructuredInvestigationSynthesizer._unlinked_numeric_values(parsed) == expected
+        StructuredInvestigationSynthesizer._unlinked_numeric_values(parsed, state)
+        == expected
     )
 
 

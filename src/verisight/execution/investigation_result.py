@@ -29,10 +29,9 @@ from verisight.execution.investigation import FailedQueryAttempt
 from verisight.execution.narrative_audit import (
     NarrativeDigitCoverage,
     NarrativeNumberToken,
-    audit_narrative_digit_coverage,
     contains_english_cardinal_words,
-    find_narrative_numbers,
 )
+from verisight.execution.narrative_context import audit_conclusion
 from verisight.execution.observations import QueryObservation
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 
@@ -101,6 +100,7 @@ class SynthesisFailure:
     diagnostics: ProviderFailureDiagnostics | None = None
     validation_reason: SynthesisValidationReason | None = None
     repair_attempted: bool | None = None
+    unlinked_numeric_values: tuple[str, ...] = ()
 
     @classmethod
     def from_exception(cls, error: Exception) -> "SynthesisFailure":
@@ -125,6 +125,7 @@ class SynthesisFailure:
                     kind=SynthesisFailureKind.SYNTHESIS_ERROR,
                     validation_reason=current.reason,
                     repair_attempted=current.repair_attempted,
+                    unlinked_numeric_values=current.unlinked_numeric_values,
                 )
             current = current.__cause__
         return cls(kind=SynthesisFailureKind.SYNTHESIS_ERROR)
@@ -238,20 +239,18 @@ class InvestigationResult:
         object.__setattr__(
             self, "quantitative_statements", report.quantitative_statements
         )
-        tokens = find_narrative_numbers(
+        audit = audit_conclusion(
             self.conclusion,
-            tuple(item.verification.expected for item in self.verified_claims),
+            tuple(item.claim for item in self.verified_claims),
+            self.observations,
+            self.question,
         )
-        object.__setattr__(self, "narrative_numbers", tokens)
-        object.__setattr__(
-            self,
-            "narrative_digit_coverage",
-            audit_narrative_digit_coverage(self.conclusion, tokens),
-        )
+        object.__setattr__(self, "narrative_numbers", audit.tokens)
+        object.__setattr__(self, "narrative_digit_coverage", audit.coverage)
         object.__setattr__(
             self,
             "unlinked_numbers",
-            tuple(token.text for token in tokens if not token.claim_indexes),
+            tuple(token.text for token in audit.unlinked),
         )
 
     @property

@@ -1,8 +1,9 @@
 """Conservative numeric-token matching without certifying narrative meaning."""
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from decimal import Decimal, DecimalException
+from decimal import ROUND_HALF_UP, Decimal, DecimalException, localcontext
 from typing import Literal
 
 # Exclude word identifiers, dotted versions, and contiguous ASCII dates or
@@ -17,6 +18,14 @@ _NUMBER = re.compile(
     r"[+-]?(?:(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)"
     r"(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
 )
+
+# A word that mixes letters and digits, such as VVS1 or Q4, is a label when it
+# is copied from the question or the evidence, not a quantity.
+_WORD = re.compile(r"\w+")
+
+NumberLink = Literal[
+    "claim_value", "cited_cell", "rounded_claim_value", "rounded_cited_cell"
+]
 
 # This is a contract-format restriction, not a natural-language number parser.
 # Unicode word boundaries avoid matching inside identifiers such as someone,
@@ -35,7 +44,9 @@ class NarrativeNumberToken:
     """One detected token, its text span, and exact matching claim indexes.
 
     Indexes refer to submitted claim values, regardless of their verdicts.
-    A null value indicates unsupported syntax or a conversion limit.
+    A null value indicates unsupported syntax or a conversion limit. ``link``
+    names the strongest match: the claim's expected value, a numeric cell the
+    claim cites, or either one rounded half up to the token's decimal places.
     """
 
     text: str
@@ -43,6 +54,7 @@ class NarrativeNumberToken:
     end: int
     value: Decimal | None
     claim_indexes: tuple[int, ...]
+    link: NumberLink | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +65,8 @@ class NarrativeDigitCoverage:
     all_digits_parsed means every such character falls within a token with a
     parsed numerical value. It does not validate signs, units, meaning, or
     number words. no_digits does not establish the absence of numerical claims.
+    Digits inside supplied label words, such as VVS1, are excluded from all
+    counts because they name data rather than state quantities.
     """
 
     total_digit_count: int
@@ -61,16 +75,35 @@ class NarrativeDigitCoverage:
     status: Literal["no_digits", "all_digits_parsed", "unparsed_digits"]
 
 
+def label_words(texts: Iterable[str]) -> frozenset[str]:
+    """Collect words mixing letters and digits, compared case-insensitively."""
+    return frozenset(
+        word.casefold()
+        for text in texts
+        for word in _WORD.findall(text)
+        if any(c.isalpha() for c in word) and any(c.isdigit() for c in word)
+    )
+
+
 def audit_narrative_digit_coverage(
-    text: str, tokens: tuple[NarrativeNumberToken, ...]
+    text: str,
+    tokens: tuple[NarrativeNumberToken, ...],
+    labels: frozenset[str] = frozenset(),
 ) -> NarrativeDigitCoverage:
     """Measure coverage using tokens returned for this text by the lexer.
 
     Rejected token syntax and conversion limits count as unparsed. No Unicode
     normalization or interpretation of suffixes, ranges, or units is performed.
+    Digits inside a whole word found in ``labels`` are not counted.
     """
+    label_positions: set[int] = set()
+    for match in _WORD.finditer(text):
+        if match.group().casefold() in labels:
+            label_positions.update(range(match.start(), match.end()))
     digit_positions = {
-        index for index, character in enumerate(text) if character.isdigit()
+        index
+        for index, character in enumerate(text)
+        if character.isdigit() and index not in label_positions
     }
     parsed_positions: set[int] = set()
     for token in tokens:
@@ -89,25 +122,74 @@ def audit_narrative_digit_coverage(
     return NarrativeDigitCoverage(total, parsed, unparsed, status)
 
 
+_LINK_ORDER: tuple[NumberLink, ...] = (
+    "claim_value",
+    "cited_cell",
+    "rounded_claim_value",
+    "rounded_cited_cell",
+)
+
+
+def _rounds_to(candidate: Decimal, value: Decimal) -> bool:
+    """True when candidate, rounded half up to value's places, equals value.
+
+    Only tokens written with at least one decimal place qualify, so integers
+    and question numbers never link by rounding.
+    """
+    exponent = value.as_tuple().exponent
+    if not isinstance(exponent, int) or exponent >= 0:
+        return False
+    try:
+        with localcontext() as context:
+            context.prec = 60
+            return (
+                candidate.quantize(Decimal(1).scaleb(exponent), ROUND_HALF_UP) == value
+            )
+    except DecimalException:
+        return False
+
+
+def _link(
+    value: Decimal, expected: Decimal, cited: tuple[Decimal, ...]
+) -> NumberLink | None:
+    if value == expected:
+        return "claim_value"
+    if value in cited:
+        return "cited_cell"
+    if _rounds_to(expected, value):
+        return "rounded_claim_value"
+    if any(_rounds_to(cell, value) for cell in cited):
+        return "rounded_cited_cell"
+    return None
+
+
 def find_narrative_numbers(
-    text: str, expected_values: tuple[Decimal, ...]
+    text: str,
+    expected_values: tuple[Decimal, ...],
+    cited_values: tuple[tuple[Decimal, ...], ...] = (),
 ) -> tuple[NarrativeNumberToken, ...]:
-    """Match supported ASCII numerical tokens against finite expected values."""
+    """Match supported ASCII numerical tokens against finite expected values.
+
+    ``cited_values[i]`` holds the evidence cells that claim ``i`` references.
+    A token links to a claim through its expected value, one of those cells,
+    or either one rounded to the token's own decimal places.
+    """
     tokens: list[NarrativeNumberToken] = []
     for match in _CANDIDATE.finditer(text):
         raw = match.group()
         value = _parse_number(raw)
-        indexes = (
-            tuple(
-                index
-                for index, expected in enumerate(expected_values)
-                if value == expected
-            )
-            if value is not None
-            else ()
-        )
+        links: dict[int, NumberLink] = {}
+        if value is not None:
+            for index, expected in enumerate(expected_values):
+                cited = cited_values[index] if index < len(cited_values) else ()
+                link = _link(value, expected, cited)
+                if link is not None:
+                    links[index] = link
+        best = min(links.values(), key=_LINK_ORDER.index) if links else None
         tokens.append(
-            NarrativeNumberToken(raw, match.start(), match.end(), value, indexes)
+            NarrativeNumberToken(
+                raw, match.start(), match.end(), value, tuple(links), best
+            )
         )
     return tuple(tokens)
 
