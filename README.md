@@ -106,6 +106,12 @@ existing environment configuration enables disclosure:
 verisight investigate transactions.csv --question "What is the net posted amount?" --population population.json --max-steps 3 --max-seconds 120 --request-timeout-seconds 60 --allow-llm-data-disclosure
 ```
 
+Temporary provider errors, such as 503 "model overloaded", are retried
+`--provider-retries` times per model call (0-5, default 1). The first wait is
+`--provider-retry-delay-seconds` (default 1) and each later wait doubles, up to 8
+seconds. All waits count toward `--max-seconds`. The request block in the report
+records both values.
+
 Omitting `--population` runs an unscoped investigation; it does not infer or
 confirm deterministic filters from the question. Units, grain, denominators,
 time periods, and business definitions still require review. Population filtering
@@ -633,6 +639,25 @@ they cannot be pooled into a general reliability rate. See
 `correct_numeric` scores the submitted metric; it does not certify prose or SQL
 semantics. `no_claims` is not automatically a justified abstention. Retain failed
 runs. These known fixtures are not a held-out generalization benchmark.
+
+### Evaluation v2: messy values, dates and a join
+
+`evaluation/v2/run_v2_eval.py` asks 14 frozen questions over three generated
+files: `orders.csv` with currency text, thousands separators, percent signs,
+`N/A` and `-` markers, label variants and a padded header; `customers.xlsx`,
+joined to orders, where region `NA` means North America; and `sensors.json`
+with ISO date-times and kWh numbers mixed with `N/A`. A fixed seed makes the
+files identical on every machine. Expected answers come from the generator's
+clean values, and offline preflight checks each control SQL and trap SQL
+before any model call.
+
+```powershell
+python evaluation\v2\run_v2_eval.py --prepare --data-dir datasets\v2 --preflight-only
+python evaluation\v2\run_v2_eval.py --data-dir datasets\v2 --out F:\verisight-validation-artifacts\eval-v2\run-1
+```
+
+Live runs use three provider retries starting at two seconds by default. Every
+attempt is kept, and `--out` must be a new folder.
 
 ## Quality gates and CI
 

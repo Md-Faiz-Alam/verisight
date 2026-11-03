@@ -138,6 +138,26 @@ def _parser() -> argparse.ArgumentParser:
             command.add_argument(
                 "--request-timeout-seconds", type=_positive_seconds, default=60.0
             )
+            command.add_argument(
+                "--provider-retries",
+                type=int,
+                choices=range(6),
+                default=1,
+                help=(
+                    "Additional retries per model call after a temporary provider "
+                    "error such as 503 (0-5, default: 1). Retries stay inside "
+                    "--max-seconds."
+                ),
+            )
+            command.add_argument(
+                "--provider-retry-delay-seconds",
+                type=_positive_seconds,
+                default=1.0,
+                help=(
+                    "First wait before a retry; each later wait doubles, up to "
+                    "8 seconds (default: 1)."
+                ),
+            )
     return parser
 
 
@@ -259,7 +279,8 @@ def _run(
                 allow_llm_data_disclosure=not args.preview,
                 max_investigation_seconds=args.max_seconds,
                 gemini_request_timeout_seconds=args.request_timeout_seconds,
-                gemini_max_retries=1,
+                gemini_max_retries=args.provider_retries,
+                gemini_retry_base_delay_seconds=args.provider_retry_delay_seconds,
                 max_query_result_rows=20,
             )
         )
@@ -291,6 +312,7 @@ def _run(
         "max_investigation_seconds": settings.max_investigation_seconds,
         "request_timeout_seconds": settings.gemini_request_timeout_seconds,
         "provider_retries": settings.gemini_max_retries,
+        "provider_retry_base_delay_seconds": (settings.gemini_retry_base_delay_seconds),
         "max_query_result_rows": settings.max_query_result_rows,
         "max_query_result_bytes": settings.max_query_result_bytes,
         "max_query_execution_seconds": settings.max_query_execution_seconds,
