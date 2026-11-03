@@ -38,3 +38,6 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Quickstart demo files (generated)
+demo/

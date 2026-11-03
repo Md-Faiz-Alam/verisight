@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="560" viewBox="0 0 920 560" role="img" aria-labelledby="title desc">
+  <title id="title">VeriSight answering a question about a messy orders file</title>
+  <desc id="desc">From live evaluation v2, run 3: VeriSight reports data-quality findings for orders.csv, Gemini writes SQL that handles label variants, and the answer 415 is verified against the SQL result cell.</desc>
+  <style>
+    .bg { fill: #0f172a; }
+    .bar { fill: #1e293b; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .label { fill: #94a3b8; font-size: 12px; letter-spacing: 0.08em; font-weight: 600; }
+    .text { fill: #e2e8f0; font-size: 14px; }
+    .dim { fill: #94a3b8; font-size: 13px; }
+    .warn { fill: #fbbf24; font-size: 14px; }
+    .info { fill: #38bdf8; font-size: 14px; }
+    .kw { fill: #c084fc; }
+    .str { fill: #86efac; }
+    .ok { fill: #4ade80; font-size: 15px; font-weight: 700; }
+    .q { fill: #f8fafc; font-size: 17px; font-weight: 600; }
+    .answer { fill: #f8fafc; font-size: 16px; }
+    .panel { fill: #111c33; stroke: #1e293b; }
+    .okpanel { fill: #052e1a; stroke: #166534; }
+  </style>
+  <rect class="bg" width="920" height="560" rx="14"/>
+  <rect class="bar" width="920" height="40" rx="14"/>
+  <rect class="bar" y="26" width="920" height="14"/>
+  <circle cx="22" cy="20" r="6" fill="#ef4444"/>
+  <circle cx="42" cy="20" r="6" fill="#f59e0b"/>
+  <circle cx="62" cy="20" r="6" fill="#22c55e"/>
+  <text x="460" y="25" text-anchor="middle" class="sans dim">VeriSight · live run (evaluation v2, run 3) · orders.csv, 600 rows</text>
+
+  <text x="28" y="72" class="sans label">DATA QUALITY, FOUND WHILE LOADING</text>
+  <text x="28" y="98" class="mono warn">⚠</text>
+  <text x="50" y="98" class="mono text">Amount</text>
+  <text x="150" y="98" class="mono text">"$1,457.23" → 1457.23 · "N/A", "-" → missing (14)</text>
+  <text x="28" y="122" class="mono warn">⚠</text>
+  <text x="50" y="122" class="mono text">status</text>
+  <text x="150" y="122" class="mono text">label variants: 'SHIPPED' / 'Shipped' / 'Shipped '</text>
+  <text x="28" y="146" class="mono info">ℹ</text>
+  <text x="50" y="146" class="mono text">discount</text>
+  <text x="150" y="146" class="mono text">"15%" → 15 (percent points) · " Amount " header trimmed</text>
+
+  <text x="28" y="190" class="sans label">QUESTION</text>
+  <text x="28" y="216" class="sans q">How many orders were shipped?</text>
+
+  <text x="28" y="258" class="sans label">SQL WRITTEN BY GEMINI · VALIDATED READ-ONLY · RUN IN DUCKDB</text>
+  <rect class="panel" x="28" y="270" width="864" height="96" rx="8"/>
+  <text x="46" y="296" class="mono text"><tspan class="kw">SELECT DISTINCT</tspan> "status" <tspan class="kw">FROM</tspan> "orders"</text>
+  <text x="46" y="324" class="mono text"><tspan class="kw">SELECT COUNT</tspan>(*) <tspan class="kw">AS</tspan> "shipped_orders_count" <tspan class="kw">FROM</tspan> "orders"</text>
+  <text x="46" y="350" class="mono text"><tspan class="kw">WHERE LOWER</tspan>(<tspan class="kw">TRIM</tspan>("status")) = <tspan class="str">'shipped'</tspan></text>
+
+  <text x="28" y="404" class="sans label">ANSWER</text>
+  <rect class="okpanel" x="28" y="416" width="864" height="84" rx="8"/>
+  <text x="46" y="446" class="sans answer">The count of orders with a shipped status is 415.</text>
+  <text x="46" y="478" class="sans ok">✓ Verified: claim 415 equals result cell shipped_orders_count = 415</text>
+
+  <text x="28" y="534" class="sans dim">Independent expected answer: 415 · Trap avoided: status = 'Shipped' gives 238</text>
+</svg>

@@ -1,18 +1,60 @@
 # VeriSight
 
-SQL-backed tabular analysis with inspectable queries, caller-enforced
-populations, and numerical claim checking.
+**Ask questions about CSV, Excel and JSON files from any domain in plain English.
+VeriSight answers with the SQL it ran, and accepts a number only when it matches
+the query result.**
 
-VeriSight loads and profiles data, executes analytical SQL, and supports
-Gemini-driven investigations. Its default synthesizer produces structured
-numerical claims that application code checks against collected query results.
+[![CI](https://github.com/Md-Faiz-Alam/verisight/actions/workflows/ci.yml/badge.svg)](https://github.com/Md-Faiz-Alam/verisight/actions/workflows/ci.yml)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+![Test coverage 100%, enforced in CI](https://img.shields.io/badge/coverage-100%25-brightgreen)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-Processing is domain-independent within the supported tabular formats and
-types. This does not promise arbitrary-format ingestion or automatic knowledge
-of unfamiliar business definitions.
+![VeriSight reporting data-quality findings for a messy orders file, the SQL Gemini wrote, and an answer verified against the SQL result](docs/assets/demo.svg)
 
-A supported number does not establish that the SQL, interpretation, or narrative
-is correct. Narrative verification remains explicitly false.
+*From a live run ([evaluation v2](docs/results.md), run 3): VeriSight reports the
+messy values it found while loading, Gemini writes the SQL, and the answer is
+checked against the executed result.*
+
+## Why VeriSight
+
+- **Verified, not just generated.** Gemini plans the SQL and states each number
+  as a claim on a result cell. VeriSight checks the claim against the executed
+  query and refuses numbers it cannot support. When it cannot verify an answer,
+  it says so instead of guessing.
+- **Messy data handled in the open.** `N/A`, `$1,234.50`, `10%`, `Shipped ` /
+  `shipped` and padded headers are cleaned under strict rules, and every change
+  is reported as a data-quality finding.
+- **Safe SQL.** One read-only statement over the loaded tables only: no file,
+  network or settings access, with time, memory and result-size limits.
+- **Measured honestly.** 150 live attempts across 7 domains, with every run
+  published, failures included.
+
+## Quickstart
+
+Windows PowerShell (on macOS or Linux, use `source .venv/bin/activate` and
+forward slashes):
+
+```powershell
+git clone https://github.com/Md-Faiz-Alam/verisight.git
+cd verisight
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+
+# Create three messy demo files: no download, no AI
+python evaluation\v2\run_v2_eval.py --prepare --data-dir demo --preflight-only
+
+# Profile a file: schema, statistics and data-quality findings, no AI
+verisight profile demo\orders.csv
+
+# Ask a question: needs a free Gemini API key in .env
+Copy-Item .env.example .env   # then set VERISIGHT_GEMINI_API_KEY=your-key
+verisight investigate demo\orders.csv --question "How many orders were shipped?" --require-claim value --allow-llm-data-disclosure
+```
+
+`--allow-llm-data-disclosure` is required because the schema, profile, question
+and observed values are sent to Gemini. `profile` and `--preview` never call the
+model. Get a key from [Google AI Studio](https://aistudio.google.com/apikey).
 
 ## Live results
 
@@ -25,6 +67,16 @@ questions include messy values such as `$1,234.50`, `N/A` and `Shipped ` /
 wrong number. In 13 attempts no number could be verified, and VeriSight said so
 instead of guessing; 52 were lost to provider overload. Every run is listed,
 including failures, in [Live results](docs/results.md).
+
+## Scope and limits
+
+Processing is domain-independent within the supported tabular formats and
+types. This does not promise arbitrary-format ingestion or automatic knowledge
+of unfamiliar business definitions.
+
+A supported number shows that the value came from an executed SQL result. It
+does not establish that the SQL, interpretation, or narrative is correct, so
+review the SQL. Narrative verification remains explicitly false.
 
 ## Current capabilities
 
@@ -45,7 +97,8 @@ including failures, in [Live results](docs/results.md).
 | Caller-selected relation populations | Implemented |
 | Optional caller-selected claim output acceptance | Implemented |
 | Python 3.11 CI on Windows and Linux | Implemented |
-| Narrative meaning and analytical correctness on unfamiliar data | Not established |
+| Analytical correctness on unfamiliar data | Evidenced on 37 live questions ([Live results](docs/results.md)); not guaranteed |
+| Narrative meaning | Not verified |
 | Local CLI for profile, preview, investigation, and JSON export | Implemented |
 | Unfamiliar-data reliability and release readiness | Remaining work |
 
