@@ -3,6 +3,7 @@
 import codecs
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 
@@ -52,6 +53,31 @@ class SourceMetadata:
     csv_delimiter: str | None = None
 
 
+NoteRule = Literal[
+    "missing_value_markers",
+    "thousands_separators",
+    "currency_symbol",
+    "percent_sign",
+    "label_variants",
+    "trimmed_column_name",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class ValueNote:
+    """One reported clean-up of loaded values, or a reported value pattern.
+
+    ``examples`` holds up to three original values (or, for label variants,
+    up to five groups of spellings). ``label_variants`` never changes data.
+    """
+
+    column: str
+    rule: NoteRule
+    affected_count: int
+    examples: tuple[str, ...]
+    detail: str | None = None
+
+
 @dataclass(slots=True)
 class LoadedTable:
     """A tabular dataset loaded into VeriSight."""
@@ -60,6 +86,7 @@ class LoadedTable:
     data: pd.DataFrame
     source: SourceMetadata
     relation_name: str = field(init=False)
+    value_notes: tuple[ValueNote, ...] = field(default=(), init=False)
 
     def __post_init__(self) -> None:
         """Validate the table and initialize its relation identity."""

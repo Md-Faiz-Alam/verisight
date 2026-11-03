@@ -5,6 +5,7 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from verisight.config import Settings
+from verisight.ingestion.cleaning import clean_table
 from verisight.ingestion.dispatcher import FileLoader
 from verisight.ingestion.models import (
     CsvReadOptions,
@@ -76,6 +77,9 @@ class DatasetLoader:
                 tables.extend(result.tables)
             else:
                 tables.append(result)
+
+        for table in tables:
+            clean_table(table)
 
         self._assign_relation_names(tables)
 

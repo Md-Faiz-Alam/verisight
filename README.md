@@ -202,6 +202,29 @@ with time-zone offsets stay text because no zone is attached or converted. Date
 columns profile as `datetime` and support SQL date functions such as `YEAR()`,
 `strftime` and `date_diff`; Excel date cells were already loaded as datetimes.
 
+Common messy values are cleaned only when every present value in a column fits
+one clear rule, in CSV, JSON and Excel alike, and every change is reported:
+
+| Rule | Example | Result |
+| --- | --- | --- |
+| Missing-value markers in a column that is otherwise numbers or ISO dates | `3, N/A, 2` | `N/A` becomes missing |
+| Comma group separators | `1,234.50` | `1234.5` |
+| One currency symbol (`$`, `€`, `£`, `₹`, `¥`) on every value | `$12.00` | `12.0`, noted as `$ removed` |
+| A percent sign on every value | `10%` | `10`, in percent points |
+| Leading or trailing spaces in a column name | `" Amount "` | `Amount`, when the name stays distinct |
+
+The markers are `N/A`, `NA`, `#N/A`, `null`, `None`, `NaN`, `-`, `--`, `?` and
+common case variants. Text columns, such as a region column where `NA` means North
+America, are never changed. Leading zeros, mixed currencies, European formats such
+as `1.234,50` and malformed grouping stay as text. Plain numbers stored as JSON or
+Excel text are not converted. Labels that differ only by letter case or
+surrounding spaces, such as `Shipped` and `shipped `, are never changed; they are
+reported as label variants, and SQL planning compares them with
+`LOWER(TRIM(column))` unless the question distinguishes them. Each change or
+variant appears as a data-quality finding (`missing_value_markers`,
+`formatted_numbers`, `label_variants` or `trimmed_column_name`) with the column,
+the number of affected values and up to three original examples.
+
 Excel columns containing native booleans and blanks use a nullable boolean
 dtype and infer as boolean. Numeric `0`/`1` cells and boolean-looking text remain
 distinct from native booleans. Mixed boolean/numeric or boolean/text columns

@@ -17,6 +17,10 @@ class QualityIssueType(StrEnum):
     EMPTY_STRINGS = "empty_strings"
     CONSTANT_COLUMN = "constant_column"
     HIGH_CARDINALITY = "high_cardinality"
+    MISSING_VALUE_MARKERS = "missing_value_markers"
+    FORMATTED_NUMBERS = "formatted_numbers"
+    LABEL_VARIANTS = "label_variants"
+    TRIMMED_COLUMN_NAME = "trimmed_column_name"
 
 
 class QualitySeverity(StrEnum):

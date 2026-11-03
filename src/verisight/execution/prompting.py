@@ -24,6 +24,15 @@ METRIC_SCALE_RULES = (
 )
 
 
+# SQL-writing guidance only; synthesis does not compare raw labels.
+LABEL_VARIANT_RULES = (
+    "Label variants:\n"
+    "- Labels that differ only by letter case or surrounding spaces, such as "
+    "'Shipped' and 'shipped ', are reported as label variants. Unless the "
+    "question distinguishes them, compare such labels with LOWER(TRIM(column)).\n"
+)
+
+
 ANALYTICAL_SCOPE_RULES = (
     "Analytical scope:\n"
     "- Explicit query separation, order, exclusions, and output scope override "
@@ -135,6 +144,7 @@ class QueryPromptBuilder:
             "QUESTION supplies constraint context; do not answer the entire "
             "investigation in every query.\n"
             + METRIC_SCALE_RULES
+            + LABEL_VARIANT_RULES
             + "\nIdentifier quoting:\n"
             "- Use double quotes for relation names, column names, and aliases, "
             "including names containing spaces, punctuation, or SQL keywords.\n"

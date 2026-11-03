@@ -1,6 +1,7 @@
 """Deterministic data-quality rules for VeriSight."""
 
-from verisight.evidence import EvidenceInput
+from verisight.evidence import EvidenceInput, EvidenceInputValue
+from verisight.ingestion.models import LoadedTable
 from verisight.ingestion.schema import LogicalType
 from verisight.profiling.models import TableProfile
 from verisight.quality.models import (
@@ -275,3 +276,68 @@ class QualityRuleEngine:
             )
 
         return issues
+
+
+_NOTE_ISSUES: dict[str, tuple[QualityIssueType, QualitySeverity, str]] = {
+    "missing_value_markers": (
+        QualityIssueType.MISSING_VALUE_MARKERS,
+        QualitySeverity.WARNING,
+        "Missing-value markers were treated as missing in an otherwise typed column.",
+    ),
+    "thousands_separators": (
+        QualityIssueType.FORMATTED_NUMBERS,
+        QualitySeverity.INFO,
+        "Comma group separators were removed to read the column as numbers.",
+    ),
+    "currency_symbol": (
+        QualityIssueType.FORMATTED_NUMBERS,
+        QualitySeverity.INFO,
+        "A single currency symbol was removed to read the column as numbers.",
+    ),
+    "percent_sign": (
+        QualityIssueType.FORMATTED_NUMBERS,
+        QualitySeverity.INFO,
+        "Percent signs were removed; values are percent points, so 10% became 10.",
+    ),
+    "label_variants": (
+        QualityIssueType.LABEL_VARIANTS,
+        QualitySeverity.WARNING,
+        "Some labels differ only by letter case or surrounding spaces; "
+        "values were not changed.",
+    ),
+    "trimmed_column_name": (
+        QualityIssueType.TRIMMED_COLUMN_NAME,
+        QualitySeverity.INFO,
+        "Leading or trailing spaces were removed from the column name.",
+    ),
+}
+
+
+def value_note_issues(table: LoadedTable) -> tuple[QualityIssue, ...]:
+    """Report every load-time value conversion or pattern as a finding."""
+    issues: list[QualityIssue] = []
+    for note in table.value_notes:
+        issue_type, severity, message = _NOTE_ISSUES[note.rule]
+        evidence: dict[str, EvidenceInputValue] = {
+            "rule": note.rule,
+            "examples": list(note.examples),
+        }
+        if note.detail is not None:
+            evidence["detail"] = note.detail
+        issues.append(
+            QualityIssue(
+                issue_type=issue_type,
+                severity=severity,
+                scope=QualityScope.COLUMN,
+                table_name=table.name,
+                relation_name=table.relation_name,
+                column_name=note.column,
+                message=message,
+                affected_count=note.affected_count,
+                affected_ratio=(
+                    note.affected_count / table.row_count if table.row_count else None
+                ),
+                evidence=evidence,
+            )
+        )
+    return tuple(issues)

@@ -5,7 +5,7 @@ from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.schema import SchemaInferer
 from verisight.profiling.dataset import DatasetProfiler
 from verisight.quality.models import QualityIssue
-from verisight.quality.rules import QualityRuleEngine
+from verisight.quality.rules import QualityRuleEngine, value_note_issues
 
 
 class DatasetAnalyzer:
@@ -30,6 +30,9 @@ class DatasetAnalyzer:
 
         for table_profile in profile.tables:
             issues.extend(self._quality_rule_engine.evaluate(table_profile))
+
+        for table in dataset.tables:
+            issues.extend(value_note_issues(table))
 
         return DatasetAnalysis(
             schema=schema,
