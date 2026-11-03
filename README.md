@@ -193,6 +193,15 @@ Inputs accept a string path, a `Path`, or an iterable of either. Empty inputs
 and invalid entries are rejected. `ask()` does not expose planning or repair
 history in its return value.
 
+CSV and JSON text columns become datetime columns only when every present value
+is an ISO 8601 calendar date, such as `2026-01-31`, optionally with a time such as
+`2026-01-31 10:15` or `2026-01-31T10:15:30.5`. Each value must be a real date in
+pandas' timestamp range (years 1677 to 2262). A single other value keeps the whole
+column as text. Regional formats such as `03/04/2026` are never guessed, and values
+with time-zone offsets stay text because no zone is attached or converted. Date
+columns profile as `datetime` and support SQL date functions such as `YEAR()`,
+`strftime` and `date_diff`; Excel date cells were already loaded as datetimes.
+
 Excel columns containing native booleans and blanks use a nullable boolean
 dtype and infer as boolean. Numeric `0`/`1` cells and boolean-looking text remain
 distinct from native booleans. Mixed boolean/numeric or boolean/text columns

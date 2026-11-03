@@ -12,6 +12,7 @@ from verisight.config import Settings
 from verisight.ingestion.exceptions import DataLoadError
 from verisight.ingestion.loaders.base import BaseTableLoader
 from verisight.ingestion.models import LoadedTable
+from verisight.ingestion.temporal import parse_iso_datetimes
 from verisight.ingestion.validation import validate_file
 
 _MIN_INT64 = -(2**63)
@@ -175,5 +176,10 @@ class JsonLoader(BaseTableLoader):
             for value in non_null
         ):
             return pd.Series(values, dtype=object)
+
+        if non_null and all(type(value) is str for value in non_null):
+            dates = parse_iso_datetimes(pd.Series(values, dtype=object))
+            if dates is not None:
+                return dates
 
         return pd.Series(values)

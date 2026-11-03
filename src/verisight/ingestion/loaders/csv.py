@@ -13,6 +13,7 @@ from verisight.config import Settings
 from verisight.ingestion.exceptions import DataLoadError
 from verisight.ingestion.loaders.base import BaseTableLoader
 from verisight.ingestion.models import CsvReadOptions, LoadedTable
+from verisight.ingestion.temporal import parse_iso_datetimes
 from verisight.ingestion.validation import validate_file
 
 _MAX_SAFE_FLOAT_INTEGER = 2**53 - 1
@@ -269,6 +270,9 @@ class CsvLoader(BaseTableLoader):
             numeric_mask = values.str.fullmatch(_NUMERIC_PATTERN)
 
             if not bool(numeric_mask.all()):
+                dates = parse_iso_datetimes(series)
+                if dates is not None:
+                    data[column] = dates
                 continue
 
             integer_mask = values.str.fullmatch(_INTEGER_PATTERN)
