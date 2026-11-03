@@ -388,6 +388,15 @@ Structured model-generated claims require decimal strings and use zero
 tolerance. The model cannot choose a tolerance. A rounded presentation can
 therefore be contradicted in the default investigation result.
 
+One exception covers binary floating-point noise, not rounding. SQL adds DOUBLE
+values in binary, so a sum of currency amounts such as 333819.64 can arrive as
+`333819.64000000036`. When a cited cell is a float, a claim written with at most
+12 significant digits is `supported` if it agrees with the evidence to 12
+significant digits of the largest cited cell. The reason says so, and the
+original cell is kept. A double carries 15–17 significant digits, so `333819.6`,
+`333820` and claims with more than 12 digits are still contradicted. Integer and
+decimal cells stay exact.
+
 Application code can explicitly reverify selected claims using a
 `DecimalRoundingPolicy` with 0–12 decimal places and rounding to nearest,
 with exact ties away from zero (`ROUND_HALF_UP`), matching DuckDB `ROUND`

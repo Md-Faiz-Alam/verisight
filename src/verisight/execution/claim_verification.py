@@ -18,6 +18,8 @@ from typing import TypeAlias, cast
 from verisight.execution.observations import QueryObservation
 
 NumericValue: TypeAlias = int | float | Decimal
+# Significant digits at which floating-point evidence and a claim must agree.
+FLOAT_SIGNIFICANT_DIGITS = 12
 
 
 class ClaimOperation(StrEnum):
@@ -264,6 +266,23 @@ class NumericalClaimVerifier:
                 ),
             )
 
+        bound = self._float_noise_bound(claim, observations)
+        if (
+            bound is not None
+            and difference <= bound
+            and len(expected.normalize().as_tuple().digits) <= FLOAT_SIGNIFICANT_DIGITS
+        ):
+            return ClaimVerificationResult(
+                status=VerificationStatus.SUPPORTED,
+                actual=actual,
+                expected=expected,
+                absolute_tolerance=tolerance,
+                reason=(
+                    "The claimed value equals the floating-point evidence to "
+                    f"{FLOAT_SIGNIFICANT_DIGITS} significant digits."
+                ),
+            )
+
         return ClaimVerificationResult(
             status=VerificationStatus.CONTRADICTED,
             actual=actual,
@@ -295,6 +314,39 @@ class NumericalClaimVerifier:
         if not math.isfinite(result):
             return None
         return Decimal(repr(result))
+
+    @classmethod
+    def _float_noise_bound(
+        cls,
+        claim: NumericalClaim,
+        observations: tuple[QueryObservation, ...],
+    ) -> Decimal | None:
+        """Return the binary rounding margin when the evidence is floating point.
+
+        SQL aggregates DOUBLE values in binary floating point, so a sum of
+        decimal amounts such as 333819.64 can arrive as 333819.64000000036.
+        When any cited cell is a float, a claim written with at most
+        ``FLOAT_SIGNIFICANT_DIGITS`` significant digits that agrees with the
+        evidence to that many digits of the largest cited cell is accepted. A
+        double carries 15 to 17 significant digits, so this margin sits far
+        below any real rounding: 333819.6 is still rejected, and so is a claim
+        with more digits than that, which is not a display of the evidence.
+        Integer and Decimal evidence stays exact.
+        """
+        references = [claim.left]
+        if claim.right is not None:
+            references.append(claim.right)
+        cells = [cls._resolve_cell(reference, observations) for reference in references]
+        if not any(type(cell) is float for cell in cells):
+            return None
+        scale = max(
+            abs(_decimal_number(cell, name="Evidence value"))
+            for cell in cells
+            if cell is not None
+        )
+        if scale == 0:
+            return None
+        return Decimal(5).scaleb(scale.adjusted() - FLOAT_SIGNIFICANT_DIGITS)
 
     @classmethod
     def _resolve(

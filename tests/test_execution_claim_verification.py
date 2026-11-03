@@ -124,15 +124,24 @@ def test_supports_explicit_absolute_tolerance() -> None:
     assert result.absolute_tolerance == Decimal("0.000000000000001")
 
 
-def test_without_tolerance_detects_float_difference() -> None:
+def test_without_tolerance_accepts_only_binary_float_noise() -> None:
     observations = (_observation(("value",), ((0.30000000000000004,),)),)
 
-    result = NumericalClaimVerifier().verify(
-        _value_claim(0.3),
-        observations,
+    noise = NumericalClaimVerifier().verify(_value_claim(0.3), observations)
+    # The 12th significant digit differs: beyond floating-point noise.
+    beyond = NumericalClaimVerifier().verify(
+        _value_claim(Decimal("0.300000000001")), observations
+    )
+    # More than 12 significant digits is not a display of the evidence.
+    extended = NumericalClaimVerifier().verify(
+        _value_claim(Decimal("0.3000000000000001")), observations
     )
 
-    assert result.status is VerificationStatus.CONTRADICTED
+    assert noise.status is VerificationStatus.SUPPORTED
+    assert noise.actual == Decimal("0.30000000000000004")
+    assert "12 significant digits" in noise.reason
+    assert beyond.status is VerificationStatus.CONTRADICTED
+    assert extended.status is VerificationStatus.CONTRADICTED
 
 
 def test_supports_difference_between_rows() -> None:
