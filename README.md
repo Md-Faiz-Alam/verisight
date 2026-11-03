@@ -56,6 +56,22 @@ verisight investigate demo\orders.csv --question "How many orders were shipped?"
 and observed values are sent to Gemini. `profile` and `--preview` never call the
 model. Get a key from [Google AI Studio](https://aistudio.google.com/apikey).
 
+## Website
+
+VeriSight also runs as a website: upload files or try the demo data, review the
+data-quality findings, ask questions, and see the SQL behind every verified
+answer. It is a FastAPI REST API with interactive docs at `/docs`, plus a single
+page with no external scripts.
+
+```powershell
+python -m pip install -e ".[web]"
+verisight-web
+```
+
+Then open <http://127.0.0.1:8000>. Visitors can paste their own Gemini key,
+which is used for one question and never stored. To publish it, see
+[Deploy on AWS](docs/deploy-aws.md).
+
 ## Live results
 
 Across **150 live Gemini attempts** on 37 frozen questions in 7 domains
@@ -83,6 +99,7 @@ review the SQL. Narrative verification remains explicitly false.
 | Capability | Status |
 | --- | --- |
 | CSV, JSON, and Excel ingestion | Implemented |
+| Website and REST API with uploads, data-quality view and verified answers | Implemented |
 | Reported cleaning of missing markers, separators, currency, percent, padded headers | Implemented |
 | ISO date and date-time columns in CSV and JSON | Implemented |
 | Schema inference, profiling, and data-quality analysis | Implemented |

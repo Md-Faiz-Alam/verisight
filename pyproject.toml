@@ -30,10 +30,20 @@ dependencies = [
 
 [project.scripts]
 verisight = "verisight.cli:main"
+verisight-web = "verisight.web.__main__:main"
 
 
 [project.optional-dependencies]
+web = [
+    "fastapi>=0.115,<1.0",
+    "python-multipart>=0.0.18,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+]
 dev = [
+    "fastapi>=0.115,<1.0",
+    "httpx2>=2.0,<3.0",
+    "python-multipart>=0.0.18,<1.0",
+    "uvicorn>=0.30,<1.0",
     "pytest>=8.0,<10.0",
     "pytest-cov>=5.0,<8.0",
     "ruff>=0.11,<1.0",
@@ -47,7 +57,7 @@ where = ["src"]
 
 
 [tool.setuptools.package-data]
-verisight = ["py.typed"]
+verisight = ["py.typed", "web/static/*", "web/demo/*"]
 
 
 [tool.pytest.ini_options]

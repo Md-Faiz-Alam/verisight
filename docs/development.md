@@ -335,6 +335,10 @@ The replay used an archived source revision and a separate environment.
 Dependency checks, Ruff formatting and lint, strict mypy, and all 2,474
 tests passed with 100% statement and branch coverage.
 
+The website dependencies (FastAPI, Starlette, Uvicorn, python-multipart, httpx2
+and their requirements) were added later, resolved for Windows and CPython
+3.11.9 within the existing pins, without changing any earlier version.
+
 This development snapshot includes transitive dependencies and build/test
 tools. It is not a minimal dependency specification, a cross-platform lock,
 or a hash-verified package archive. Version pins do not guarantee continued

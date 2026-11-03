@@ -40,4 +40,7 @@ htmlcov/
 Thumbs.db
 
 # Quickstart demo files (generated)
-demo/
+/demo/
+
+# Lightsail deployment files (docs/deploy-aws.md)
+lightsail-*.json

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VeriSight · Verified answers from your data</title>
+  <meta name="description" content="Ask questions about CSV, Excel and JSON files in plain English. VeriSight shows the SQL it ran and verifies every number against the query result.">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="VeriSight home">
+      <img src="/static/favicon.svg" alt="" width="28" height="28">
+      <span>VeriSight</span>
+    </a>
+    <nav class="topnav" aria-label="Links">
+      <a href="https://github.com/Md-Faiz-Alam/verisight/blob/main/docs/results.md" target="_blank" rel="noopener">Live results</a>
+      <a href="/docs" target="_blank" rel="noopener">API</a>
+      <a href="https://github.com/Md-Faiz-Alam/verisight" target="_blank" rel="noopener">GitHub</a>
+      <button class="icon-button" id="theme-toggle" type="button" aria-label="Switch colour theme">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" id="hero">
+      <p class="eyebrow">AI data analyst · every number checked</p>
+      <h1>Ask your data anything.<br><span class="accent">Get answers you can verify.</span></h1>
+      <p class="lede">Upload a CSV, Excel or JSON file from any domain. VeriSight cleans and profiles it, Gemini writes the SQL, and every number in the answer is checked against the query result before you see it.</p>
+
+      <label class="dropzone" id="dropzone" for="file-input">
+        <input type="file" id="file-input" multiple accept=".csv,.json,.xlsx,.xls">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <strong>Drop files here or choose files</strong>
+        <span id="dropzone-hint">CSV, JSON, XLSX or XLS · several files can be joined</span>
+      </label>
+      <div class="hero-actions">
+        <button class="button secondary" id="demo-button" type="button">Try the demo: messy orders + customers</button>
+      </div>
+      <p class="error" id="upload-error" role="alert" hidden></p>
+
+      <ul class="features" aria-label="Features">
+        <li><b>Verified</b><span>Each number must match a cell of the executed SQL.</span></li>
+        <li><b>Messy data</b><span>N/A, $1,234.50, 10% and label variants handled and reported.</span></li>
+        <li><b>Safe SQL</b><span>One read-only query over your files only, with limits.</span></li>
+        <li><b>Honest</b><span>If an answer cannot be verified, it says so.</span></li>
+      </ul>
+    </section>
+
+    <section class="workspace" id="workspace" hidden>
+      <aside class="panel dataset" aria-labelledby="dataset-title">
+        <div class="panel-head">
+          <h2 id="dataset-title">Your data</h2>
+          <button class="link-button" id="remove-button" type="button">Remove</button>
+        </div>
+        <p class="muted small" id="dataset-expiry"></p>
+        <div id="tables"></div>
+        <h3 class="section-title">Data quality <span class="count" id="finding-count"></span></h3>
+        <ul class="findings" id="findings"></ul>
+        <button class="button ghost more" id="more-findings" type="button" hidden>Show all findings</button>
+      </aside>
+
+      <div class="main-column">
+        <form class="panel ask" id="ask-form">
+          <label class="ask-label" for="question">Ask a question about your data</label>
+          <textarea id="question" rows="2" maxlength="1000" placeholder="e.g. How many orders were shipped?" required></textarea>
+          <div class="chips" id="examples" aria-label="Example questions"></div>
+          <div class="ask-options">
+            <fieldset class="segmented">
+              <legend>Answer is</legend>
+              <label><input type="radio" name="answer-type" value="number" checked><span>One number</span></label>
+              <label><input type="radio" name="answer-type" value="difference"><span>A difference</span></label>
+              <label><input type="radio" name="answer-type" value="any"><span>Anything</span></label>
+            </fieldset>
+            <div class="key-field" id="key-field" hidden>
+              <label for="api-key">Gemini API key</label>
+              <input type="password" id="api-key" autocomplete="off" spellcheck="false" placeholder="Used for this question only, never stored">
+            </div>
+          </div>
+          <label class="consent">
+            <input type="checkbox" id="consent">
+            <span>Send the schema, profile, question and sample values to Google Gemini to answer this question.</span>
+          </label>
+          <div class="ask-footer">
+            <p class="error" id="ask-error" role="alert" hidden></p>
+            <button class="button primary" id="ask-button" type="submit">Ask</button>
+          </div>
+        </form>
+        <div class="answers" id="answers" aria-live="polite"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>VeriSight proves each number came from an executed SQL result. It does not prove the SQL means what you asked, so review the SQL. <a href="https://github.com/Md-Faiz-Alam/verisight#scope-and-limits" target="_blank" rel="noopener">Scope and limits</a></p>
+  </footer>
+</body>
+</html>
