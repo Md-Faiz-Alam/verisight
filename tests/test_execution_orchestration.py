@@ -154,8 +154,9 @@ def _build_orchestrator(
     )
 
 
-def test_investigation_finishes_without_querying() -> None:
-    investigator = StubInvestigator([_finish()])
+def test_early_finish_still_queries_the_original_question_once() -> None:
+    """Conclusions need SQL evidence, so an early finish cannot end the run."""
+    investigator = StubInvestigator([_finish(), _finish()])
     execution_service = StubExecutionService()
     synthesizer = StubInvestigationSynthesizer(
         conclusion="The existing evidence supports the final conclusion."
@@ -172,16 +173,13 @@ def test_investigation_finishes_without_querying() -> None:
 
     assert isinstance(result, InvestigationResult)
     assert result.question == "Why did revenue decline?"
-    assert result.status is InvestigationStatus.INCOMPLETE
-    assert result.conclusion == (
-        "Investigation incomplete: no analytical observations were collected. "
-        "No analytical conclusion has been established."
-    )
-    assert result.observations == ()
-    assert result.observation_count == 0
-    assert execution_service.run_questions == []
-    assert len(investigator.states) == 1
-    assert synthesizer.states == []
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.conclusion == "The existing evidence supports the final conclusion."
+    assert result.observation_count == 1
+    assert result.initial_query_required is True
+    assert execution_service.run_questions == ["Why did revenue decline?"]
+    assert len(investigator.states) == 2
+    assert len(synthesizer.states) == 1
 
 
 def test_investigation_executes_requested_observation() -> None:
@@ -276,7 +274,7 @@ def test_investigation_result_preserves_analysis() -> None:
     synthesizer = StubInvestigationSynthesizer()
 
     result = _build_orchestrator(
-        investigator=StubInvestigator([_finish()]),
+        investigator=StubInvestigator([_finish(), _finish()]),
         execution_service=StubExecutionService(),
         synthesizer=synthesizer,
     ).investigate(
@@ -285,10 +283,9 @@ def test_investigation_result_preserves_analysis() -> None:
     )
 
     assert result.analysis is analysis
-    assert result.status is InvestigationStatus.INCOMPLETE
-    assert result.observation_count == 0
-    assert result.observations == ()
-    assert synthesizer.states == []
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.observation_count == 1
+    assert synthesizer.states[0].analysis is analysis
 
 
 def test_finish_reasoning_is_not_used_as_conclusion() -> None:
@@ -1047,8 +1044,8 @@ def test_single_step_success_synthesizes_without_a_second_decision() -> None:
     assert synthesizer.states[0].observations == result.observations
 
 
-def test_single_step_budget_can_finish_without_querying() -> None:
-    """Finishing immediately does not consume the query budget."""
+def test_single_step_early_finish_queries_then_synthesizes() -> None:
+    """With one step, the required query is followed directly by synthesis."""
 
     investigator = StubInvestigator([_finish()])
     execution_service = StubExecutionService()
@@ -1064,11 +1061,12 @@ def test_single_step_budget_can_finish_without_querying() -> None:
         analysis=_build_analysis_result(),
     )
 
-    assert result.status is InvestigationStatus.INCOMPLETE
-    assert result.observation_count == 0
-    assert execution_service.run_questions == []
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.observation_count == 1
+    assert result.initial_query_required is True
+    assert execution_service.run_questions == ["Investigate the dataset."]
     assert len(investigator.states) == 1
-    assert synthesizer.states == []
+    assert len(synthesizer.states) == 1
 
 
 def test_mixed_success_and_failure_consume_query_budget() -> None:

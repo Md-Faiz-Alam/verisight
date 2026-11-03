@@ -65,6 +65,10 @@ class InvestigationOrchestrator:
     query, synthesis runs directly; multi-step investigations still require
     a finish decision. Neither path establishes full task acceptance.
 
+    A finish decision before any query was attempted plans the original
+    question once instead, because conclusions require SQL evidence; the
+    result records this as ``initial_query_required``.
+
     With a claim output contract, a finished synthesis that cites a missing
     or inconsistent cell, or returns no claims, may use one remaining step
     for a recovery query that asks for the final value as its own result
@@ -123,10 +127,18 @@ class InvestigationOrchestrator:
         question: str,
         analysis: DatasetAnalysisResult,
     ) -> InvestigationResult:
-        """Attach the recovery record to whichever result ends the run."""
+        """Attach run records to whichever result ends the run."""
 
         pending: list[_PendingRecovery] = []
-        result = self._run(question=question, analysis=analysis, pending=pending)
+        initial_query: list[bool] = []
+        result = self._run(
+            question=question,
+            analysis=analysis,
+            pending=pending,
+            initial_query=initial_query,
+        )
+        if initial_query:
+            result = replace(result, initial_query_required=True)
         if pending and result.synthesis_recovery is None:
             result = replace(
                 result,
@@ -144,6 +156,7 @@ class InvestigationOrchestrator:
         question: str,
         analysis: DatasetAnalysisResult,
         pending: list[_PendingRecovery],
+        initial_query: list[bool],
     ) -> InvestigationResult:
         """Keep the latest state available if any stage exhausts the budget."""
 
@@ -197,14 +210,21 @@ class InvestigationOrchestrator:
                         ),
                     )
 
-                if decision.action is InvestigationAction.FINISH:
+                if (
+                    decision.action is InvestigationAction.FINISH
+                    and state.observation_count == 0
+                    and state.failed_attempt_count == 0
+                ):
+                    # Profiling context can make a question look answered, but
+                    # conclusions need SQL evidence. Query the original task
+                    # once instead of finishing with nothing to verify.
+                    initial_query.append(True)
+                    investigation_question = state.question
+                elif decision.action is InvestigationAction.FINISH:
                     if state.observation_count == 0:
-                        reason = (
-                            "all attempted analytical queries failed"
-                            if state.failed_attempt_count > 0
-                            else "no analytical observations were collected"
+                        return self._incomplete(
+                            state, reason="all attempted analytical queries failed"
                         )
-                        return self._incomplete(state, reason=reason)
 
                     result = self._synthesize(state)
                     trigger = self._recovery_trigger(result)

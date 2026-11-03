@@ -600,7 +600,11 @@ def test_public_investigate_can_finish_without_querying(
             InvestigationDecision(
                 action=InvestigationAction.FINISH,
                 reasoning="The deterministic analysis is sufficient.",
-            )
+            ),
+            InvestigationDecision(
+                action=InvestigationAction.FINISH,
+                reasoning="The deterministic analysis is sufficient.",
+            ),
         ]
     )
 
@@ -617,14 +621,13 @@ def test_public_investigate_can_finish_without_querying(
         "Inspect the orders dataset.",
     )
 
-    assert result.status is InvestigationStatus.INCOMPLETE
-    assert result.conclusion == (
-        "Investigation incomplete: no analytical observations were collected. "
-        "No analytical conclusion has been established."
-    )
-    assert result.observation_count == 0
-    assert len(investigator.states) == 1
-    assert synthesizer.states == []
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.conclusion == "The deterministic analysis supports the conclusion."
+    assert result.observation_count == 1
+    assert result.initial_query_required is True
+    assert result.observations[0].question == "Inspect the orders dataset."
+    assert len(investigator.states) == 2
+    assert len(synthesizer.states) == 1
 
 
 def test_public_investigate_requires_configured_investigator(
@@ -698,6 +701,7 @@ def test_explicit_investigator_and_synthesizer_do_not_require_gemini(
     pd.DataFrame(
         {
             "order_id": [1, 2, 3],
+            "amount": [10.0, 20.0, 30.0],
         }
     ).to_csv(path, index=False)
 
@@ -706,7 +710,11 @@ def test_explicit_investigator_and_synthesizer_do_not_require_gemini(
             InvestigationDecision(
                 action=InvestigationAction.FINISH,
                 reasoning="No further investigation is required.",
-            )
+            ),
+            InvestigationDecision(
+                action=InvestigationAction.FINISH,
+                reasoning="No further investigation is required.",
+            ),
         ]
     )
 
@@ -726,14 +734,11 @@ def test_explicit_investigator_and_synthesizer_do_not_require_gemini(
         "Inspect the orders.",
     )
 
-    assert result.status is InvestigationStatus.INCOMPLETE
-    assert result.conclusion == (
-        "Investigation incomplete: no analytical observations were collected. "
-        "No analytical conclusion has been established."
-    )
-    assert result.observation_count == 0
-    assert len(investigator.states) == 1
-    assert synthesizer.states == []
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.conclusion == "No additional analytical evidence is required."
+    assert result.observation_count == 1
+    assert len(investigator.states) == 2
+    assert len(synthesizer.states) == 1
 
 
 def test_public_investigate_preserves_safe_execution_validation(
@@ -822,6 +827,9 @@ def test_public_investigate_builds_default_gemini_components(
         '"question":null}'
     )
     synthesizer_client = MagicMock()
+    synthesizer_client.generate.return_value = (
+        '{"conclusion":"The orders were observed.","claims":[]}'
+    )
 
     settings = Settings(
         gemini_api_key="test-api-key",
@@ -848,12 +856,10 @@ def test_public_investigate_builds_default_gemini_components(
         )
 
     assert result.question == "What can we learn about these orders?"
-    assert result.status is InvestigationStatus.INCOMPLETE
-    assert result.conclusion == (
-        "Investigation incomplete: no analytical observations were collected. "
-        "No analytical conclusion has been established."
-    )
-    assert result.observation_count == 0
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.conclusion == "The orders were observed."
+    assert result.observation_count == 1
+    assert result.initial_query_required is True
     assert result.generated_claims == ()
     assert result.verified_claims == ()
     assert result.narrative_verified is False
@@ -878,8 +884,9 @@ def test_public_investigate_builds_default_gemini_components(
     assert set(schema["required"]) == {"conclusion", "claims"}
     assert schema["additionalProperties"] is False
 
-    investigator_client.generate.assert_called_once()
-    synthesizer_client.generate.assert_not_called()
+    # Finish, required initial query, then finish again before synthesis.
+    assert investigator_client.generate.call_count == 2
+    synthesizer_client.generate.assert_called_once()
 
     investigator_prompt = investigator_client.generate.call_args.args[0]
     assert (
@@ -1061,7 +1068,11 @@ def test_public_investigate_rebuilds_missing_planner(
             InvestigationDecision(
                 action=InvestigationAction.FINISH,
                 reasoning="The deterministic analysis is sufficient.",
-            )
+            ),
+            InvestigationDecision(
+                action=InvestigationAction.FINISH,
+                reasoning="The deterministic analysis is sufficient.",
+            ),
         ]
     )
 
@@ -1089,15 +1100,11 @@ def test_public_investigate_rebuilds_missing_planner(
             "Inspect the orders dataset.",
         )
 
-    assert result.status is InvestigationStatus.INCOMPLETE
-    assert result.conclusion == (
-        "Investigation incomplete: no analytical observations were collected. "
-        "No analytical conclusion has been established."
-    )
-    assert result.observation_count == 0
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.observation_count == 1
 
     build_planner.assert_called_once_with(settings)
-    assert synthesizer.states == []
+    assert len(synthesizer.states) == 1
 
 
 def test_public_ask_repairs_failed_generated_sql(tmp_path: Path) -> None:

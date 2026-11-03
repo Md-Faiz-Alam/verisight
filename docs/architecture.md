@@ -125,6 +125,16 @@ The investigator decides whether to request the initial query. After a successfu
 one-attempt query, the orchestrator checks the shared deadline and proceeds
 directly to the configured synthesizer without another investigator decision.
 Multi-step investigations still require a finish decision before synthesis.
+A finish decision before any query has been attempted does not end the run.
+Profiling context, such as a reported missing-value count, can make a question
+look answered, but conclusions and claims require SQL evidence. The orchestrator
+instead plans the caller's original question once, as with `max_steps=1`, and the
+result reports `initial_query_required: true`. After that query, the normal flow
+resumes: one-attempt runs synthesize directly, and multi-step runs return to the
+investigator. If the query fails, a later finish decision produces the existing
+"all attempted analytical queries failed" incomplete result; the query is not
+retried. A provider failure on that first query is raised as before, because no
+evidence exists yet.
 In contract mode, a finished synthesis that lacks the requested final value may
 use one remaining step for a recovery query; see
 [Final-value recovery query](output-contracts.md#final-value-recovery-query).
