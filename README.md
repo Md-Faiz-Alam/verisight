@@ -14,11 +14,25 @@ of unfamiliar business definitions.
 A supported number does not establish that the SQL, interpretation, or narrative
 is correct. Narrative verification remains explicitly false.
 
+## Live results
+
+Across **150 live Gemini attempts** on 37 frozen questions in 7 domains
+(banking, transport, ecology, gem retail, e-commerce orders, customer records
+and energy sensors) and 3 formats (CSV, JSON, Excel), VeriSight accepted **85
+answers, and all 85 matched independently computed values: 0 wrong**. The
+questions include messy values such as `$1,234.50`, `N/A` and `Shipped ` /
+`shipped`, ISO dates, two-file joins and traps where a plausible query gives a
+wrong number. In 13 attempts no number could be verified, and VeriSight said so
+instead of guessing; 52 were lost to provider overload. Every run is listed,
+including failures, in [Live results](docs/results.md).
+
 ## Current capabilities
 
 | Capability | Status |
 | --- | --- |
 | CSV, JSON, and Excel ingestion | Implemented |
+| Reported cleaning of missing markers, separators, currency, percent, padded headers | Implemented |
+| ISO date and date-time columns in CSV and JSON | Implemented |
 | Schema inference, profiling, and data-quality analysis | Implemented |
 | Validated DuckDB queries with configured resource limits | Implemented |
 | Gemini planning, query repair, and bounded investigations | Implemented |
