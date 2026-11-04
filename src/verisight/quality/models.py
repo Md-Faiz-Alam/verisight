@@ -21,6 +21,7 @@ class QualityIssueType(StrEnum):
     FORMATTED_NUMBERS = "formatted_numbers"
     LABEL_VARIANTS = "label_variants"
     TRIMMED_COLUMN_NAME = "trimmed_column_name"
+    NAMED_BLANK_COLUMN = "named_blank_column"
 
 
 class QualitySeverity(StrEnum):

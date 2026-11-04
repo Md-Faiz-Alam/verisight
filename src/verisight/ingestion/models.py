@@ -60,6 +60,7 @@ NoteRule = Literal[
     "percent_sign",
     "label_variants",
     "trimmed_column_name",
+    "named_blank_column",
 ]
 
 

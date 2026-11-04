@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
@@ -143,8 +144,91 @@ def test_uploads_are_validated_with_clear_messages() -> None:
         too_many = [("a.csv", CSV), ("b.csv", CSV), ("c.csv", CSV)]
         assert _upload(client, *too_many, status=400)["code"] == "too_many_files"
         broken = _upload(client, ("bad.json", b"{not json"), status=422)
-        assert broken["code"] == "data_load_error"
-        assert "valid, non-empty CSV" in str(broken["message"])
+        assert broken == {
+            "code": "data_load_error",
+            "message": "The file is not valid JSON. Check it with a JSON "
+            "validator and upload again.",
+        }
+
+
+def _workbook(rows: list[list[object]]) -> bytes:
+    from io import BytesIO
+
+    buffer = BytesIO()
+    pd.DataFrame(rows).to_excel(buffer, index=False, header=False)
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("name", "data", "message"),
+    [
+        ("lines.json", b'{"a": 1}\n{"a": 2}\n', "looks like JSON Lines"),
+        ("encoding.json", b"{broken", "is not valid JSON"),
+        ("nan.json", b'[{"a": NaN}]', "NaN or Infinity"),
+        ("dup.json", b'[{"a": 1, "a": 2}]', "repeats the same key"),
+        ("scalars.json", b"[1, 2]", "one object per row"),
+        ("scalar.json", b"42", "equal-length array per column"),
+        ("ragged.json", b'{"a": [1, 2], "b": [3]}', "different lengths"),
+        ("latin.json", '[{"city": "Malmö"}]'.encode("latin-1"), "UTF-8"),
+        ("latin.csv", "city,n\nMalmö,1\n".encode("latin-1"), "UTF-8"),
+        ("nul.csv", b"a,b\n1,\x002\n", "binary data"),
+        ("dupes.csv", b"amount,amount\n1,2\n", "same header"),
+        ("case.csv", b"Amount,amount\n1,2\n", "differ only by letter case"),
+        ("wide.csv", b"a,b\n1,2\n3,4,5\n", "same number of columns"),
+        (
+            "formula.xlsx",
+            _workbook([["amount", "double"], [10, "=A2*2"]]),
+            "formulas without saved",
+        ),
+        (
+            "errors.xlsx",
+            _workbook([["amount", "ratio"], [10, "#DIV/0!"]]),
+            "error cells",
+        ),
+        (
+            "titled.xlsx",
+            _workbook([["Report", None], ["amount", "region"], [10, "n"]]),
+            "no title rows",
+        ),
+        ("wide.xlsx", _workbook([["amount", None], [10, "stray"]]), "no title rows"),
+    ],
+)
+def test_load_failures_explain_what_to_fix(
+    client: TestClient, name: str, data: bytes, message: str
+) -> None:
+    failure = _upload(client, (name, data), status=422)
+
+    assert failure["code"] in {"data_load_error", "table_validation_error"}
+    assert message in failure["message"]
+    assert "verisight-" not in failure["message"]
+    assert name not in failure["message"]
+
+
+def test_unknown_load_failures_keep_the_generic_message() -> None:
+    from verisight.ingestion.exceptions import DataLoadError
+
+    class _Unreadable(VeriSight):
+        def analyze(self, paths: object) -> Any:
+            raise DataLoadError("Excel workbook contains a non-string sheet name.")
+
+    class _Broken(VeriSight):
+        def analyze(self, paths: object) -> Any:
+            raise RuntimeError("Excel worksheet contains error cells.")
+
+    for engine, status, code, text in (
+        (_Unreadable, 422, "data_load_error", "could not be read as a table"),
+        (_Broken, 500, "internal_error", "unexpected"),
+    ):
+
+        def factory(settings: Settings, engine: type[VeriSight] = engine) -> VeriSight:
+            return engine(settings=settings)
+
+        app = create_app(settings=_settings(), web=WebSettings(), factory=factory)
+        with TestClient(app) as test_client:
+            failure = _upload(test_client, ("data.csv", CSV), status=status)
+        assert failure["code"] == code
+        assert text in failure["message"].lower()
+        assert "error cells" not in failure["message"]
 
 
 def test_upload_names_are_cleaned_and_unique(client: TestClient) -> None:

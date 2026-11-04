@@ -35,6 +35,7 @@ const ISSUE_LABELS = {
   formatted_numbers: "Formatted numbers",
   label_variants: "Label variants",
   trimmed_column_name: "Padded column name",
+  named_blank_column: "Column without a header",
   high_cardinality: "Mostly unique values",
   constant_column: "Single repeated value",
   duplicate_rows: "Duplicate rows",
@@ -46,6 +47,7 @@ const ISSUE_ORDER = {
   missing_value_markers: 1,
   formatted_numbers: 2,
   trimmed_column_name: 3,
+  named_blank_column: 3,
 };
 const SEVERITY_ORDER = { error: 0, warning: 1, info: 2 };
 const FINDINGS_SHOWN = 5;

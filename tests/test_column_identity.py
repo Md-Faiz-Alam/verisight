@@ -16,6 +16,7 @@ from verisight.execution.engine import DuckDBExecutor
 from verisight.ingestion.exceptions import DataLoadError, TableValidationError
 from verisight.ingestion.models import LoadedDataset, LoadedTable, SourceMetadata
 from verisight.public_api import run_public_operation
+from verisight.quality.models import QualityIssueType, QualitySeverity
 
 
 def _settings() -> Settings:
@@ -119,16 +120,22 @@ def test_ambiguous_column_failure_has_a_safe_public_error(tmp_path: Path) -> Non
     assert "private_source" not in outcome.error.message
 
 
-@pytest.mark.parametrize("extension", ["csv", "xlsx"])
 @pytest.mark.parametrize(
-    "headers",
+    ("extension", "headers"),
     [
-        ("amount", "amount"),
-        ("", "amount"),
-        ("amount", ""),
-        ("amount", "   "),
+        ("csv", ("amount", "amount")),
+        ("xlsx", ("amount", "amount")),
+        ("xlsx", ("", "amount")),
+        ("xlsx", ("amount", "")),
+        ("xlsx", ("amount", "   ")),
     ],
-    ids=["duplicate", "blank-first", "blank-last", "whitespace"],
+    ids=[
+        "csv-duplicate",
+        "xlsx-duplicate",
+        "xlsx-blank-first",
+        "xlsx-blank-last",
+        "xlsx-whitespace",
+    ],
 )
 def test_raw_headers_are_rejected_before_generation(
     tmp_path: Path, extension: str, headers: tuple[str, str]
@@ -387,3 +394,43 @@ def test_json_name_validation_does_not_rewrite_nested_keys_or_cell_values(
     )
     assert result.columns == ("note", "C0")
     assert result.rows == ((note, 10),)
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        (("", "amount"), ("unnamed_1", "amount")),
+        (("amount", "   "), ("amount", "unnamed_2")),
+        (("", "unnamed_1"), ("unnamed_1_2", "unnamed_1")),
+        (("", "UNNAMED_1", ""), ("unnamed_1_2", "UNNAMED_1", "unnamed_3")),
+    ],
+    ids=["blank-first", "whitespace-last", "name-taken", "case-taken"],
+)
+def test_blank_csv_headers_are_named_and_reported(
+    tmp_path: Path, headers: tuple[str, ...], expected: tuple[str, ...]
+) -> None:
+    path = tmp_path / "measurements.csv"
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.writer(file, lineterminator="\n")
+        writer.writerow(headers)
+        writer.writerow(range(len(headers)))
+    app = VeriSight(settings=_settings())
+
+    analysis = app.analyze(path).analysis
+    columns = tuple(column.name for column in analysis.schema.tables[0].columns)
+    named = [
+        issue
+        for issue in analysis.issues
+        if issue.issue_type is QualityIssueType.NAMED_BLANK_COLUMN
+    ]
+    quoted = ", ".join('"' + name + '"' for name in expected)
+    result = app.execute(path, f"SELECT {quoted} FROM measurements")
+
+    assert columns == expected
+    assert sorted(issue.column_name or "" for issue in named) == sorted(
+        name
+        for name, header in zip(expected, headers, strict=True)
+        if not header.strip()
+    )
+    assert all(issue.severity is QualitySeverity.WARNING for issue in named)
+    assert result.rows == (tuple(range(len(headers))),)

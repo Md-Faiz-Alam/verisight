@@ -1,6 +1,7 @@
 """Schema models and inference for ingested VeriSight tables."""
 
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import StrEnum
 
 import pandas as pd
@@ -21,6 +22,7 @@ class LogicalType(StrEnum):
 
     INTEGER = "integer"
     FLOAT = "float"
+    DECIMAL = "decimal"
     BOOLEAN = "boolean"
     DATETIME = "datetime"
     STRING = "string"
@@ -135,6 +137,15 @@ class SchemaInferer:
 
             if non_missing.map(lambda value: isinstance(value, str)).all():
                 return LogicalType.STRING
+
+            # Loaders keep source decimals as Decimal objects when a float
+            # would change their value. A column made only of finite Decimals
+            # is exact numeric data; mixed Decimal and float columns stay
+            # unknown so approximate floats are never presented as exact.
+            if non_missing.map(
+                lambda value: type(value) is Decimal and value.is_finite()
+            ).all():
+                return LogicalType.DECIMAL
 
             return LogicalType.UNKNOWN
 

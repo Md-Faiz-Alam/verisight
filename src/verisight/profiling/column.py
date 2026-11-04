@@ -45,7 +45,11 @@ class ColumnProfiler:
         text_statistics: TextStatistics | None = None
         datetime_statistics: DatetimeStatistics | None = None
 
-        if logical_type in {LogicalType.INTEGER, LogicalType.FLOAT}:
+        if logical_type in {
+            LogicalType.INTEGER,
+            LogicalType.FLOAT,
+            LogicalType.DECIMAL,
+        }:
             numeric_statistics = self._profile_numeric(non_missing)
 
             if numeric_statistics is not None:

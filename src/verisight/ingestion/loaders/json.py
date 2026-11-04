@@ -116,6 +116,8 @@ class JsonLoader(BaseTableLoader):
         """Convert a supported JSON structure into a DataFrame."""
 
         if isinstance(payload, dict):
+            if JsonLoader._is_columnar(payload):
+                return JsonLoader._columns_to_dataframe(payload)
             return JsonLoader._records_to_dataframe([payload])
 
         if isinstance(payload, list):
@@ -127,7 +129,38 @@ class JsonLoader(BaseTableLoader):
 
             return JsonLoader._records_to_dataframe(payload)
 
-        raise DataLoadError(f"JSON root must be an object or array of objects: {path}")
+        raise DataLoadError(
+            "JSON root must be an object, an array of objects, or an object of "
+            f"column arrays: {path}"
+        )
+
+    @staticmethod
+    def _is_columnar(payload: dict[str, Any]) -> bool:
+        """Detect column-oriented JSON such as ``{"a": [1, 2], "b": [3, 4]}``.
+
+        Every value must be an array of scalar values. A single record whose
+        fields hold nested objects or arrays keeps the one-row interpretation.
+        """
+        return bool(payload) and all(
+            isinstance(values, list)
+            and not any(isinstance(value, dict | list) for value in values)
+            for values in payload.values()
+        )
+
+    @staticmethod
+    def _columns_to_dataframe(payload: dict[str, list[Any]]) -> pd.DataFrame:
+        """Convert equal-length column arrays into rows, keeping source order."""
+        lengths = {len(values) for values in payload.values()}
+        if len(lengths) != 1:
+            raise DataLoadError(
+                "JSON column arrays must all have the same number of values."
+            )
+        row_count = lengths.pop()
+        records = [
+            {column: values[index] for column, values in payload.items()}
+            for index in range(row_count)
+        ]
+        return JsonLoader._records_to_dataframe(records)
 
     @staticmethod
     def _records_to_dataframe(records: list[dict[str, Any]]) -> pd.DataFrame:

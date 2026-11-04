@@ -66,9 +66,12 @@ aws lightsail get-container-services --region $region --service-name verisight -
 ```
 
 Wait until the state is `READY`, usually a few minutes. `micro` has 1 GB of
-memory, enough for files up to the default 20 MB. Use `--power small` or
-`medium` for larger files; `aws lightsail get-container-service-powers` lists
-each size and price.
+memory. In a test sweep of 118 files, uploading a 15 MB CSV peaked at about
+360 MB and a heavy self-join question on it at about 530 MB, because each
+question reloads the files. The deployment below therefore limits uploads to
+10 MB and answers one question at a time. For larger files use `--power small`
+or `medium` and raise `VERISIGHT_WEB_MAX_UPLOAD_MB`;
+`aws lightsail get-container-service-powers` lists each size and price.
 
 ## 3. Push the image
 
@@ -90,6 +93,7 @@ $containers = @"
   "web": {
     "image": "$image",
     "environment": {
+      "VERISIGHT_WEB_MAX_UPLOAD_MB": "10",
       "VERISIGHT_WEB_QUESTIONS_PER_HOUR": "20",
       "VERISIGHT_WEB_MAX_CONCURRENT_QUESTIONS": "1"
     },

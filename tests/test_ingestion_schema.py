@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
@@ -384,3 +385,34 @@ def test_schema_inferer_treats_unsupported_dtype_as_unknown() -> None:
 
     assert column.logical_type is LogicalType.UNKNOWN
     assert column.physical_dtype == "category"
+
+
+def test_schema_inferer_detects_exact_decimal_column() -> None:
+    table = make_table(
+        pd.DataFrame(
+            {"amount": [Decimal("0.12345678901234567890"), None, Decimal("2.5")]},
+            dtype=object,
+        )
+    )
+
+    column = SchemaInferer().infer_table(table).columns[0]
+
+    assert column.logical_type is LogicalType.DECIMAL
+
+
+def test_schema_inferer_keeps_non_finite_decimal_column_unknown() -> None:
+    table = make_table(
+        pd.DataFrame({"amount": [Decimal("1.5"), Decimal("Infinity")]}, dtype=object)
+    )
+
+    column = SchemaInferer().infer_table(table).columns[0]
+
+    assert column.logical_type is LogicalType.UNKNOWN
+
+
+def test_schema_inferer_keeps_mixed_decimal_and_float_column_unknown() -> None:
+    table = make_table(pd.DataFrame({"amount": [Decimal("1.5"), 2.25]}, dtype=object))
+
+    column = SchemaInferer().infer_table(table).columns[0]
+
+    assert column.logical_type is LogicalType.UNKNOWN

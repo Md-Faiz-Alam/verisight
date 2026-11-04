@@ -313,7 +313,10 @@ reported as label variants, and SQL planning compares them with
 `LOWER(TRIM(column))` unless the question distinguishes them. Each change or
 variant appears as a data-quality finding (`missing_value_markers`,
 `formatted_numbers`, `label_variants` or `trimmed_column_name`) with the column,
-the number of affected values and up to three original examples.
+the number of affected values and up to three original examples. A CSV column
+with a blank header, such as the unnamed index column of a pandas export, is
+named `unnamed_<position>` and reported as `named_blank_column`; Excel workbooks
+still need every used column to have a header.
 
 Excel columns containing native booleans and blanks use a nullable boolean
 dtype and infer as boolean. Numeric `0`/`1` cells and boolean-looking text remain
@@ -330,11 +333,14 @@ formula definitions or independently identify missing or stale formula caches.
 Recalculate and save affected workbooks, or export corrected values before loading.
 
 The data boundary rejects blank or NUL-containing column names and names that
-collide under DuckDB's ASCII case-insensitive identifier rules. Names are
+collide under DuckDB's ASCII case-insensitive identifier rules (CSV blank headers
+are named first, as described above). Names are
 rechecked before SQL registration because loaded DataFrames remain mutable.
 Valid punctuation and distinct Unicode identifiers are preserved. CSV inputs
 that pandas would turn into an implicit row index are rejected. JSON duplicate
-keys are rejected before they can discard source fields. Decimal fallback and
+keys are rejected before they can discard source fields. JSON can be an array
+of row objects or an object of equal-length column arrays. Columns of exact
+decimals infer as `decimal` and are profiled as numbers. Decimal fallback and
 explicit SQL binding protect supported mixed numerical columns from silent
 float conversion; exact decimal
 binding has a 38-digit precision limit. Existing floating-point values do not

@@ -7,6 +7,8 @@ only with explicit consent, using the server key or a key supplied with the
 request; a supplied key is used for that request only and is never stored.
 """
 
+import json
+import re
 import shutil
 import threading
 import time
@@ -85,7 +87,121 @@ _ENGINE_HINTS = {
     ),
 }
 
+# Specific advice for known load failures. Engine messages are matched by
+# their fixed leading text and never shown: some include paths or values.
+_ENCODING_HINT = (
+    "The file is not saved as UTF-8 text. Save it with UTF-8 encoding (in "
+    "Excel: Save As, CSV UTF-8) and upload again."
+)
+_LOAD_HINTS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(pattern, re.DOTALL), hint)
+    for pattern, hint in (
+        (
+            r"(CSV|Excel) column headers must not be blank",
+            "Some columns have no header. Make sure the first row holds the "
+            "headers, with no title rows above it, and every used column has "
+            "a name.",
+        ),
+        (
+            r"Excel data contains fields without source headers",
+            "Some cells sit in columns without a header. Make sure the first "
+            "row holds the headers, with no title rows above it.",
+        ),
+        (
+            r"(CSV|Excel) contains duplicate source column headers"
+            r"|Table '.*' contains duplicate column names",
+            "Two or more columns have the same header. Rename them so every "
+            "header is different and upload again.",
+        ),
+        (
+            r"Table '.*' contains ambiguous SQL column names",
+            "Two headers differ only by letter case, such as Amount and "
+            "amount. Rename one of them and upload again.",
+        ),
+        (
+            r"CSV encoding could not be established|CSV file uses UTF-32",
+            _ENCODING_HINT,
+        ),
+        (
+            r"CSV file contains NUL",
+            "The file contains binary data. Upload a plain-text CSV saved as "
+            "UTF-8, or the original Excel workbook.",
+        ),
+        (
+            r"CSV delimiter detection was inconclusive",
+            "The column separator could not be worked out. Use commas between "
+            "columns and the same number of columns on every row.",
+        ),
+        (
+            r"CSV rows contain more fields than the header",
+            "Some rows have more values than there are headers. Check for "
+            "extra commas or unquoted text that contains commas.",
+        ),
+        (
+            r"Excel formula has no saved result",
+            "The workbook has formulas without saved values. Open it in "
+            "Excel, save it, and upload again, or export it as CSV.",
+        ),
+        (
+            r"Excel worksheet contains error cells",
+            "The worksheet has error cells such as #DIV/0! or #N/A. Fix or "
+            "clear them and upload again.",
+        ),
+        (
+            r"Duplicate JSON object key",
+            "A JSON object repeats the same key. Each key may appear once per object.",
+        ),
+        (
+            r"Nonstandard JSON numeric constant",
+            "The JSON contains NaN or Infinity, which JSON does not allow. "
+            "Use null instead.",
+        ),
+        (
+            r"JSON column arrays must all have",
+            "The JSON has one array per column, but the arrays have different "
+            "lengths. Give every column the same number of values.",
+        ),
+        (
+            r"JSON array must contain objects",
+            'A JSON array must hold one object per row, like [{"name": "A", '
+            '"value": 1}].',
+        ),
+        (
+            r"JSON root must be",
+            "Use a JSON array of row objects, or an object with one "
+            "equal-length array per column.",
+        ),
+    )
+)
+_JSON_LINES_HINT = (
+    "This looks like JSON Lines (one object per line). Put the objects in a "
+    "JSON array, like [{...}, {...}], and upload again."
+)
+_INVALID_JSON_HINT = (
+    "The file is not valid JSON. Check it with a JSON validator and upload again."
+)
+
 AppFactory = Callable[[Settings], VeriSight]
+
+
+def _load_hint(error: BaseException) -> str | None:
+    """Return fixed advice for the first known failure in an exception chain."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, json.JSONDecodeError):
+            if current.msg.startswith("Extra data"):
+                return _JSON_LINES_HINT
+            return _INVALID_JSON_HINT
+        if isinstance(current, UnicodeError):
+            return _ENCODING_HINT
+        text = str(current)
+        for pattern, hint in _LOAD_HINTS:
+            if pattern.match(text):
+                return hint
+        current = current.__cause__ or current.__context__
+    return None
 
 
 class WebError(HTTPException):
@@ -226,13 +342,25 @@ def create_app(
                 update={"allow_llm_data_disclosure": False, "gemini_api_key": None}
             )
         )
-        operation = run_public_operation(lambda: engine.analyze(paths))
+        hints: list[str] = []
+
+        def load() -> DatasetAnalysisResult:
+            try:
+                return engine.analyze(paths)
+            except Exception as exc:
+                hint = _load_hint(exc)
+                if hint is not None:
+                    hints.append(hint)
+                raise
+
+        operation = run_public_operation(load)
         if operation.error is not None:
             report = operation.error
+            message = _ENGINE_HINTS.get(report.code, report.message)
+            if hints and report.code is not ErrorCode.INTERNAL_ERROR:
+                message = hints[0]
             raise WebError(
-                _ENGINE_STATUS.get(report.code, 422),
-                report.code.value,
-                _ENGINE_HINTS.get(report.code, report.message),
+                _ENGINE_STATUS.get(report.code, 422), report.code.value, message
             )
         assert operation.value is not None
         return _profile_view(operation.value)

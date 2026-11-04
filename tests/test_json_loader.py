@@ -161,7 +161,7 @@ def test_json_loader_rejects_scalar_root(tmp_path: Path) -> None:
 
     with pytest.raises(
         DataLoadError,
-        match="JSON root must be an object or array of objects",
+        match="JSON root must be an object, an array of objects",
     ):
         loader.load(file_path)
 
@@ -541,3 +541,47 @@ def test_json_loader_wraps_unrepresentable_decimal_exponent(tmp_path: Path) -> N
     path.write_text('[{"value":1e' + "9" * 100 + "}]", encoding="utf-8")
     with pytest.raises(DataLoadError, match="Could not load JSON file"):
         JsonLoader(Settings()).load(path)
+
+
+def test_json_loader_reads_column_oriented_object(tmp_path: Path) -> None:
+    file_path = tmp_path / "columns.json"
+    file_path.write_text(
+        '{"city": ["Pune", "Delhi", null], "visits": [3, 5, 7], '
+        '"rate": [0.5, 1.25, null]}',
+        encoding="utf-8",
+    )
+
+    data = JsonLoader(Settings()).load(file_path).data
+
+    assert list(data.columns) == ["city", "visits", "rate"]
+    assert len(data) == 3
+    assert data["city"].tolist()[:2] == ["Pune", "Delhi"]
+    assert str(data["visits"].dtype) == "int64"
+    assert data["rate"].tolist()[:2] == [0.5, 1.25]
+
+
+def test_json_loader_reads_empty_column_arrays_as_empty_table(tmp_path: Path) -> None:
+    file_path = tmp_path / "columns.json"
+    file_path.write_text('{"a": [], "b": []}', encoding="utf-8")
+
+    assert JsonLoader(Settings()).load(file_path).data.empty
+
+
+def test_json_loader_rejects_unequal_column_arrays(tmp_path: Path) -> None:
+    file_path = tmp_path / "columns.json"
+    file_path.write_text('{"a": [1, 2], "b": [3]}', encoding="utf-8")
+
+    with pytest.raises(DataLoadError, match="same number of values"):
+        JsonLoader(Settings()).load(file_path)
+
+
+def test_json_loader_keeps_record_with_nested_arrays_as_one_row(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "record.json"
+    file_path.write_text('{"id": [1, 2], "tags": [["x"], ["y"]]}', encoding="utf-8")
+
+    data = JsonLoader(Settings()).load(file_path).data
+
+    assert len(data) == 1
+    assert data.loc[0, "id"] == [1, 2]

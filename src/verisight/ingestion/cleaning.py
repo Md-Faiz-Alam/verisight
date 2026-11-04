@@ -45,8 +45,11 @@ _MAX_VARIANT_GROUPS = 5
 
 
 def clean_table(table: LoadedTable) -> None:
-    """Trim padded headers, then convert or report messy values in place."""
-    notes: list[ValueNote] = []
+    """Trim padded headers, then convert or report messy values in place.
+
+    Notes a loader already recorded, such as generated header names, are kept.
+    """
+    notes: list[ValueNote] = list(table.value_notes)
     notes.extend(_trim_headers(table))
     for column in table.data.columns:
         notes.extend(_clean_column(table.data, str(column)))

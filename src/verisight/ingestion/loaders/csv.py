@@ -12,7 +12,7 @@ import pandas as pd
 from verisight.config import Settings
 from verisight.ingestion.exceptions import DataLoadError
 from verisight.ingestion.loaders.base import BaseTableLoader
-from verisight.ingestion.models import CsvReadOptions, LoadedTable
+from verisight.ingestion.models import CsvReadOptions, LoadedTable, ValueNote
 from verisight.ingestion.temporal import parse_iso_datetimes
 from verisight.ingestion.validation import validate_file
 
@@ -90,10 +90,9 @@ class CsvLoader(BaseTableLoader):
                 keep_default_na=False,
                 na_filter=False,
             )
-            source_columns = header.iloc[0].tolist()
-            if any(not str(column).strip() for column in source_columns):
-                raise DataLoadError("CSV column headers must not be blank.")
-            if not pd.Index(source_columns).is_unique:
+            source_columns = [str(column) for column in header.iloc[0].tolist()]
+            columns, notes = self._name_blank_headers(source_columns)
+            if not pd.Index(columns).is_unique:
                 raise DataLoadError("CSV contains duplicate source column headers.")
 
             data = pd.read_csv(
@@ -111,6 +110,8 @@ class CsvLoader(BaseTableLoader):
                     "Implicit row indexes are not supported."
                 )
 
+            # A length mismatch raises ValueError and becomes a load error.
+            data.columns = pd.Index(columns, dtype=object)
             data = self._infer_safe_column_types(data)
 
         except DataLoadError:
@@ -118,11 +119,49 @@ class CsvLoader(BaseTableLoader):
         except Exception as exc:
             raise DataLoadError(f"Could not load CSV file: {metadata.path}") from exc
 
-        return LoadedTable(
+        table = LoadedTable(
             name=metadata.path.stem,
             data=data,
             source=replace(metadata, csv_encoding=encoding, csv_delimiter=delimiter),
         )
+        table.value_notes = notes
+        return table
+
+    @staticmethod
+    def _name_blank_headers(
+        source_columns: list[str],
+    ) -> tuple[list[str], tuple[ValueNote, ...]]:
+        """Name blank headers ``unnamed_<position>`` and report each one.
+
+        Spreadsheet and pandas exports often leave the index column header
+        empty. A generated name keeps the column queryable; it never matches
+        another header, compared ASCII case-insensitively like SQL names.
+        """
+        taken = {column.lower() for column in source_columns if column.strip()}
+        columns: list[str] = []
+        notes: list[ValueNote] = []
+        for position, column in enumerate(source_columns, start=1):
+            if column.strip():
+                columns.append(column)
+                continue
+            base = f"unnamed_{position}"
+            name = base
+            number = 2
+            while name.lower() in taken:
+                name = f"{base}_{number}"
+                number += 1
+            taken.add(name.lower())
+            columns.append(name)
+            notes.append(
+                ValueNote(
+                    column=name,
+                    rule="named_blank_column",
+                    affected_count=1,
+                    examples=(),
+                    detail=f"Header position {position} was blank.",
+                )
+            )
+        return columns, tuple(notes)
 
     @staticmethod
     def _detect_encoding(path: Path) -> str:

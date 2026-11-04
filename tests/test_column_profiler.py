@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -254,3 +256,20 @@ def test_numeric_profile_distinguishes_missing_and_non_finite_values() -> None:
     assert statistics.standard_deviation is None
     assert statistics.non_finite_count == 1
     assert statistics.non_finite_ratio == pytest.approx(0.5)
+
+
+def test_profiles_exact_decimal_column_as_numeric() -> None:
+    series = pd.Series(
+        [Decimal("0.12345678901234567890"), Decimal("2.5"), None], dtype=object
+    )
+
+    profile = ColumnProfiler().profile(
+        name="amount",
+        series=series,
+        logical_type=LogicalType.DECIMAL,
+    )
+
+    assert profile.numeric_statistics is not None
+    assert profile.minimum == Decimal("0.12345678901234567890")
+    assert profile.maximum == Decimal("2.5")
+    assert profile.numeric_statistics.mean == pytest.approx(1.3117283945)

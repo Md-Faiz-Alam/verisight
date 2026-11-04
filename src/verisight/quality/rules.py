@@ -310,6 +310,12 @@ _NOTE_ISSUES: dict[str, tuple[QualityIssueType, QualitySeverity, str]] = {
         QualitySeverity.INFO,
         "Leading or trailing spaces were removed from the column name.",
     ),
+    "named_blank_column": (
+        QualityIssueType.NAMED_BLANK_COLUMN,
+        QualitySeverity.WARNING,
+        "The column had no header in the file, so it was named after its "
+        "position. Check what it holds before relying on it.",
+    ),
 }
 
 

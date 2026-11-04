@@ -42,7 +42,10 @@ of mixed scalar types in SQL results.
 Loaded tables reject column identities that collide after string conversion
 and ASCII case normalization, matching DuckDB's identifier behavior even for
 quoted names. Blank and NUL-containing column names are also rejected; valid
-names are not silently renamed. The executor rechecks column and relation
+names are not silently renamed. Before that check, the CSV loader names each
+blank source header `unnamed_<position>` (with a numeric suffix if the name is
+taken) and records a `named_blank_column` warning finding, so the rename is
+always reported. The executor rechecks column and relation
 identities before registration. Loaded DataFrames and table lists remain
 caller-owned mutable data: these checks do not lock against concurrent mutation.
 This is not Unicode case folding. CSV loading rejects implicit
@@ -52,6 +55,10 @@ record-width validator.
 
 For inferred CSV numerical columns that cannot retain their source decimal
 values through ordinary numeric conversion, loading falls back to Decimal.
+A column whose non-missing values are all finite Decimals infers as `decimal`
+and receives numeric profile statistics; its minimum and maximum stay exact,
+while the mean, median and standard deviation are computed from floats. A mix
+of Decimal and float values stays `unknown`.
 Object-backed numerical columns are bound through explicitly checked DuckDB
 DECIMAL precision and scale. Non-finite values in that binding path or a required
 precision above 38 digits raise a query runtime error. Native float columns keep
@@ -70,8 +77,10 @@ existing bounded repair path. Planning can still occur before binding fails.
 
 JSON parsing rejects duplicate keys and nonstandard NaN/infinity constants.
 Integers retain their source values; decimal tokens use a Decimal fallback when
-ordinary float conversion changes the decimal string value. Supported tabular
-JSON structures do not imply support for arbitrary nested documents or exact
+ordinary float conversion changes the decimal string value. The supported
+roots are an array of objects (one per row), a single object (one row), and an
+object whose values are equal-length arrays of scalars (one array per column).
+Arrays of unequal length are rejected. Supported tabular JSON structures do not imply support for arbitrary nested documents or exact
 SQL processing of every nested value.
 
 Excel ingestion does not recalculate formulas. `.xlsx` formulas require saved
