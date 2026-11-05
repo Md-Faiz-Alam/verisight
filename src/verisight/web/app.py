@@ -224,6 +224,26 @@ def _default_factory(settings: Settings) -> VeriSight:
     return VeriSight(settings=settings)
 
 
+# Browsers parse JSON numbers as doubles, which hold integers exactly only up
+# to 2**53 - 1. Larger integers are sent as decimal strings so no digit changes.
+_MAX_SAFE_INTEGER = 2**53 - 1
+
+
+def _browser_safe(value: object) -> object:
+    """Send integers a browser would round as exact decimal strings."""
+    if isinstance(value, dict):
+        return {key: _browser_safe(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_browser_safe(item) for item in value]
+    if (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and abs(value) > _MAX_SAFE_INTEGER
+    ):
+        return str(value)
+    return value
+
+
 def _profile_view(analysis: DatasetAnalysisResult) -> dict[str, object]:
     """Profile for display, without server-side file paths."""
     sources = []
@@ -231,13 +251,14 @@ def _profile_view(analysis: DatasetAnalysisResult) -> dict[str, object]:
         fields = cast(dict[str, object], to_jsonable(source))
         fields.pop("path", None)
         sources.append(fields)
-    return {
+    view: dict[str, object] = {
         "summary": to_jsonable(analysis.summary),
         "sources": sources,
         "schema": to_jsonable(analysis.analysis.schema),
         "profiles": to_jsonable(analysis.analysis.profile),
         "quality_findings": to_jsonable(analysis.analysis.issues),
     }
+    return cast(dict[str, object], _browser_safe(view))
 
 
 def _answer_view(
@@ -257,7 +278,7 @@ def _answer_view(
         and bool(claims)
         and all(claim.verification.status in _VERIFIED for claim in claims)
     )
-    return {
+    view: dict[str, object] = {
         "outcome": "verified" if verified else "unverified",
         "status": result.status.value,
         "answer": result.conclusion,
@@ -281,6 +302,7 @@ def _answer_view(
         "model_calls": to_jsonable(tuple(calls)),
         "elapsed_seconds": round(elapsed, 2),
     }
+    return cast(dict[str, object], _browser_safe(view))
 
 
 def create_app(

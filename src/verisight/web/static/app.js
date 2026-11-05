@@ -96,17 +96,25 @@ async function api(path, options = {}) {
 
 /* ---------- formatting ---------- */
 
-function formatNumber(text) {
-  const value = Number(text);
-  if (text === null || text === undefined || text === "" || !Number.isFinite(value)) {
-    return String(text);
-  }
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(value);
+// Numbers are shown exactly as the server sent them: digits are grouped, never
+// rounded. JSON numbers are safe integers or doubles, which round-trip exactly;
+// exact decimals and integers beyond 2^53 arrive as decimal strings.
+const PLAIN_DECIMAL = /^([+-]?)(\d+)(\.\d+)?$/;
+
+function exactNumber(value) {
+  if (value === null || value === undefined) return "";
+  const text = String(value);
+  const match = PLAIN_DECIMAL.exec(text);
+  if (!match) return text;
+  const [, sign, whole, fraction = ""] = match;
+  if (whole.length > 1 && whole.startsWith("0")) return text;
+  return `${sign}${BigInt(whole).toLocaleString("en-US")}${fraction}`;
 }
 
 function formatCell(value) {
   if (value === null || value === undefined) return "∅";
-  if (typeof value === "number") return formatNumber(value);
+  // Text cells such as "00123" are never reformatted.
+  if (typeof value === "number") return exactNumber(value);
   return String(value);
 }
 
@@ -159,7 +167,7 @@ function columnRange(profile) {
   }
   if (profile.numeric_statistics) {
     const s = profile.numeric_statistics;
-    return `${formatNumber(s.minimum)} → ${formatNumber(s.maximum)}`;
+    return `${exactNumber(s.minimum)} → ${exactNumber(s.maximum)}`;
   }
   if (typeof profile.distinct_count === "number") return `${profile.distinct_count} distinct`;
   return "";
@@ -359,6 +367,19 @@ function claimLine(item) {
   );
 }
 
+function headline(item) {
+  // The verifier's own decimal string, so every digit can be traced to the cell.
+  const { claim, verification } = item;
+  const exact = verification.status === "supported";
+  const shown = exact ? verification.actual : claim.expected;
+  const note = exact
+    ? "equals the SQL result cell exactly"
+    : `rounded from the SQL result ${exactNumber(verification.actual)}`;
+  return h("div", { class: "headline" },
+    h("span", { class: "big-number", title: String(shown), text: exactNumber(shown) }),
+    h("span", { class: "verified-note", text: note }));
+}
+
 function renderAnswer(card, question, answer) {
   const verified = answer.outcome === "verified";
   const pill = verified
@@ -368,10 +389,7 @@ function renderAnswer(card, question, answer) {
   const body = h("div", { class: "answer-body" });
 
   if (verified && claims.length === 1) {
-    const expected = claims[0].claim.expected;
-    body.append(h("div", { class: "headline" },
-      h("span", { class: "big-number", title: String(expected), text: formatNumber(expected) }),
-      h("span", { class: "verified-note", text: "matches the SQL result exactly" })));
+    body.append(headline(claims[0]));
   }
   if (answer.answer) {
     body.append(h("p", { class: verified ? "answer-text" : "answer-text muted", text: answer.answer }));

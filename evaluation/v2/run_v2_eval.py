@@ -608,7 +608,11 @@ def preflight(data_dir: Path) -> dict[str, dict[str, str]]:
 def classify(
     report: dict[str, object] | None, case: Case, expected: Decimal
 ) -> dict[str, object]:
-    """Score one CLI report. Only the SQL evidence cell is compared, never prose."""
+    """Score one CLI report. Only the SQL evidence cell is compared, never prose.
+
+    Correct and incorrect require an accepted answer; a matching cell in a
+    rejected answer is reported separately as not_accepted.
+    """
     if report is None:
         return {"outcome": "no_report"}
     if report.get("kind") == "operation_error":
@@ -661,8 +665,12 @@ def classify(
             "status": verification["status"],
         }
     actual = Decimal(str(verification["actual"]))
-    outcome = "correct" if _close(actual, expected, case.integer) else "incorrect"
-    return {**base, "outcome": outcome, "actual": str(actual)}
+    matches = _close(actual, expected, case.integer)
+    scored = {**base, "numeric_match": matches, "actual": str(actual)}
+    if base["contract_accepted"] is not True:
+        # A matching cell inside a rejected answer is not an answer users get.
+        return {**scored, "outcome": "not_accepted"}
+    return {**scored, "outcome": "correct" if matches else "incorrect"}
 
 
 def _write_new(path: Path, payload: object) -> None:

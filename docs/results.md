@@ -182,3 +182,12 @@ python evaluation\v2\run_v2_eval.py --prepare --data-dir datasets\v2 --preflight
 Remove `--preflight-only` and add a new `--out` folder outside the repository to
 run live. Each run writes a manifest (revision, packages, settings, questions,
 expected and trap values), one JSON report per attempt and a summary.
+
+Correct and wrong count only answers VeriSight accepted. A matching SQL cell
+inside a rejected answer is scored `not_accepted`, never correct. To rescore a
+saved run with the current scorer, without model calls and without changing the
+run folder:
+
+```powershell
+python evaluation\rescore.py evaluation\v2\run_v2_eval.py <run folder> --out <new folder>
+```

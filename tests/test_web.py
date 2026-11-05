@@ -25,6 +25,7 @@ from verisight.execution.investigation_result import (
 from verisight.service import VeriSight
 from verisight.web import create_app
 from verisight.web.__main__ import main as serve
+from verisight.web.app import _browser_safe
 from verisight.web.config import WebSettings
 from verisight.web.store import DatasetStore, RateLimiter, safe_file_name
 
@@ -266,6 +267,41 @@ def test_verified_answer_shows_sql_cells_and_claims() -> None:
     # The patched generate() bypasses per-call telemetry, so no calls are listed.
     assert answer["model_calls"] == []
     assert answer["recovery"] is None
+
+
+def test_integers_beyond_browser_precision_are_sent_as_text() -> None:
+    big = 9007199254740993  # 2**53 + 1: a browser would show ...992
+    data = json.dumps([{"state": "a", "amount": big}, {"state": "b", "amount": 0}])
+    app = create_app(settings=_settings("server-key"), web=WebSettings())
+    with TestClient(app) as client:
+        dataset = _upload(client, ("data.json", data.encode()))
+        with patch(GENERATE, side_effect=_script(f"The total is {big}.", str(big))):
+            status, answer = _ask(client, dataset["dataset_id"])
+
+    amount = dataset["profile"]["profiles"]["tables"][0]["columns"][1]
+    assert amount["maximum"] == str(big)
+    assert amount["numeric_statistics"]["maximum"] == str(big)
+    assert amount["minimum"] == 0
+    assert status == 200
+    assert answer["outcome"] == "verified"
+    assert answer["steps"][0]["rows"] == [[str(big)]]
+    assert answer["claims"][0]["verification"]["actual"] == str(big)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (2**53 - 1, 2**53 - 1),
+        (-(2**53) + 1, -(2**53) + 1),
+        (2**53, str(2**53)),
+        (-(2**53), str(-(2**53))),
+        (True, True),
+        (0.1, 0.1),
+        ({"a": [(2**60, "x")]}, {"a": [[str(2**60), "x"]]}),
+    ],
+)
+def test_browser_safe_values(value: object, expected: object) -> None:
+    assert _browser_safe(value) == expected
 
 
 def test_contradicted_number_is_not_verified(client: TestClient) -> None:

@@ -436,14 +436,22 @@ def preflight(data_dir: Path) -> dict[str, dict[str, str]]:
 
 
 def classify(status: int, body: dict[str, Any], case: Case) -> dict[str, Any]:
-    """Score one API answer. Only the SQL evidence cell is compared, never prose."""
+    """Score one API answer. Only the SQL evidence cell is compared, never prose.
+
+    Correct and incorrect require an answer the website showed as verified and
+    accepted; a matching cell in a rejected answer is reported as not_accepted.
+    """
     if status != 200:
         code = body.get("code") if isinstance(body, dict) else None
         if code in {"provider_unavailable", "busy", "rate_limited"}:
             return {"outcome": "provider_error", "http_status": status, "code": code}
         return {"outcome": "application_error", "http_status": status, "code": code}
+    assessment = body.get("assessment")
     base: dict[str, Any] = {
         "web_outcome": body.get("outcome"),
+        "accepted": body.get("outcome") == "verified"
+        and isinstance(assessment, dict)
+        and assessment.get("accepted") is True,
         "sql": [step.get("sql") for step in body.get("steps", [])],
         "review_required": body.get("review_required"),
         "recovery_used": bool(body.get("recovery")),
@@ -470,8 +478,12 @@ def classify(status: int, body: dict[str, Any], case: Case) -> dict[str, Any]:
             "status": verification["status"],
         }
     actual = Decimal(str(verification["actual"]))
-    outcome = "correct" if _close(actual, case) else "incorrect"
-    return {**base, "outcome": outcome, "actual": str(actual)}
+    matches = _close(actual, case)
+    scored = {**base, "numeric_match": matches, "actual": str(actual)}
+    if not base["accepted"]:
+        # A matching cell inside a rejected answer is not an answer users get.
+        return {**scored, "outcome": "not_accepted"}
+    return {**scored, "outcome": "correct" if matches else "incorrect"}
 
 
 def _client(base_url: str | None) -> Any:

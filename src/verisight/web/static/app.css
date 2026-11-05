@@ -302,7 +302,7 @@ h1 .accent {
 
 .answer-body { padding: 18px; }
 .headline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; }
-.big-number { font-size: clamp(30px, 5vw, 42px); font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.big-number { font-size: clamp(30px, 5vw, 42px); font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .verified-note { color: var(--ok); font-size: 13.5px; font-weight: 600; }
 .answer-text { margin: 10px 0 0; font-size: 16px; }
 .notice { margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 14px; }
