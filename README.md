@@ -74,15 +74,15 @@ which is used for one question and never stored. To publish it, see
 
 ## Live results
 
-Across **150 live Gemini attempts** on 37 frozen questions in 7 domains
-(banking, transport, ecology, gem retail, e-commerce orders, customer records
-and energy sensors) and 3 formats (CSV, JSON, Excel), VeriSight accepted **85
-answers, and all 85 matched independently computed values: 0 wrong**. The
-questions include messy values such as `$1,234.50`, `N/A` and `Shipped ` /
-`shipped`, ISO dates, two-file joins and traps where a plausible query gives a
-wrong number. In 13 attempts no number could be verified, and VeriSight said so
-instead of guessing; 52 were lost to provider overload. Every run is listed,
-including failures, in [Live results](docs/results.md).
+Across **150 development attempts** on 37 frozen questions in 7 domains and 3
+formats (CSV, JSON, Excel), VeriSight accepted **85 answers, all correct**; in
+13 it said no number could be verified instead of guessing. On **held-out**
+datasets that played no part in development, with questions committed before
+each run, the first set exposed bugs and **3 wrong accepted answers** where the
+SQL answered a different question. After the fixes, a second held-out set of
+15 questions on 5 more unseen datasets gave **26 correct and 0 wrong** in 30
+attempts. Every run is listed, including failures, in
+[Live results](docs/results.md).
 
 ## Scope and limits
 
@@ -114,7 +114,7 @@ review the SQL. Narrative verification remains explicitly false.
 | Caller-selected relation populations | Implemented |
 | Optional caller-selected claim output acceptance | Implemented |
 | Python 3.11 CI on Windows and Linux | Implemented |
-| Analytical correctness on unfamiliar data | Evidenced on 37 live questions ([Live results](docs/results.md)); not guaranteed |
+| Analytical correctness on unfamiliar data | Evidenced on 67 live questions, 30 of them held out ([Live results](docs/results.md)); not guaranteed |
 | Narrative meaning | Not verified |
 | Local CLI for profile, preview, investigation, and JSON export | Implemented |
 | Unfamiliar-data reliability and release readiness | Remaining work |

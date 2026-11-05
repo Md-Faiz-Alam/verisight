@@ -2,21 +2,29 @@
 
 VeriSight answers questions about tabular data from any domain by writing SQL,
 running it, and accepting a number only when that number is found in the SQL
-result. This page reports every live run of its three evaluations, including
+result. This page reports every live run of its evaluations, including
 failures. No run was repeated to replace a worse one.
 
 ## At a glance
 
-| | |
-| --- | --- |
-| Live attempts | **150** |
-| Answers VeriSight accepted | **85** |
-| Accepted answers that were wrong | **0** |
-| Attempts that ended without an accepted number | 13 (VeriSight reported this rather than guessing) |
-| Attempts lost to the model provider (HTTP 503/500) | 52 |
-| Domains | 7: banking, transport, ecology, gem retail, e-commerce orders, customer records, energy sensors |
-| File formats | CSV, JSON, Excel |
-| Model | `gemini-3.1-flash-lite` (free tier), Python 3.11.9, `google-genai` 2.27.0 |
+| | Development | Held-out v1 | Held-out v2 |
+| --- | --- | --- | --- |
+| Questions | 37 | 15 | 15 |
+| Live attempts | 150 | 30 | 30 |
+| Correct accepted answers | **85** | 7 | **26** |
+| Wrong accepted answers | **0** | **3** | **0** |
+| No accepted number | 13 | 5 | 3 |
+| Lost to the model provider | 52 | 15 | 1 |
+| Domains | 7 | 5 | 5 |
+
+- **Development** evaluations were used while building VeriSight; gaps they
+  found were fixed between runs.
+- **Held-out** questions use public datasets that played no part in
+  development and were committed to the repository before their first run.
+  Held-out v1 exposed two bugs and two semantic errors; after the fixes,
+  held-out v2 measured the engine on five more unseen datasets.
+- Model: `gemini-3.1-flash-lite` (free tier), Python 3.11.9, `google-genai`
+  2.27.0. File formats: CSV, JSON, Excel.
 
 "Wrong" means a number VeriSight accepted that differs from an expected answer
 computed independently, from the source data, without VeriSight, pandas or
@@ -105,7 +113,7 @@ Every one of the 14 questions has been answered correctly at least once. Run 2
 found that a correct sum, `333819.64`, was refused because the SQL cell held
 binary floating-point noise, `333819.64000000036`; this was fixed before run 3.
 
-### Totals
+### Development totals
 
 | Evaluation | Attempts | Correct | Wrong | No accepted number | Provider errors |
 | --- | --- | --- | --- | --- | --- |
@@ -113,6 +121,64 @@ binary floating-point noise, `333819.64000000036`; this was fixed before run 3.
 | Multidomain v1 | 78 | 35 | 0 | 4 | 39 |
 | Evaluation v2 | 42 | 27 | 0 | 2 | 13 |
 | **All** | **150** | **85** | **0** | **13** | **52** |
+
+### Held-out v1 (15 questions, 5 unseen datasets)
+
+Movies (JSON), natural disaster deaths (CSV), barley yields (Excel), monthly
+CO2 readings (CSV) and GLUE benchmark scores (CSV), pinned to exact commits.
+Questions and answers were committed in `7c27755` before any run; the two runs
+used the website's REST API.
+
+| Run | Revision | Correct | Wrong | No accepted number | Provider errors |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `7c27755` | 3 | 2 | 2 | 8 |
+| 2 | `7c27755` | 4 | 1 | 3 | 7 |
+
+All three wrong answers were accepted because each number did come from the
+SQL, but the SQL answered a different question:
+
+- *How many people died in natural disasters in 2010?* The table holds an
+  `All natural disasters` row per year next to its parts. `SUM(Deaths) WHERE
+  Year = 2010` counted every death twice: 659800 instead of 329900 (both runs).
+- *How many earthquake deaths over all years?* Run 1's SQL had no earthquake
+  filter and summed every row: 65214300 instead of 2576801. Run 2 was correct.
+
+Four of the five missing answers had correct SQL blocked by two bugs: a
+difference answer could not cite two cells, and labels such as `PG-13` were
+read as stray numbers. All four problems were fixed in `fd543a9`: difference
+operands are returned as separate columns, hyphenated labels are recognised,
+total rows are detected and reported (`total_row`), and an answer whose SQL
+skips a named value or adds total rows to their parts is marked for review.
+Re-checked offline, the new reviews flag all three wrong answers and none of
+the seven correct ones. Because the fixes were designed after these failures,
+they were measured on a new set.
+
+### Held-out v2 (15 questions, 5 more unseen datasets)
+
+Historical US jobs by sex (JSON), household income by state (Excel), monthly
+unemployment by industry (JSON), daily weather in two cities (CSV) and an
+antibiotic study (Excel). Four questions ask for a difference; two are
+counting-grain traps, because each state's total repeats on ten income-group
+rows. Committed in `bb8310f` before any run, at the revision that includes the
+fixes above.
+
+| Run | Revision | Correct | Wrong | No accepted number | Provider errors |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `bb8310f` | **13** | 0 | 2 | 0 |
+| 2 | `bb8310f` | **13** | 0 | 1 | 1 |
+
+- All 8 difference attempts and all 4 counting-grain traps were correct.
+- *Texas's pct for the 200000+ group* failed in both runs: the SQL filtered
+  `region = 'Texas'`, although Texas is in the `name` column. The query
+  returned no rows, and VeriSight said so instead of reporting a number.
+- One run stopped when the model's next investigation step could not be
+  completed; VeriSight reported the investigation as incomplete.
+- One correct answer was marked for review because an earlier query in the same
+  investigation used `sex = 'Female'` (the data uses `women`); the final query
+  and its number were right.
+- Provider overload was much lower on this day than during held-out v1, and
+  these datasets may simply be easier. Two runs of 15 questions show the fixes
+  work on unseen data; they do not establish an accuracy rate.
 
 ## Examples from live runs
 
@@ -163,13 +229,17 @@ because `NOT IN` never matches null.
 - An accepted number is proven to come from an executed SQL result. The
   verifier does not prove that the SQL means what the question asked. The
   evaluations measure that separately, against independent answers and traps.
-- These are development evaluations with known questions, not a held-out
-  benchmark. Gaps they found were fixed between runs, as the tables show.
+- Development evaluations used known questions, and gaps they found were fixed
+  between runs. Held-out questions were committed before their first run; after
+  held-out v1 found failures, a new held-out set measured the fixes.
+- Accepted answers can still be wrong when the SQL answers a different question:
+  held-out v1 recorded three such answers. Review flags now catch the patterns
+  seen there, but not every possible mistake.
 - v2 data is generated, not collected; it reproduces common real-world problems
   but not every one. Formats outside the documented cleaning rules stay as text.
 - Provider errors depend on the free model tier's load and are excluded from the
   correct and wrong counts, not hidden: they appear in every table.
-- 150 attempts across 37 questions is evidence, not a reliability guarantee.
+- 210 attempts across 67 questions is evidence, not a reliability guarantee.
 
 ## Reproduce
 
@@ -177,6 +247,8 @@ because `NOT IN` never matches null.
 python evaluation\bank\run_bank_eval.py --dataset datasets\bank_marketing\bank-additional-full.csv --preflight-only
 python evaluation\multidomain\run_multidomain_eval.py --prepare --data-dir datasets\multidomain --preflight-only
 python evaluation\v2\run_v2_eval.py --prepare --data-dir datasets\v2 --preflight-only
+python evaluation\heldout\run_heldout_eval.py --prepare --data-dir <data folder> --preflight-only
+python evaluation\heldout_v2\run_heldout_eval.py --prepare --data-dir <data folder> --preflight-only
 ```
 
 Remove `--preflight-only` and add a new `--out` folder outside the repository to
