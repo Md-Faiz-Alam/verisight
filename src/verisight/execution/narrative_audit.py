@@ -20,8 +20,11 @@ _NUMBER = re.compile(
 )
 
 # A word that mixes letters and digits, such as VVS1 or Q4, is a label when it
-# is copied from the question or the evidence, not a quantity.
+# is copied from the question or the evidence, not a quantity. Hyphenated
+# words such as PG-13 or COVID-19 are compared whole, so their digits are not
+# mistaken for a separate number.
 _WORD = re.compile(r"\w+")
+_COMPOUND = re.compile(r"\w+(?:-\w+)+")
 
 NumberLink = Literal[
     "claim_value", "cited_cell", "rounded_claim_value", "rounded_cited_cell"
@@ -80,7 +83,8 @@ def label_words(texts: Iterable[str]) -> frozenset[str]:
     return frozenset(
         word.casefold()
         for text in texts
-        for word in _WORD.findall(text)
+        for pattern in (_WORD, _COMPOUND)
+        for word in pattern.findall(text)
         if any(c.isalpha() for c in word) and any(c.isdigit() for c in word)
     )
 
@@ -97,9 +101,10 @@ def audit_narrative_digit_coverage(
     Digits inside a whole word found in ``labels`` are not counted.
     """
     label_positions: set[int] = set()
-    for match in _WORD.finditer(text):
-        if match.group().casefold() in labels:
-            label_positions.update(range(match.start(), match.end()))
+    for pattern in (_WORD, _COMPOUND):
+        for match in pattern.finditer(text):
+            if match.group().casefold() in labels:
+                label_positions.update(range(match.start(), match.end()))
     digit_positions = {
         index
         for index, character in enumerate(text)

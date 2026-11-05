@@ -155,7 +155,9 @@ A conclusion number is linked when it equals a claim's expected value, one of
 the two cells a `difference` claim subtracts, or either of those rounded to the
 number's own decimal places, such as `3851.41` for `3851.4105577…`. Data labels
 that mix letters and digits and come from the question or the evidence, such as
-`VVS1`, are not treated as numbers. Every accepted number still traces to a
+`VVS1`, or hyphenated ones such as `PG-13` and `COVID-19`, are not treated as
+numbers. A hyphenated label is compared whole, and one that appears in neither
+the question nor the evidence still counts. Every accepted number still traces to a
 claim or the evidence cells it cites.
 
 Repair guidance asks the model to omit those quantities entirely from the
@@ -231,7 +233,12 @@ acceptance. It changes the CLI exit status only when a requested metric display
 is withheld; see [Metric displays and advisory reviews](#metric-displays-and-advisory-reviews).
 
 The heuristic compares exact case-insensitive category mentions in the original
-question with bounded observed string values and simple SQL filters. It handles
+question with bounded observed string values and simple SQL filters. A regular
+English plural of a value's last word also counts as a mention, so `earthquakes`
+names `Earthquake` and `categories` names `Category`. The values come from a
+review-only list of up to 200 distinct strings per column (64 KiB in total) that
+is never sent to a model; the smaller prompt list is used only when the review
+list is unavailable. It handles
 one directly queried outer table, aliases, conjunctions, equality, inequality,
 and literal membership. A nested membership query on another column does not
 establish a category filter on the outer table. An exact single-value caller
@@ -256,6 +263,11 @@ value is shared by several columns, it is attributed to a single column only if
 the question names that column for it, as in `loan is yes`,
 `default status is no` or `loan = 'yes'`. No status establishes intended business
 meaning.
+
+The review also warns, with the code `total_rows_not_excluded`, when an aggregate
+over one directly queried table never references a column that holds detected
+total rows (see the `total_row` data-quality finding). Such a query neither
+filters nor groups by that column, so it may add each total to its own parts.
 
 Warnings contain the relation, column, mentioned category and a stable code.
 These local diagnostics can contain dataset identifiers and values. They use

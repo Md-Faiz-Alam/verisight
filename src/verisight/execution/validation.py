@@ -343,7 +343,7 @@ def _question_mentions_category(question: str, value: str) -> bool:
     if not value.strip():
         return False
     question = _without_format_complements(question)
-    literal = re.escape(value)
+    literal = _plural_pattern(value)
     if not re.search(rf"(?<!\w){literal}(?!\w)", question, re.IGNORECASE):
         return False
     negative = (
@@ -351,6 +351,21 @@ def _question_mentions_category(question: str, value: str) -> bool:
         rf"(?:all\s+)?['\"]?{literal}(?!\w)"
     )
     return not re.search(negative, question, re.IGNORECASE)
+
+
+def _plural_pattern(value: str) -> str:
+    """Match a value or a regular English plural of its last word.
+
+    ``Earthquake`` also matches ``earthquakes``, ``Flood`` matches ``floods``
+    and ``Category`` matches ``categories``. Only values ending in a letter of
+    a word of at least three letters get plural forms.
+    """
+    literal = re.escape(value)
+    if not re.search(r"[A-Za-z]{3}$", value):
+        return literal
+    if value[-1] in "yY" and value[-2] not in "aeiouAEIOU":
+        return rf"(?:{literal}|{re.escape(value[:-1])}ies)"
+    return rf"{literal}(?:s|es)?"
 
 
 def _question_assigns_category(question: str, column: str, value: str) -> bool:
@@ -392,6 +407,55 @@ def _population_terms(expression: exp.Expression) -> list[exp.Expression]:
 def review_population(
     question: str, sql: str, context: QueryContext
 ) -> PopulationReview:
+    """Combine the category/filter review with the total-row review.
+
+    Either review can require attention; neither certifies the SQL.
+    """
+    review = _review_categories(question, sql, context)
+    totals = _review_total_rows(sql, context)
+    if not totals:
+        return review
+    return PopulationReview("review_required", (*review.warnings, *totals))
+
+
+def _review_total_rows(
+    sql: str, context: QueryContext
+) -> tuple[PopulationWarning, ...]:
+    """Warn when an aggregate may add detected total rows to their own parts.
+
+    Applies to one direct table with a detected total row whose category
+    column the query never references, so it neither filters nor groups by it.
+    """
+    try:
+        statements = sqlglot.parse(sql, read="duckdb")
+    except ParseError:
+        return ()
+    if len(statements) != 1 or not isinstance(statements[0], exp.Select):
+        return ()
+    query = statements[0]
+    source = query.args.get("from_")
+    if (
+        query.args.get("joins")
+        or not isinstance(source, exp.From)
+        or not isinstance(source.this, exp.Table)
+        or query.find(exp.AggFunc) is None
+    ):
+        return ()
+    relation = source.this.name.casefold()
+    referenced = {column.name.casefold() for column in query.find_all(exp.Column)}
+    return tuple(
+        PopulationWarning(
+            item.relation, item.column, item.value, "total_rows_not_excluded"
+        )
+        for item in context.total_rows
+        if item.relation.casefold() == relation
+        and item.column.casefold() not in referenced
+    )
+
+
+def _review_categories(
+    question: str, sql: str, context: QueryContext
+) -> PopulationReview:
     """Warn about a narrow category/filter mismatch without certifying SQL.
 
     Only one direct outer table is assessed. CTEs, joins, derived tables,
@@ -420,7 +484,7 @@ def review_population(
         return unknown
     categories = [
         item
-        for item in context.observed_categories
+        for item in context.review_categories or context.observed_categories
         if item.relation.casefold() == table.name.casefold()
     ]
     candidates = [

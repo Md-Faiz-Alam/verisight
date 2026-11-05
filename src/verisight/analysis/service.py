@@ -6,6 +6,7 @@ from verisight.ingestion.schema import SchemaInferer
 from verisight.profiling.dataset import DatasetProfiler
 from verisight.quality.models import QualityIssue
 from verisight.quality.rules import QualityRuleEngine, value_note_issues
+from verisight.quality.totals import total_row_issues
 
 
 class DatasetAnalyzer:
@@ -33,6 +34,7 @@ class DatasetAnalyzer:
 
         for table in dataset.tables:
             issues.extend(value_note_issues(table))
+            issues.extend(total_row_issues(table))
 
         return DatasetAnalysis(
             schema=schema,

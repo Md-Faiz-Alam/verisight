@@ -36,6 +36,7 @@ const ISSUE_LABELS = {
   label_variants: "Label variants",
   trimmed_column_name: "Padded column name",
   named_blank_column: "Column without a header",
+  total_row: "Rows that hold totals",
   high_cardinality: "Mostly unique values",
   constant_column: "Single repeated value",
   duplicate_rows: "Duplicate rows",
@@ -43,6 +44,7 @@ const ISSUE_LABELS = {
 
 // Load-time clean-ups first: they explain how messy values were read.
 const ISSUE_ORDER = {
+  total_row: 0,
   label_variants: 0,
   missing_value_markers: 1,
   formatted_numbers: 2,

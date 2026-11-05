@@ -187,3 +187,5 @@ def test_planner_prompt_asks_for_derived_numbers_in_sql() -> None:
 
     assert "including the days between two dates, compute it in SQL" in prompt
     assert "date_diff" in prompt
+    # A difference claim cites two cells, so both operands must be returned.
+    assert "also return each of the two numbers as its own numeric" in prompt

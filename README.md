@@ -318,6 +318,13 @@ with a blank header, such as the unnamed index column of a pandas export, is
 named `unnamed_<position>` and reported as `named_blank_column`; Excel workbooks
 still need every used column to have a header.
 
+Rows that hold the total of other rows, such as a `Total` region per month or an
+`All causes` entity per year, are detected when a category value's measure equals
+the sum of the other rows in nearly every group of rows sharing the remaining
+key columns. They are reported as a `total_row` warning, listed for SQL planning
+so totals are not added to their own parts, and an aggregate that ignores them is
+marked for review.
+
 Excel columns containing native booleans and blanks use a nullable boolean
 dtype and infer as boolean. Numeric `0`/`1` cells and boolean-looking text remain
 distinct from native booleans. Mixed boolean/numeric or boolean/text columns
@@ -420,9 +427,10 @@ VERISIGHT_ALLOW_LLM_DATA_DISCLOSURE=true
 Set `VERISIGHT_GEMINI_MODEL` to override the configured model. Check available
 models and quotas for your provider project. Disclosure permission defaults to
 false. Enabling it permits built-in generation to send analytical context,
-including schema, profiles, questions, query observations, and bounded observed
-categorical values used by SQL planning and repair. These categorical values
-come from the original loaded data before caller-selected population filters.
+including schema, profiles, questions, query observations, bounded observed
+categorical values and detected total-row values used by SQL planning and repair.
+These values come from the original loaded data before caller-selected
+population filters.
 They can include raw identifiers or other sensitive strings and are not
 automatically redacted. Population filters restrict analytical query relations;
 they do not redact model context.

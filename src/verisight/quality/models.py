@@ -22,6 +22,7 @@ class QualityIssueType(StrEnum):
     LABEL_VARIANTS = "label_variants"
     TRIMMED_COLUMN_NAME = "trimmed_column_name"
     NAMED_BLANK_COLUMN = "named_blank_column"
+    TOTAL_ROW = "total_row"
 
 
 class QualitySeverity(StrEnum):

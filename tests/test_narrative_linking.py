@@ -254,7 +254,32 @@ def test_labels_come_from_question_columns_and_text_cells() -> None:
         ["VVS1-clarity in 2019", *observation.result.columns, "basic.4y"]
     )
 
-    assert labels == frozenset({"vvs1", "grade_q4", "4y"})
+    assert labels == frozenset({"vvs1", "vvs1-clarity", "grade_q4", "4y"})
+
+
+@pytest.mark.parametrize(
+    ("text", "unparsed"),
+    [
+        ("Movies rated PG-13 grossed 5 in total.", 0),
+        ("Movies rated pg-13 grossed 5 in total.", 0),
+        ("Movies rated PG-14 grossed 5 in total.", 2),
+        ("COVID-19 cases were 5.", 2),
+    ],
+)
+def test_hyphenated_labels_from_the_question_are_not_numbers(
+    text: str, unparsed: int
+) -> None:
+    labels = label_words(["What is the total for movies rated PG-13?"])
+    tokens = find_narrative_numbers(text, (Decimal(5),))
+
+    coverage = audit_narrative_digit_coverage(text, tokens, labels)
+
+    assert "pg-13" in labels
+    assert coverage.unparsed_digit_count == unparsed
+
+
+def test_digit_only_hyphen_ranges_are_never_labels() -> None:
+    assert label_words(["Between 2010-2012 and 3-4 times"]) == frozenset()
 
 
 def test_digits_outside_labels_are_still_counted() -> None:

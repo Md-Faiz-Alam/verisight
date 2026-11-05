@@ -1,7 +1,7 @@
 """Deterministic query context for analytical execution."""
 
 import json
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from typing import Literal
 
 import pandas as pd
@@ -9,6 +9,7 @@ import pandas as pd
 from verisight.execution.exceptions import QueryValidationError
 from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.schema import DatasetSchema, LogicalType, SchemaInferer
+from verisight.quality.totals import find_total_rows
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,16 +140,42 @@ class ObservedCategoryValues:
     observed_nonmissing_values: tuple[str, ...]
 
 
-def _complete_string_values(series: pd.Series) -> tuple[str, ...] | None:
-    """Retain at most eight values of at most 128 characters; never sample."""
+@dataclass(frozen=True, slots=True)
+class ObservedTotalRows:
+    """Rows of one category value that hold the sum of the other rows.
+
+    Detected from the original loaded data by matching sums within groups that
+    share the ``group_by`` columns; an empty ``group_by`` means the whole table.
+    This is untrusted evidence for planning, not a verified business rule.
+    """
+
+    relation: str
+    column: str
+    value: str
+    measures: tuple[str, ...]
+    group_by: tuple[str, ...]
+
+
+_MAX_TOTAL_ROWS = 20
+
+
+def _complete_string_values(
+    series: pd.Series, limit: int = 8
+) -> tuple[str, ...] | None:
+    """Retain at most ``limit`` values of at most 128 characters; never sample."""
     values: set[str] = set()
     for value in series.dropna():
         if not isinstance(value, str) or len(value) > 128:
             return None
         values.add(value)
-        if len(values) > 8:
+        if len(values) > limit:
             return None
     return tuple(sorted(values)) if values else None
+
+
+# Review-only category values: larger than the prompt list, never sent to a model.
+_REVIEW_VALUES_PER_COLUMN = 200
+_REVIEW_VALUES_BUDGET = 65_536
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +185,11 @@ class QueryContext:
     relations: tuple[QueryRelation, ...]
     population: tuple[PopulationFilter, ...] = ()
     observed_categories: tuple[ObservedCategoryValues, ...] = ()
+    total_rows: tuple[ObservedTotalRows, ...] = ()
+    # Complete value sets for advisory review only; never formatted into prompts.
+    review_categories: tuple[ObservedCategoryValues, ...] = field(
+        default=(), repr=False
+    )
 
     @property
     def relation_count(self) -> int:
@@ -232,4 +264,38 @@ class QueryContextBuilder:
                     continue
                 categories.append(item)
                 used += size
-        return replace(context, observed_categories=tuple(categories))
+        totals = [
+            ObservedTotalRows(
+                relation=relation.relation_name,
+                column=found.column,
+                value=found.value,
+                measures=found.measures,
+                group_by=found.keys,
+            )
+            for table, relation in zip(dataset.tables, context.relations, strict=True)
+            for found in find_total_rows(table.data, relation.columns)
+            if len(found.value) <= 128
+        ][:_MAX_TOTAL_ROWS]
+        review: list[ObservedCategoryValues] = []
+        review_used = 0
+        for table, relation in zip(dataset.tables, context.relations, strict=True):
+            for column in relation.columns:
+                if column.logical_type is not LogicalType.STRING:
+                    continue
+                values = _complete_string_values(
+                    table.data[column.name], _REVIEW_VALUES_PER_COLUMN
+                )
+                if values is None:
+                    continue
+                review_used += sum(len(value) for value in values)
+                if review_used > _REVIEW_VALUES_BUDGET:
+                    break
+                review.append(
+                    ObservedCategoryValues(relation.relation_name, column.name, values)
+                )
+        return replace(
+            context,
+            observed_categories=tuple(categories),
+            total_rows=tuple(totals),
+            review_categories=tuple(review),
+        )

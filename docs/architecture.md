@@ -425,7 +425,9 @@ recognized by `str.isdigit()`, including Unicode digits, and checks whether
 they fall inside successfully parsed tokens from that same conclusion. Digits
 inside a word that mixes letters and digits and also appears in the question,
 an observation's column names, or its text result cells, such as `VVS1` or
-`Q4`, are data labels and are not counted. Unknown mixed words still count.
+`Q4`, are data labels and are not counted. Hyphenated words mixing letters and
+digits, such as `PG-13`, are compared whole, so `13` is not read as a separate
+number when `PG-13` appears in the question. Unknown mixed words still count.
 
 | Field | Meaning |
 | --- | --- |

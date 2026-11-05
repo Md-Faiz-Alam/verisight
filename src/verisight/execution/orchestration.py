@@ -44,7 +44,8 @@ _RECOVERY_INSTRUCTION = (
     "The evidence collected so far does not contain the requested final value "
     "as a numeric SQL result cell. Compute each value the requested claim needs "
     "directly in SQL, each as its own numeric result column, instead of only "
-    "counts or other components."
+    "counts or other components. For a difference, return the two numbers it "
+    "subtracts as separate numeric columns in the same row as the difference."
 )
 
 
