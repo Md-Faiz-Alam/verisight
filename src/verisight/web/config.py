@@ -37,6 +37,10 @@ class WebSettings(BaseSettings):
         default=2.0, gt=0, le=60, allow_inf_nan=False
     )
     max_result_rows: int = Field(default=20, gt=0, le=1000)
+    # Expired uploads are deleted on this schedule even when no one visits.
+    cleanup_interval_seconds: float = Field(
+        default=60.0, gt=0, le=3600, allow_inf_nan=False
+    )
     # Behind one load balancer (AWS Lightsail or ALB), the client address is
     # the right-most X-Forwarded-For entry, which that proxy appends. Enable
     # only when such a proxy is always in front of the server.

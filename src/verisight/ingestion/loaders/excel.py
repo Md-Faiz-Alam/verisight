@@ -68,7 +68,12 @@ class ExcelLoader:
 
         try:
             if metadata.file_extension == ".xlsx":
-                _validate_xlsx_cells(metadata.path)
+                _validate_xlsx_cells(
+                    metadata.path,
+                    max_unpacked_bytes=self._settings.max_excel_uncompressed_mb
+                    * 1024
+                    * 1024,
+                )
             with pd.ExcelFile(metadata.path) as workbook:
                 for sheet_name in workbook.sheet_names:
                     if not isinstance(sheet_name, str):
@@ -141,14 +146,22 @@ class ExcelLoader:
         )
 
 
-def _validate_xlsx_cells(path: Path) -> None:
+def _validate_xlsx_cells(path: Path, *, max_unpacked_bytes: int) -> None:
     """Inspect source cells before pandas hides formulas and Excel errors.
 
     Saved formula results are used without recalculation or freshness checks.
     An explicitly cached empty string is supported; a missing cache is not.
     Inspect worksheet roots rather than assuming particular ZIP entry paths.
+    The archive's declared unpacked size is checked first; Python's zipfile
+    never reads past a member's declared size, so this bounds parsing memory.
     """
     with ZipFile(path) as archive:
+        unpacked = sum(entry.file_size for entry in archive.infolist())
+        if unpacked > max_unpacked_bytes:
+            raise DataLoadError(
+                "Excel workbook expands to more than "
+                f"{max_unpacked_bytes // (1024 * 1024)} MB when unpacked."
+            )
         for entry in archive.infolist():
             with archive.open(entry) as source:
                 events = ElementTree.iterparse(source, events=("start", "end"))

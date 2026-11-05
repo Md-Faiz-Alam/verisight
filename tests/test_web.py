@@ -548,3 +548,171 @@ def test_server_explains_missing_web_extras() -> None:
         serve([])
 
     assert "pip install" in str(caught.value)
+
+
+def test_capacity_is_enforced_when_uploads_finish_not_when_they_start() -> None:
+    from verisight.web.store import StoredDataset, StoreFullError
+
+    clock = Clock()
+    store = DatasetStore(ttl_seconds=60, max_datasets=2, clock=clock)
+    first, first_dir = store.create_directory()
+    second, second_dir = store.create_directory()
+    # Slots are reserved atomically: a third concurrent upload must wait.
+    with pytest.raises(StoreFullError):
+        store.create_directory()
+
+    store.add(StoredDataset(first, first_dir, (), clock()))
+    clock.now += 1
+    store.add(StoredDataset(second, second_dir, (), clock()))
+    clock.now += 1
+    # Starting an upload at capacity evicts nothing.
+    third, third_dir = store.create_directory()
+    assert store.get(first) is not None
+
+    # A failed upload releases its slot and never evicts stored data.
+    store.release(third)
+    store.release(third)
+    assert not third_dir.exists()
+    assert store.get(first) is not None
+
+    # A finished upload evicts the oldest stored dataset beyond capacity.
+    fourth, fourth_dir = store.create_directory()
+    store.add(StoredDataset(fourth, fourth_dir, (), clock()))
+    assert store.get(first) is None
+    assert not first_dir.exists()
+    assert store.get(second) is not None
+    assert store.get(fourth) is not None
+
+    _, pending_dir = store.create_directory()
+    store.clear()
+    assert not pending_dir.exists()
+    assert not second_dir.exists()
+
+
+def test_invalid_upload_at_capacity_keeps_the_stored_dataset() -> None:
+    store = DatasetStore(ttl_seconds=60, max_datasets=1)
+    app = create_app(settings=_settings(), web=WebSettings(), store=store)
+    with TestClient(app) as client:
+        kept = _upload(client, ("data.csv", CSV))["dataset_id"]
+        _upload(client, ("bad.json", b"{broken"), status=422)
+        _upload(client, ("a.parquet", b"x"), status=415)
+
+        assert store.get(str(kept)) is not None
+
+
+def test_uploads_are_refused_while_every_slot_is_being_checked() -> None:
+    store = DatasetStore(ttl_seconds=60, max_datasets=1)
+    store.create_directory()
+    app = create_app(settings=_settings(), web=WebSettings(), store=store)
+    with TestClient(app) as client:
+        assert _upload(client, ("data.csv", CSV), status=503)["code"] == "busy"
+        assert client.post("/api/datasets/demo").status_code == 503
+
+
+def test_oversized_request_is_refused_before_it_is_parsed() -> None:
+    with _client(max_upload_mb=1, max_files=1) as client:
+        body = b"a\n" + b"1\n" * (1024 * 1024 + 300_000)
+        response = client.post("/api/datasets", files=[("files", ("big.csv", body))])
+
+    assert response.status_code == 413
+    assert response.json()["code"] == "file_too_large"
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def _limited(
+    downstream: Any, chunks: list[bytes], path: str = "/api/datasets"
+) -> list[Any]:
+    import asyncio
+
+    from verisight.web.app import UploadBodyLimit
+
+    messages: list[dict[str, Any]] = [
+        {"type": "http.request", "body": chunk, "more_body": i < len(chunks) - 1}
+        for i, chunk in enumerate(chunks)
+    ] or [{"type": "http.disconnect"}]
+    sent: list[Any] = []
+
+    async def receive() -> Any:
+        return messages.pop(0) if messages else {"type": "http.disconnect"}
+
+    async def send(message: Any) -> None:
+        sent.append(message)
+
+    middleware = UploadBodyLimit(downstream, limit_bytes=10, max_upload_mb=1)
+    scope = {"type": "http", "method": "POST", "path": path, "headers": []}
+    asyncio.run(middleware(scope, receive, send))
+    return sent
+
+
+async def _read_all_then_reply(scope: Any, receive: Any, send: Any) -> None:
+    while True:
+        message = await receive()
+        if not message.get("more_body"):
+            break
+    # A parser may read again after a disconnect; it must not get more data.
+    assert (await receive())["type"] in {"http.disconnect", "http.request"}
+    await send({"type": "http.response.start", "status": 201, "headers": []})
+    await send({"type": "http.response.body", "body": b""})
+
+
+async def _read_then_fail(scope: Any, receive: Any, send: Any) -> None:
+    while (await receive()).get("more_body"):
+        pass
+    raise ValueError("body could not be parsed")
+
+
+def test_body_limit_counts_bodies_without_a_declared_length() -> None:
+    refused = _limited(_read_all_then_reply, [b"123456", b"789012", b"3"])
+    allowed = _limited(_read_all_then_reply, [b"12345", b"67890"])
+    other = _limited(_read_all_then_reply, [b"x" * 50], path="/api/other")
+    disconnected = _limited(_read_all_then_reply, [])
+    failed = _limited(_read_then_fail, [b"123456", b"789012"])
+
+    assert [m["status"] for m in refused if "status" in m] == [413]
+    assert len(refused) == 2
+    assert allowed[0]["status"] == 201
+    assert other[0]["status"] == 201
+    assert disconnected[0]["status"] == 201
+    assert failed[0]["status"] == 413
+    with pytest.raises(ValueError, match="parsed"):
+        _limited(_read_then_fail, [b"12345"])
+
+
+def test_expired_uploads_are_deleted_while_the_server_is_idle() -> None:
+    import time
+
+    clock = Clock()
+    store = DatasetStore(ttl_seconds=60, max_datasets=5, clock=clock)
+    app = create_app(
+        settings=_settings(),
+        web=WebSettings(cleanup_interval_seconds=0.02),
+        store=store,
+        clock=clock,
+    )
+    with TestClient(app) as client:
+        dataset_id = _upload(client, ("data.csv", CSV))["dataset_id"]
+        stored = store.get(str(dataset_id))
+        assert stored is not None
+        clock.now += 61
+        deadline = time.monotonic() + 5
+        while stored.directory.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+
+        assert not stored.directory.exists()
+
+
+def test_excel_unpacked_size_is_limited(tmp_path: Path) -> None:
+    rows: list[list[object]] = [["note"]]
+    rows.extend(["x" * 200] for _ in range(6000))
+    workbook = _workbook(rows)
+    with TestClient(
+        create_app(
+            settings=Settings(max_excel_uncompressed_mb=1),
+            web=WebSettings(),
+        )
+    ) as client:
+        failure = _upload(client, ("wide.xlsx", workbook), status=422)
+
+    assert len(workbook) < 1024 * 1024
+    assert failure["code"] == "data_load_error"
+    assert "too large once unpacked" in failure["message"]

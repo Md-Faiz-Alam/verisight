@@ -94,6 +94,7 @@ $containers = @"
     "image": "$image",
     "environment": {
       "VERISIGHT_WEB_MAX_UPLOAD_MB": "10",
+      "VERISIGHT_MAX_EXCEL_UNCOMPRESSED_MB": "100",
       "VERISIGHT_WEB_QUESTIONS_PER_HOUR": "20",
       "VERISIGHT_WEB_MAX_CONCURRENT_QUESTIONS": "1"
     },
@@ -156,11 +157,18 @@ All settings are environment variables in the `environment` block:
 | `VERISIGHT_WEB_MAX_UPLOAD_MB` | 20 | Largest accepted file |
 | `VERISIGHT_WEB_MAX_FILES` | 5 | Files per upload |
 | `VERISIGHT_WEB_DATASET_TTL_SECONDS` | 3600 | Uploads are deleted after this |
+| `VERISIGHT_WEB_CLEANUP_INTERVAL_SECONDS` | 60 | How often expired uploads are deleted, even with no visitors |
+| `VERISIGHT_WEB_MAX_DATASETS` | 100 | Stored uploads; the oldest is removed only when a new upload is valid |
 | `VERISIGHT_WEB_QUESTIONS_PER_HOUR` | 30 | Questions per visitor address |
 | `VERISIGHT_WEB_UPLOADS_PER_HOUR` | 60 | Uploads per visitor address |
 | `VERISIGHT_WEB_MAX_CONCURRENT_QUESTIONS` | 2 | Questions answered at once |
 | `VERISIGHT_WEB_PROVIDER_RETRIES` | 3 | Retries after a Gemini 503 |
+| `VERISIGHT_MAX_EXCEL_UNCOMPRESSED_MB` | 200 | Largest unpacked size of an `.xlsx` workbook |
 | `VERISIGHT_GEMINI_MODEL` | `gemini-3.1-flash-lite` | Gemini model |
+
+An upload request larger than `MAX_UPLOAD_MB` × `MAX_FILES` (plus 1 MB) is
+refused before any file is saved. On `micro`, also set
+`VERISIGHT_MAX_EXCEL_UNCOMPRESSED_MB` to `100`.
 
 The image sets `VERISIGHT_WEB_TRUST_FORWARDED_FOR=true`, so rate limits use the
 visitor address added by AWS's load balancer.

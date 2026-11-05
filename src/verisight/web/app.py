@@ -7,16 +7,17 @@ only with explicit consent, using the server key or a key supplied with the
 request; a supplied key is used for that request only and is never stored.
 """
 
+import asyncio
 import json
 import re
 import shutil
 import threading
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from importlib.resources import files
 from pathlib import Path
-from typing import Annotated, Literal, cast
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -47,6 +48,7 @@ from verisight.web.store import (
     DatasetStore,
     RateLimiter,
     StoredDataset,
+    StoreFullError,
     safe_file_name,
 )
 
@@ -167,6 +169,11 @@ _LOAD_HINTS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
             '"value": 1}].',
         ),
         (
+            r"Excel workbook expands to more than",
+            "The workbook is too large once unpacked. Remove unused sheets or "
+            "export the data you need as CSV.",
+        ),
+        (
             r"JSON root must be",
             "Use a JSON array of row objects, or an object with one "
             "equal-length array per column.",
@@ -182,6 +189,80 @@ _INVALID_JSON_HINT = (
 )
 
 AppFactory = Callable[[Settings], VeriSight]
+
+_UPLOAD_PATH = "/api/datasets"
+# Room for multipart boundaries and part headers on top of the file bytes.
+_MULTIPART_OVERHEAD = 1 << 20
+
+
+class UploadBodyLimit:
+    """Reject an upload request body larger than all allowed files together.
+
+    Runs before multipart parsing, so an oversized request is refused without
+    first being stored in temporary files. A declared Content-Length is checked
+    up front; a body without one is counted while it arrives.
+    """
+
+    def __init__(self, app: Any, *, limit_bytes: int, max_upload_mb: int) -> None:
+        self._app = app
+        self._limit = limit_bytes
+        self._message = (
+            f"The upload is larger than the {max_upload_mb} MB per file allowed."
+        )
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if (
+            scope["type"] != "http"
+            or scope["method"] != "POST"
+            or scope["path"] != _UPLOAD_PATH
+        ):
+            await self._app(scope, receive, send)
+            return
+        declared = dict(scope.get("headers") or ()).get(b"content-length")
+        if declared is not None and declared.isdigit() and int(declared) > self._limit:
+            await self._refuse(scope, receive, send)
+            return
+        received = 0
+        exceeded = False
+        replaced = False
+
+        async def counted() -> Any:
+            nonlocal received, exceeded
+            if exceeded:
+                return {"type": "http.disconnect"}
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self._limit:
+                    # Stop reading; the response is replaced below.
+                    exceeded = True
+                    return {"type": "http.disconnect"}
+            return message
+
+        async def guarded(message: Any) -> None:
+            nonlocal replaced
+            if exceeded:
+                if not replaced:
+                    replaced = True
+                    await self._refuse(scope, receive, send)
+                return
+            await send(message)
+
+        try:
+            await self._app(scope, counted, guarded)
+        except Exception:
+            if not exceeded:
+                raise
+        if exceeded and not replaced:
+            await self._refuse(scope, receive, send)
+
+    async def _refuse(self, scope: Any, receive: Any, send: Any) -> None:
+        response = JSONResponse(
+            status_code=413,
+            content={"code": "file_too_large", "message": self._message},
+            headers={"Connection": "close", **_SECURITY_HEADERS},
+        )
+        await response(scope, receive, send)
 
 
 def _load_hint(error: BaseException) -> str | None:
@@ -329,16 +410,34 @@ def create_app(
     )
     server_key = (core.gemini_api_key or "").strip()
 
+    async def remove_expired() -> None:
+        # Uploads expire on time even when no request arrives to trigger it.
+        while True:
+            await asyncio.sleep(limits.cleanup_interval_seconds)
+            datasets.purge_expired()
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        yield
-        datasets.clear()
+        cleanup = asyncio.create_task(remove_expired())
+        try:
+            yield
+        finally:
+            cleanup.cancel()
+            with suppress(asyncio.CancelledError):
+                await cleanup
+            datasets.clear()
 
     app = FastAPI(
         title="VeriSight",
         summary="Ask questions about tabular data and get SQL-verified answers.",
         version="0.2.0",
         lifespan=lifespan,
+    )
+    app.add_middleware(
+        UploadBodyLimit,
+        limit_bytes=limits.max_upload_mb * limits.max_files * 1024 * 1024
+        + _MULTIPART_OVERHEAD,
+        max_upload_mb=limits.max_upload_mb,
     )
 
     @app.middleware("http")
@@ -387,13 +486,23 @@ def create_app(
         assert operation.value is not None
         return _profile_view(operation.value)
 
+    def reserve() -> tuple[str, Path]:
+        try:
+            return datasets.create_directory()
+        except StoreFullError:
+            raise WebError(
+                503,
+                "busy",
+                "Many uploads are being checked right now. Try again in a moment.",
+            ) from None
+
     async def register(
         dataset_id: str, directory: Path, paths: list[Path]
     ) -> dict[str, object]:
         try:
             profile = await run_in_threadpool(analyze, tuple(paths))
-        except WebError:
-            shutil.rmtree(directory, ignore_errors=True)
+        except BaseException:
+            datasets.release(dataset_id)
             raise
         datasets.add(
             StoredDataset(
@@ -451,7 +560,7 @@ def create_app(
                 f"Upload at most {limits.max_files} files at a time.",
             )
         limit = limits.max_upload_mb * 1024 * 1024
-        dataset_id, directory = datasets.create_directory()
+        dataset_id, directory = reserve()
         taken: set[str] = set()
         paths: list[Path] = []
         try:
@@ -478,8 +587,8 @@ def create_app(
                 if size == 0:
                     raise WebError(400, "empty_file", f"{original} is empty.")
                 paths.append(target)
-        except WebError:
-            shutil.rmtree(directory, ignore_errors=True)
+        except BaseException:
+            datasets.release(dataset_id)
             raise
         return await register(dataset_id, directory, paths)
 
@@ -489,7 +598,7 @@ def create_app(
             raise WebError(
                 429, "rate_limited", "Too many uploads. Try again in an hour."
             )
-        dataset_id, directory = datasets.create_directory()
+        dataset_id, directory = reserve()
         paths = [
             Path(shutil.copyfile(DEMO_DIR / name, directory / name))
             for name in DEMO_FILES

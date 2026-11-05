@@ -34,6 +34,11 @@ class Settings(BaseSettings):
         default=100,
         gt=0,
     )
+    # An .xlsx file is a ZIP archive; this bounds its total unpacked size.
+    max_excel_uncompressed_mb: int = Field(
+        default=200,
+        gt=0,
+    )
 
     max_query_result_rows: int = Field(
         default=10_000,

@@ -41,8 +41,19 @@ class StoredDataset:
     profile: dict[str, object] = field(default_factory=dict)
 
 
+class StoreFullError(Exception):
+    """Every upload slot is taken by uploads that are still being checked."""
+
+
 class DatasetStore:
-    """Thread-safe store that deletes datasets after a time limit."""
+    """Thread-safe store that deletes datasets after a time limit.
+
+    An upload first reserves a slot and a private directory. Capacity is
+    enforced when the upload is added, after it passed validation, so a failed
+    upload never evicts a stored dataset, and concurrent uploads can never
+    leave more than ``max_datasets`` stored. At most ``max_datasets`` uploads
+    may be in progress at once.
+    """
 
     def __init__(
         self,
@@ -56,21 +67,41 @@ class DatasetStore:
         self._clock = clock
         self._lock = threading.Lock()
         self._items: dict[str, StoredDataset] = {}
+        self._pending: dict[str, Path] = {}
 
     def create_directory(self) -> tuple[str, Path]:
-        """Reserve a new dataset id and an empty private directory."""
+        """Reserve an upload slot: a new dataset id and an empty directory."""
         self.purge_expired()
         with self._lock:
-            if len(self._items) >= self._max:
-                oldest = min(self._items.values(), key=lambda item: item.created)
-                self._remove(oldest.dataset_id)
-        dataset_id = uuid.uuid4().hex
-        directory = Path(tempfile.mkdtemp(prefix="verisight-"))
+            if len(self._pending) >= self._max:
+                raise StoreFullError
+            dataset_id = uuid.uuid4().hex
+            directory = Path(tempfile.mkdtemp(prefix="verisight-"))
+            self._pending[dataset_id] = directory
         return dataset_id, directory
 
-    def add(self, dataset: StoredDataset) -> None:
+    def release(self, dataset_id: str) -> None:
+        """Give up a reservation and delete its directory; stored data is kept."""
         with self._lock:
+            directory = self._pending.pop(dataset_id, None)
+        if directory is not None:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def add(self, dataset: StoredDataset) -> None:
+        """Store a validated upload, evicting the oldest others beyond capacity."""
+        with self._lock:
+            self._pending.pop(dataset.dataset_id, None)
             self._items[dataset.dataset_id] = dataset
+            while len(self._items) > self._max:
+                oldest = min(
+                    (
+                        item
+                        for item in self._items.values()
+                        if item.dataset_id != dataset.dataset_id
+                    ),
+                    key=lambda item: item.created,
+                )
+                self._remove(oldest.dataset_id)
 
     def get(self, dataset_id: str) -> StoredDataset | None:
         self.purge_expired()
@@ -95,6 +126,10 @@ class DatasetStore:
         with self._lock:
             for dataset_id in list(self._items):
                 self._remove(dataset_id)
+            pending = list(self._pending.values())
+            self._pending.clear()
+        for directory in pending:
+            shutil.rmtree(directory, ignore_errors=True)
 
     def _remove(self, dataset_id: str) -> bool:
         item = self._items.pop(dataset_id, None)
