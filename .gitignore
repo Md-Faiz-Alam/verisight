@@ -47,3 +47,7 @@ Thumbs.db
 
 # Lightsail deployment files (docs/deploy-aws.md)
 lightsail-*.json
+
+# Local evaluation data and reports
+/datasets/
+/reports/

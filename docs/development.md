@@ -34,7 +34,6 @@ scripts run from the repository root and are not included by the current
 | `src/verisight/public_api.py` | Operation boundary |
 | `tests/` | Offline regression and development benchmark tests |
 | `scripts/` | Development evaluation utilities |
-| `reports/evaluations/` | Reviewed evaluation evidence |
 | `.github/workflows/ci.yml` | Automated quality gates |
 
 ## Required gates and CI
@@ -226,8 +225,8 @@ a justified abstention, or a completed evaluation. There is no resume mode;
 preserve partial directories and use a separate identifier for any later batch.
 
 This is the existing Python-facade evaluation path, not an installed-CLI
-subprocess test. It does not implement the proposed six-case CLI protocol,
-ordered DIFFERENCE tasks, or justified-abstention scoring. It adds no provider
+subprocess test. It does not implement ordered DIFFERENCE tasks or
+justified-abstention scoring. It adds no provider
 calls and does not recover old temporary artifacts. Retained files contain
 synthetic questions, source values, SQL, and conclusions; review them before
 committing. No credentials or arbitrary environment dump are included by the

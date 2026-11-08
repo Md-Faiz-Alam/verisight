@@ -48,8 +48,7 @@ analytical interpretation failure. A later unscoped full investigation at
 `33b8d4e` used the correct active-only query and completed with one supported
 `37.5` VALUE claim in `20.085` seconds. It also used the existing synthesis
 format-repair path. That success applies to one known development fixture;
-general autonomous population interpretation remains unproven. See
-[Evaluation](evaluation.md#reviewed-october-29-development-checks).
+general autonomous population interpretation remains unproven.
 
 Caller-selected population enforcement is implemented separately. The public
 `execute`, `ask`, and `investigate` methods accept typed, immutable equality or
@@ -63,7 +62,7 @@ SQL control was restricted to that same population. The live investigation
 returned a supported 37.5% claim and a matching conclusion in 13.298 seconds.
 The report was retained in commit `529baf3`:
 
-[Caller-scoped education validation](../reports/evaluations/education-caller-scoped-20261024-085546-292.json)
+[Caller-scoped education validation](https://github.com/Md-Faiz-Alam/verisight/blob/529baf3/reports/evaluations/education-caller-scoped-20261024-085546-292.json)
 
 This is one successful known synthetic case. It is not a held-out benchmark,
 a demonstration that autonomous population selection is corrected, or evidence
@@ -180,7 +179,7 @@ and a successful full weighted-mean investigation at `7a91a83`. The original
 three-case transfer batch had no completed cases. A later latest-version check
 successfully synthesized retained evidence but did not rerun the full workflow.
 These are development diagnostics across different invocation paths and
-settings, not a combined accuracy rate. See [Evaluation](evaluation.md).
+settings, not a combined accuracy rate.
 
 ## 3. Establish independent release evaluation
 
@@ -256,5 +255,5 @@ Keep private datasets and credentials out of routine commits. Stage exact paths
 and retain unsuccessful evaluation reports as well as successful ones.
 
 See [Architecture](architecture.md) for implemented boundaries,
-[Evaluation](evaluation.md) for evaluation definitions, and
+[Live results](results.md) for measured outcomes, and
 [Development](development.md) for commands.

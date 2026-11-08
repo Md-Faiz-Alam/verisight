@@ -338,8 +338,7 @@ unavailable historical response.
 Provider failures bypass format repair; bounded provider retries apply
 independently to each generation call. Contradicted claims do not trigger
 format repair. Legacy injected synthesizers may return plain text without
-structured claims. Legacy synthesis formatter dependencies are configured
-through the prompt builder's constructor.
+structured claims.
 
 ## Numerical verification and rendered statements
 
@@ -615,7 +614,7 @@ The runner does not invoke `ClaimOutputContract`; CLI output acceptance and
 `correct_numeric` remain distinct checks. `run_case()` adds synthetic questions,
 conclusions, SQL, cells, and claim details to its summary. These content-bearing
 reports need publication review. Historical CLI batches and manual rechecks
-have separate schemas and assessment notes; see [Evaluation](evaluation.md).
+have separate schemas and assessment notes.
 
 Saved reports include revision, tracked-change status, settings, timings,
 audits, and observed generation calls when available. Older reports may lack

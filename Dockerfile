@@ -16,8 +16,7 @@ RUN pip install ".[web]" \
     && useradd --create-home --uid 10001 verisight
 
 USER verisight
-ENV VERISIGHT_ENVIRONMENT=production \
-    VERISIGHT_WEB_TRUST_FORWARDED_FOR=true
+ENV VERISIGHT_WEB_TRUST_FORWARDED_FOR=true
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

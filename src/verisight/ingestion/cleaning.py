@@ -70,7 +70,130 @@ _DATE_SHAPE = r"[0-9]{1,4}[/.-][0-9]{1,2}[/.-][0-9]{1,4}.*"
 _MIN_ROWS_FOR_STRAYS = 20
 _MAX_STRAY_SHARE = 0.05
 _MAX_STRAY_LABELS = 5
-_IDENTIFIER_WORDS = frozenset({"id", "uuid", "guid", "code", "sku", "zip", "phone"})
+_NAME_WORD = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
+_LEADING_ZERO = re.compile(r"[+-]?0[0-9]")
+_IDENTIFIER_WORDS = frozenset(
+    {
+        "id",
+        "uuid",
+        "guid",
+        "code",
+        "sku",
+        "zip",
+        "phone",
+        "key",
+        "ref",
+        "reference",
+        "serial",
+    }
+)
+# A letter after a number is often part of a code: shoe size 10M, seat 12A,
+# SKU 120B. Columns named like this are never read as quantities that way.
+_LABEL_WORDS = _IDENTIFIER_WORDS | {
+    "size",
+    "seat",
+    "room",
+    "gate",
+    "flight",
+    "part",
+    "lot",
+    "batch",
+    "model",
+    "version",
+    "release",
+    "grade",
+    "class",
+    "level",
+    "tier",
+    "rank",
+}
+# Names that say K, M and B are amounts, as in a salary of 50K.
+_AMOUNT_WORDS = frozenset(
+    {
+        "amount",
+        "revenue",
+        "sale",
+        "salary",
+        "salaries",
+        "wage",
+        "income",
+        "earning",
+        "price",
+        "cost",
+        "budget",
+        "spend",
+        "spending",
+        "profit",
+        "turnover",
+        "gross",
+        "funding",
+        "valuation",
+        "capital",
+        "asset",
+        "fee",
+        "fare",
+        "follower",
+        "subscriber",
+        "view",
+        "like",
+        "download",
+        "install",
+        "impression",
+        "click",
+        "vote",
+        "user",
+        "member",
+        "visitor",
+        "stream",
+        "comment",
+        "review",
+        "listener",
+        "population",
+        "volume",
+    }
+)
+# Names that say a one-letter ending is a unit, as in a voltage of 12V.
+_MEASURE_WORDS = frozenset(
+    {
+        "weight",
+        "mass",
+        "height",
+        "width",
+        "length",
+        "depth",
+        "distance",
+        "duration",
+        "time",
+        "voltage",
+        "power",
+        "current",
+        "temperature",
+        "temp",
+        "volume",
+        "capacity",
+        "speed",
+        "energy",
+        "pressure",
+        "area",
+        "dose",
+    }
+)
+_ONE_LETTER_UNITS = frozenset("gmlLshtVWACF")
+# Compared without case. K, M and B are handled as abbreviations instead.
+_UNITS = frozenset(
+    unit
+    for group in (
+        "kg mg lb lbs oz ton tons tonne tonnes gram grams kilo kilos pound pounds",
+        "km cm mm mi ft yd metre metres meter meters mile miles feet inch inches",
+        "ml cl gal cc litre litres liter liters m³ cm³ ha sqft sqm m² km²",
+        "ms sec secs second seconds min mins minute minutes hr hrs hour hours",
+        "day days wk wks week weeks month months yr yrs year years",
+        "wh kwh mwh gwh kw mw gw kv mv ma mah hz khz mhz ghz kcal cal kj",
+        "kb mb gb tb pb kbps mbps gbps °c °f mph kph km/h m/s",
+        "psi bar kpa mpa hpa ppm ppb mg/l g/l mg/dl pcs items units",
+    )
+    for unit in group.split()
+)
 _MAX_EXAMPLES = 3
 _MAX_SAFE_INTEGER = 2**53 - 1
 _MAX_VARIANT_GROUPS = 5
@@ -138,15 +261,16 @@ def _clean_text(
     candidate = series.mask(markers)
     if candidate.dropna().empty:
         return _label_variants(column, series)
-    converted = _parse_text(candidate, semicolons)
+    words = _name_words(column)
+    converted = _parse_text(candidate, semicolons, words)
     strays = pd.Series(False, index=series.index)
     if converted is None:
-        found = _stray_values(column, candidate)
+        found = _stray_values(words, candidate)
         if found is not None:
-            converted = _parse_text(candidate.mask(found), semicolons)
+            converted = _parse_text(candidate.mask(found), semicolons, words)
             strays = found if converted is not None else strays
     if converted is None:
-        return _text_column(data, column, series)
+        return _text_column(data, column, series, words)
     typed, rule, detail, formatted = converted
     notes: list[ValueNote] = []
     if markers.any():
@@ -162,13 +286,18 @@ def _clean_text(
     return notes
 
 
-def _stray_values(column: str, candidate: pd.Series) -> pd.Series | None:
+def _name_words(column: str) -> set[str]:
+    """Split a column name, so ``order_id`` and ``OrderID`` both contain ``id``."""
+    words = {word.casefold() for word in _NAME_WORD.findall(column)}
+    return words | {word.removesuffix("s") for word in words}
+
+
+def _stray_values(words: set[str], candidate: pd.Series) -> pd.Series | None:
     """Mark a few values that stop an otherwise numeric or date column.
 
     Identifier columns are excluded, where a code such as ``A12`` is as real
     as ``123``. The caller still requires the remaining values to parse.
     """
-    words = {word.casefold() for word in re.split(r"[^A-Za-z0-9]+", column)}
     present = candidate.dropna().str.strip()
     if words & _IDENTIFIER_WORDS or len(present) < _MIN_ROWS_FOR_STRAYS:
         return None
@@ -183,7 +312,9 @@ def _stray_values(column: str, candidate: pd.Series) -> pd.Series | None:
     return pd.Series(candidate.index.isin(outliers.index), index=candidate.index)
 
 
-def _text_column(data: pd.DataFrame, column: str, series: pd.Series) -> list[ValueNote]:
+def _text_column(
+    data: pd.DataFrame, column: str, series: pd.Series, words: set[str]
+) -> list[ValueNote]:
     """Clear placeholders from a text column and report what could not be read."""
     stripped = series.str.strip()
     notes: list[ValueNote] = []
@@ -197,10 +328,24 @@ def _text_column(data: pd.DataFrame, column: str, series: pd.Series) -> list[Val
         notes.append(_note(column, "possible_missing_labels", series[possible]))
     if has_ambiguous_dates(cleared):
         notes.append(_note(column, "ambiguous_dates", cleared.dropna()))
+    if _could_be_quantities(cleared, words):
+        notes.append(_note(column, "ambiguous_numbers", cleared.dropna()))
     return notes + _label_variants(column, cleared)
 
 
-def _parse_text(values: pd.Series, semicolons: bool) -> _Parsed | None:
+def _could_be_quantities(values: pd.Series, words: set[str]) -> bool:
+    """Whether values look abbreviated, or are numbers with one ending, as 12A."""
+    if words & _IDENTIFIER_WORDS:
+        return False
+    present = values.dropna().str.strip()
+    short = present.str.fullmatch(_ABBREVIATED)
+    if short.any() and (short | present.str.fullmatch(_PLAIN)).all():
+        return True
+    endings = present.str.extract(_WITH_UNIT.pattern + "$")[1]
+    return bool(endings.notna().all()) and endings.nunique() == 1
+
+
+def _parse_text(values: pd.Series, semicolons: bool, words: set[str]) -> _Parsed | None:
     """Type strings as dates or numbers, removing consistent formatting.
 
     Returns the typed column, the first format rule applied, a description of
@@ -216,15 +361,15 @@ def _parse_text(values: pd.Series, semicolons: bool) -> _Parsed | None:
         return flexible[0], "date_format", flexible[1], present
     text = values.str.strip()
     steps: list[tuple[NoteRule, str]] = []
-    text = _bracketed_negatives(text, steps)
+    text = _bracketed_negatives(text, steps, words)
     if all(value.endswith("%") for value in text.dropna()):
         text = text.str.removesuffix("%").str.strip()
         steps.append(("percent_sign", "values are percent points; 10% became 10"))
     else:
-        text = _without_currency(text, steps)
+        text = _without_currency(text, steps, words)
     text = _european(text, semicolons, steps)
-    text = _expanded(text, steps)
-    text = _without_unit(text, steps)
+    text = _expanded(text, steps, words)
+    text = _without_unit(text, steps, words)
     grouped = text.str.fullmatch(_GROUPED, na=False).astype(bool)
     if grouped.any():
         text = text.mask(grouped, text.str.replace(",", "", regex=False))
@@ -255,10 +400,14 @@ def _grouping_detail(values: pd.Series) -> str:
 
 
 def _bracketed_negatives(
-    text: pd.Series, steps: list[tuple[NoteRule, str]]
+    text: pd.Series, steps: list[tuple[NoteRule, str]], words: set[str]
 ) -> pd.Series:
     bracketed = text.str.fullmatch(_BRACKETED, na=False).astype(bool)
-    if not bracketed.any():
+    if not bracketed.any() or words & _IDENTIFIER_WORDS:
+        return text
+    # A column of nothing but (123) may hold codes rather than negative amounts.
+    formatted = text.dropna().str.contains(rf"[.,]|{_CURRENCY}").any()
+    if bracketed[text.notna()].all() and not formatted:
         return text
     steps.append(("accounting_negatives", "numbers in brackets read as negative"))
     return text.mask(bracketed, "-" + text.str[1:-1])
@@ -273,15 +422,21 @@ def _split_currency(value: str) -> tuple[str, str] | None:
     return None if last is None else (last[2], last[1])
 
 
-def _without_currency(text: pd.Series, steps: list[tuple[NoteRule, str]]) -> pd.Series:
+def _without_currency(
+    text: pd.Series, steps: list[tuple[NoteRule, str]], words: set[str]
+) -> pd.Series:
     """Remove a currency mark only when every value carries the same one."""
     parts = text.dropna().map(_split_currency)
-    if parts.isna().any():
+    if parts.isna().any() or words & _LABEL_WORDS:
         return text
     marks = {part[0] for part in parts}
     if len(marks) != 1:
         return text
-    steps.append(("currency_symbol", f"{next(iter(marks))} removed"))
+    mark = next(iter(marks))
+    # GBP100 may be a voucher code; GBP 100, GBP100.50 and £100 read as money.
+    if mark.isalpha() and not text.dropna().str.contains(r"[\s.,]").all():
+        return text
+    steps.append(("currency_symbol", f"{mark} removed"))
     numbers = parts.map(lambda part: part[1])
     return numbers.reindex(text.index)
 
@@ -308,10 +463,35 @@ def _european(
     return text.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
 
 
-def _expanded(text: pd.Series, steps: list[tuple[NoteRule, str]]) -> pd.Series:
+def _shows_amounts(
+    present: pd.Series,
+    short: pd.Series,
+    steps: list[tuple[NoteRule, str]],
+    words: set[str],
+) -> bool:
+    """Tell amounts such as 1.2K from codes that only look abbreviated, as 10M.
+
+    The column's name can decide. Otherwise the values must show it, with a
+    currency mark or a decimal. Whole numbers with these letters stay unproven:
+    reading a code as an amount is far worse than leaving it as text.
+    """
+    if words & _LABEL_WORDS or present.str.match(_LEADING_ZERO).any():
+        return False
+    return bool(
+        words & _AMOUNT_WORDS
+        or any(rule == "currency_symbol" for rule, _ in steps)
+        or present[short].str.contains(".", regex=False).any()
+    )
+
+
+def _expanded(
+    text: pd.Series, steps: list[tuple[NoteRule, str]], words: set[str]
+) -> pd.Series:
     present = text.dropna()
     short = present.str.fullmatch(_ABBREVIATED)
     if not short.any() or not (short | present.str.fullmatch(_PLAIN)).all():
+        return text
+    if not _shows_amounts(present, short, steps, words):
         return text
 
     def expand(value: str) -> str:
@@ -324,14 +504,33 @@ def _expanded(text: pd.Series, steps: list[tuple[NoteRule, str]]) -> pd.Series:
     return text.map(expand, na_action="ignore")
 
 
-def _without_unit(text: pd.Series, steps: list[tuple[NoteRule, str]]) -> pd.Series:
-    """Remove a unit only when every value carries the same one."""
-    matches = text.dropna().str.extract(_WITH_UNIT.pattern + "$")
-    full = text.dropna().str.fullmatch(_WITH_UNIT)
+def _is_unit(unit: str, spaced: bool, words: set[str]) -> bool:
+    """A known unit, on a column not named as a label or code.
+
+    One letter proves little, since 12A is as likely a seat as 12 amperes, so
+    it also needs a space before it or a measurement in the column's name.
+    """
+    if words & _LABEL_WORDS:
+        return False
+    if len(unit) > 1:
+        return unit.casefold() in _UNITS
+    return unit in _ONE_LETTER_UNITS and (spaced or bool(words & _MEASURE_WORDS))
+
+
+def _without_unit(
+    text: pd.Series, steps: list[tuple[NoteRule, str]], words: set[str]
+) -> pd.Series:
+    """Remove a unit only when every value carries the same known one."""
+    present = text.dropna()
+    matches = present.str.extract(_WITH_UNIT.pattern + "$")
+    full = present.str.fullmatch(_WITH_UNIT)
     units = set(matches[1].dropna())
     if not full.all() or len(units) != 1:
         return text
-    steps.append(("unit_suffix", f"{next(iter(units))} removed"))
+    unit = next(iter(units))
+    if not _is_unit(unit, bool(present.str.contains(r"\s").all()), words):
+        return text
+    steps.append(("unit_suffix", f"{unit} removed"))
     return matches[0].reindex(text.index)
 
 

@@ -182,6 +182,33 @@ def test_repeated_formulation_is_recorded(sql: str, identical: bool) -> None:
     assert check.identical_sql is identical
 
 
+WHERE_SQL = "SELECT SUM(amount) AS total FROM sales WHERE "
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "identical"),
+    [
+        ("a = 1 AND b = 2", "b = 2 AND a = 1", True),
+        ("a = 1 AND b = 2 AND c = 3", "c = 3 AND a = 1 AND b = 2", True),
+        ("a = 1 AND (b = 2 AND c = 3)", "(c = 3 AND b = 2) AND a = 1", True),
+        ("a = 1 AND (b = 2 OR c = 3)", "(b = 2 OR c = 3) AND a = 1", True),
+        ("a = 1 AND b = 2", "a = 1 OR b = 2", False),
+        ("a = 1 AND b = 2", "a = 1 AND b = 3", False),
+        ("a = 1 AND (b = 2 OR c = 3)", "(a = 1 AND b = 2) OR c = 3", False),
+    ],
+)
+def test_filters_in_another_order_are_the_same_query(
+    first: str, second: str, identical: bool
+) -> None:
+    runner = _Runner(sql=WHERE_SQL + second)
+
+    check = IndependentCrossChecker(runner).check(
+        "How much?", ANSWER, WHERE_SQL + first
+    )
+
+    assert check.identical_sql is identical
+
+
 class _Script:
     def __init__(self, items: list[str | Exception]) -> None:
         self.items = list(items)

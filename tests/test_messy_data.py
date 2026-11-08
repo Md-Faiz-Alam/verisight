@@ -81,6 +81,109 @@ def test_unclear_numbers_stay_text(tmp_path: Path, values: list[str]) -> None:
     assert _values(_column(tmp_path, values)) == values
 
 
+def _named(tmp_path: Path, name: str, values: Sequence[str]) -> LoadedTable:
+    rows = "\n".join(f'{i},"{value}"' for i, value in enumerate(values))
+    return _csv(tmp_path, f"row,{name}\n{rows}\n")
+
+
+@pytest.mark.parametrize(
+    ("name", "values", "warned"),
+    [
+        # Whole numbers with K, M or B prove nothing without a name or a mark.
+        ("shoe", ["10M", "9M"], True),
+        ("race", ["5K", "10K"], True),
+        ("train", ["12M", "14B", "9K"], True),
+        ("bus", ["500K", "365"], True),
+        # Names that mean a label outrank a decimal or a known unit.
+        ("shoe_size", ["10.5M", "9M"], True),
+        ("version", ["1.2B", "2.5B"], True),
+        ("batch_sizes", ["12 kg", "15 kg"], True),
+        # A leading zero is a code, whatever else the values show.
+        ("lane", ["007K", "1.5K"], True),
+        # Endings that are not known units.
+        ("rank", ["4th", "5th"], True),
+        ("start", ["10am", "11am"], True),
+        ("era", ["100BC", "200BC"], True),
+        ("rating", ["5x", "6x"], True),
+        # One letter needs a space or a measurement in the column's name.
+        ("block", ["3A", "4A"], True),
+        ("zone", ["5m", "6m"], True),
+        # Identifiers are plainly labels, so there is nothing to warn about.
+        ("sku", ["120B", "340B"], False),
+        ("product_code", ["100K", "200K"], False),
+        ("orderId", ["101K", "102K"], False),
+        ("roll_ids", ["101L", "102L"], False),
+        ("reference", ["USD1001", "USD1002"], False),
+        ("phone", ["(212)", "(646)"], False),
+        # Other shapes that are not quantities.
+        ("tracking", ["(123)", "(456)"], False),
+        ("voucher", ["GBP100", "GBP200"], False),
+        ("sector", ["12A", "12B"], False),
+    ],
+)
+def test_codes_are_not_read_as_numbers(
+    tmp_path: Path, name: str, values: list[str], warned: bool
+) -> None:
+    table = _named(tmp_path, name, values)
+
+    assert table.data[name].tolist() == values
+    assert ("ambiguous_numbers" in _rules(table)) is warned
+
+
+@pytest.mark.parametrize(
+    ("name", "values", "expected", "rule"),
+    [
+        ("salary", ["50K", "75K"], [50_000, 75_000], "abbreviated_numbers"),
+        ("Followers", ["10K", "20K"], [10_000, 20_000], "abbreviated_numbers"),
+        ("reach", ["1.2K", "3K"], [1200.0, 3000.0], "abbreviated_numbers"),
+        ("reach", ["$100K", "$200K"], [100_000, 200_000], "currency_symbol"),
+        ("trip", ["5km", "10km"], [5, 10], "unit_suffix"),
+        ("climate", ["20°C", "21°C"], [20, 21], "unit_suffix"),
+        ("storage", ["512MB", "64MB"], [512, 64], "unit_suffix"),
+        ("reading", ["12 V", "24 V"], [12, 24], "unit_suffix"),
+        ("voltage", ["12V", "24V"], [12, 24], "unit_suffix"),
+        ("ledger", ["(100)", "200"], [-100, 200], "accounting_negatives"),
+        ("ledger", ["(1.50)", "(2.50)"], [-1.5, -2.5], "accounting_negatives"),
+        ("ledger", ["($100)", "($200)"], [-100, -200], "accounting_negatives"),
+        ("payment", ["£100", "£200"], [100, 200], "currency_symbol"),
+        ("payment", ["GBP 100", "GBP 200"], [100, 200], "currency_symbol"),
+        ("payment", ["GBP100.50", "GBP2.75"], [100.5, 2.75], "currency_symbol"),
+    ],
+)
+def test_real_quantities_are_still_read_as_numbers(
+    tmp_path: Path, name: str, values: list[str], expected: list[object], rule: str
+) -> None:
+    table = _named(tmp_path, name, values)
+
+    assert table.data[name].tolist() == expected
+    assert _rules(table)[0] == rule
+    assert "ambiguous_numbers" not in _rules(table)
+
+
+def test_unclear_numbers_are_reported_as_warnings(tmp_path: Path) -> None:
+    path = tmp_path / "seats.csv"
+    path.write_text("seat,fare\n12A,50\n14A,45\n", encoding="utf-8")
+
+    issues = VeriSight(settings=SETTINGS).analyze(path).analysis.issues
+
+    issue = next(i for i in issues if i.issue_type.value == "ambiguous_numbers")
+    assert issue.column_name == "seat"
+    assert issue.severity.value == "warning"
+    assert issue.affected_count == 2
+    assert issue.evidence["examples"] == ("12A", "14A")
+
+
+def test_expanded_abbreviations_are_flagged_for_checking(tmp_path: Path) -> None:
+    path = tmp_path / "pay.csv"
+    path.write_text("salary,team\n50K,a\n75K,b\n", encoding="utf-8")
+
+    issues = VeriSight(settings=SETTINGS).analyze(path).analysis.issues
+
+    issue = next(i for i in issues if i.issue_type.value == "formatted_numbers")
+    assert issue.severity.value == "warning"
+    assert "Check that the letters" in issue.message
+
+
 def test_a_lone_group_separator_is_read_but_flagged(tmp_path: Path) -> None:
     table = _column(tmp_path, ["1,234", "5,678"])
 

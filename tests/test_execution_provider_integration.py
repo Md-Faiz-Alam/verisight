@@ -17,13 +17,11 @@ from verisight.execution.gemini import GeminiGenerationError, GeminiTransientErr
 from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
 from verisight.execution.generative_repair import GenerativeQueryRepairer
-from verisight.execution.generative_synthesis import (
-    GenerativeInvestigationSynthesizer,
-)
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import InvestigationStatus
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.service import AnalyticalExecutionService
+from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 from verisight.ingestion.models import (
     LoadedDataset,
     LoadedTable,
@@ -390,7 +388,7 @@ def test_transient_synthesis_failure_returns_incomplete_public_value() -> None:
             planner=GenerativeQueryPlanner(planner_client),
         ),
         investigator=investigator,
-        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        synthesizer=StructuredInvestigationSynthesizer(synthesis_client),
         max_steps=3,
     )
 

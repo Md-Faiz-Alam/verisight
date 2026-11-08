@@ -10,10 +10,10 @@ failures. No run was repeated to replace a worse one.
 | | Development | Held-out v1 | Held-out v2 |
 | --- | --- | --- | --- |
 | Questions | 37 | 15 | 15 |
-| Live attempts | 150 | 30 | 30 |
-| Correct accepted answers | **85** | 7 | **26** |
+| Live attempts | 150 | 45 | 45 |
+| Correct accepted answers | **85** | 22 | **39** |
 | Wrong accepted answers | **0** | **3** | **0** |
-| No accepted number | 13 | 5 | 3 |
+| No accepted number | 13 | 5 | 5 |
 | Lost to the model provider | 52 | 15 | 1 |
 | Domains | 7 | 5 | 5 |
 
@@ -133,6 +133,7 @@ used the website's REST API.
 | --- | --- | --- | --- | --- | --- |
 | 1 | `7c27755` | 3 | 2 | 2 | 8 |
 | 2 | `7c27755` | 4 | 1 | 3 | 7 |
+| 3 | `242d4f0` | **15** | 0 | 0 | 0 |
 
 All three wrong answers were accepted because each number did come from the
 SQL, but the SQL answered a different question:
@@ -166,6 +167,7 @@ fixes above.
 | --- | --- | --- | --- | --- | --- |
 | 1 | `bb8310f` | **13** | 0 | 2 | 0 |
 | 2 | `bb8310f` | **13** | 0 | 1 | 1 |
+| 3 | `242d4f0` | **13** | 0 | 2 | 0 |
 
 - All 8 difference attempts and all 4 counting-grain traps were correct.
 - *Texas's pct for the 200000+ group* failed in both runs: the SQL filtered
@@ -179,6 +181,41 @@ fixes above.
 - Provider overload was much lower on this day than during held-out v1, and
   these datasets may simply be easier. Two runs of 15 questions show the fixes
   work on unseen data; they do not establish an accuracy rate.
+
+### Held-out runs with the trust engine
+
+Both held-out sets were run once more at `242d4f0`, through the website's API,
+with the SQL audit, trust levels and second query switched on. An answer counted
+as correct only if the website showed it as verified.
+
+| Set | Attempts | Correct and verified | Wrong | No accepted number | Provider errors |
+| --- | --- | --- | --- | --- | --- |
+| Held-out v1 | 15 | 15 | 0 | 0 | 0 |
+| Held-out v2 | 15 | 13 | 0 | 2 | 0 |
+| **Both** | **30** | **28** | **0** | **2** | **0** |
+
+Neither answer without an accepted number showed a wrong number:
+
+- *Texas's pct for the 200000+ group.* The answer, 0.048, was right, but the
+  second query filtered `region = 'Texas'` and returned no rows. The audit named
+  the mistake and the answer was marked for review.
+- *Construction unemployment, January 2010 minus January 2000.* The SQL was right
+  (2194 minus 745 is 1449), but the written conclusion repeated the two years,
+  which no claim covers, so VeriSight gave no answer.
+
+A question took a median of 18 seconds and 5 model calls, and at most 44 seconds
+and 11 calls.
+
+Two limits apply:
+
+- These questions were no longer unseen. Held-out v1's failures drove fixes, and
+  both sets were used to measure the SQL audit. The runs test the whole engine on
+  known questions; they do not estimate accuracy on new data.
+- The second query was often not independent. In 17 of the 28 verified answers it
+  repeated the first query apart from aliases, quoting or the order of filters.
+  Such a repeat no longer counts as a second check. With that rule applied to
+  these saved answers, 11 stay verified and 17 become "Number matches SQL only",
+  with the same correct numbers.
 
 ## Examples from live runs
 
@@ -226,11 +263,9 @@ because `NOT IN` never matches null.
 
 ## What these results do and do not show
 
-- Every run above predates the SQL audit and trust levels as well, and held-out
-  live runs have not been repeated with them.
-- Every run above predates the independent second-query cross-check, so none of
-  these numbers measures it. Held-out evaluations go through the website's API,
-  so a new run will count an answer as accepted only when both queries agree.
+- Only the held-out runs at `242d4f0` used the SQL audit, trust levels and second
+  query. Every earlier run predates them, and the development evaluations go
+  through the command line, which does not run those checks.
 - An accepted number is proven to come from an executed SQL result. The
   verifier does not prove that the SQL means what the question asked. The
   evaluations measure that separately, against independent answers and traps.
@@ -244,7 +279,7 @@ because `NOT IN` never matches null.
   but not every one. Formats outside the documented cleaning rules stay as text.
 - Provider errors depend on the free model tier's load and are excluded from the
   correct and wrong counts, not hidden: they appear in every table.
-- 210 attempts across 67 questions is evidence, not a reliability guarantee.
+- 240 attempts across 67 questions is evidence, not a reliability guarantee.
 
 ## Reproduce
 

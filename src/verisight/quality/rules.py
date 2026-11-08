@@ -323,8 +323,9 @@ _NOTE_ISSUES: dict[str, tuple[QualityIssueType, QualitySeverity, str]] = {
     ),
     "abbreviated_numbers": (
         QualityIssueType.FORMATTED_NUMBERS,
-        QualitySeverity.INFO,
-        "Abbreviated numbers were expanded, so 1.2K became 1200.",
+        QualitySeverity.WARNING,
+        "Abbreviated numbers were expanded, so 1.2K became 1200. Check that the "
+        "letters mean thousands, millions or billions in this column.",
     ),
     "unit_suffix": (
         QualityIssueType.FORMATTED_NUMBERS,
@@ -351,6 +352,13 @@ _NOTE_ISSUES: dict[str, tuple[QualityIssueType, QualitySeverity, str]] = {
         QualitySeverity.WARNING,
         "Dates could be day-first or month-first, so the column stayed as text "
         "instead of guessing.",
+    ),
+    "ambiguous_numbers": (
+        QualityIssueType.AMBIGUOUS_NUMBERS,
+        QualitySeverity.WARNING,
+        "These values are numbers with letters after them, such as 10M or 12A. "
+        "That could be an amount or a code, so the column stayed as text instead "
+        "of guessing.",
     ),
     "non_numeric_values": (
         QualityIssueType.STRAY_VALUES,

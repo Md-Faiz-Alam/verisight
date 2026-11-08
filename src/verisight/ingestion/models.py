@@ -68,6 +68,7 @@ NoteRule = Literal[
     "padded_numbers",
     "date_format",
     "ambiguous_dates",
+    "ambiguous_numbers",
     "non_numeric_values",
     "text_missing_labels",
     "possible_missing_labels",

@@ -228,12 +228,12 @@ export const TRUST: Record<TrustLevel, { label: string; tone: string; note: stri
   verified: {
     label: "Verified",
     tone: "ok",
-    note: "The SQL passed every check, and a second query agreed.",
+    note: "The SQL passed every check, and a differently written second query agreed.",
   },
   number_matched: {
     label: "Number matches SQL only",
     tone: "warn",
-    note: "A check could not run, so this is not fully verified.",
+    note: "A check could not run or added no new evidence, so this is not fully verified.",
   },
   needs_review: {
     label: "Needs review",

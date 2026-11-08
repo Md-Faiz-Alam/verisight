@@ -22,7 +22,7 @@ from verisight.execution.investigation_result import (
 from verisight.execution.models import QueryResult
 from verisight.execution.sql_audit import SqlAudit, audit_sql
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
-from verisight.execution.trust import TrustLevel
+from verisight.execution.trust import CheckStatus, TrustLevel
 from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.service import DatasetLoader
 
@@ -706,7 +706,10 @@ def _investigate(
 
 
 GOOD = "SELECT SUM(amount) AS total FROM orders"
-SECOND = "SELECT SUM(amount) AS cross_check_answer FROM orders"
+SECOND = (
+    "SELECT SUM(a) AS cross_check_answer FROM (SELECT amount AS a FROM orders) AS o"
+)
+REPEAT = "SELECT SUM(amount) AS cross_check_answer FROM orders"
 
 
 def _level(result: InvestigationResult) -> TrustLevel:
@@ -726,6 +729,20 @@ def test_all_checks_passing_earns_verified(tmp_path: Path) -> None:
         "second_query",
         "second_query_audit",
     ]
+
+
+def test_second_query_that_repeats_the_first_is_only_a_number_match(
+    tmp_path: Path,
+) -> None:
+    result = _investigate(tmp_path, [GOOD, REPEAT])
+
+    assert _level(result) is TrustLevel.NUMBER_MATCHED
+    assert result.cross_check is not None
+    assert result.cross_check.identical_sql is True
+    assert result.trust is not None
+    second = result.trust.checks[3]
+    assert second.status is CheckStatus.NOT_ASSESSED
+    assert "same way as the first" in second.detail
 
 
 def test_second_query_agreeing_on_a_flawed_query_is_not_enough(tmp_path: Path) -> None:

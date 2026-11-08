@@ -24,6 +24,7 @@ from verisight.execution.exceptions import (
 from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.models import QueryResult
 from verisight.execution.prompt_budget import PromptBudgetExceededError
+from verisight.execution.validation import _population_terms
 
 CROSS_CHECK_COLUMN = "cross_check_answer"
 # Absorbs binary floating-point noise only; a rounded display does not agree.
@@ -64,9 +65,10 @@ CrossCheckReason = Literal[
 class CrossCheck:
     """A second calculation of one answer, kept beside the original evidence.
 
-    ``identical_sql`` is true when both queries are the same apart from aliases
-    and identifier quoting. The check is then weaker: the second query repeated
-    the first formulation instead of reaching the number another way.
+    ``identical_sql`` is true when both queries are the same apart from aliases,
+    identifier quoting and the order of AND conditions. The second query then
+    repeated the first formulation instead of reaching the number another way,
+    so its agreement adds no independent evidence.
     """
 
     status: CrossCheckStatus
@@ -158,10 +160,16 @@ def _same_number(first: Decimal, second: Decimal) -> bool:
 
 
 def _canonical_sql(sql: str) -> str:
-    """Render SQL without aliases or quoting, for comparison only."""
+    """Render SQL without aliases, quoting or AND order, for comparison only."""
     tree = sqlglot.parse_one(sql, read="duckdb").transform(
         lambda node: node.this if isinstance(node, exp.Alias) else node
     )
     for identifier in tree.find_all(exp.Identifier):
         identifier.set("quoted", False)
+    # Deepest first, so each outer run of conditions sorts on settled text.
+    for node in reversed(list(tree.find_all(exp.And))):
+        if not isinstance(node.parent, exp.And):
+            terms = _population_terms(node)
+            terms.sort(key=lambda term: term.sql(dialect="duckdb"))
+            node.replace(exp.and_(*terms))
     return tree.sql(dialect="duckdb")

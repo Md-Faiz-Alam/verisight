@@ -93,7 +93,9 @@ datasets that played no part in development, with questions committed before
 each run, the first set exposed bugs and **3 wrong accepted answers** where the
 SQL answered a different question. After the fixes, a second held-out set of
 15 questions on 5 more unseen datasets gave **26 correct and 0 wrong** in 30
-attempts. Every run is listed, including failures, in
+attempts. Run again with the trust engine switched on, when these 30 questions
+were no longer unseen, the two sets gave **28 correct and verified, 0 wrong**
+and 2 with no accepted number. Every run is listed, including failures, in
 [Live results](docs/results.md).
 
 ## Scope and limits
@@ -119,7 +121,7 @@ review the SQL. Narrative verification remains explicitly false.
 | Validated DuckDB queries with configured resource limits | Implemented |
 | Gemini planning, query repair, and bounded investigations | Implemented |
 | Structured synthesis and numerical claim verification | Implemented |
-| Independent second-query cross-check of single-number answers | Implemented; required for the website's verified label, not yet evaluated live |
+| Independent second-query cross-check of single-number answers | Implemented; required for the website's verified label; run live at `242d4f0` ([Live results](docs/results.md)) |
 | Application-rendered statements linked to claims | Implemented |
 | Limited narrative token audit and Unicode digit coverage | Implemented |
 | Evidence recovery for tested expected workflow failures | Implemented |
@@ -343,8 +345,8 @@ one clear rule, in CSV, JSON and Excel alike, and every change is reported:
 | One currency mark on every value, before or after the number | `$12.00`, `USD 100`, `100 €` | `12.0`, noted as `$ removed` |
 | A percent sign on every value | `10%` | `10`, in percent points |
 | Numbers in brackets | `(1,234.50)` | `-1234.5` |
-| K, M or B after a number | `1.2K` | `1200` |
-| One unit on every value | `12 kg` | `12`, noted as `kg removed` |
+| K, M or B after a number, when the column is shown to hold amounts | `1.2K` | `1200` |
+| One known unit on every value | `12 kg` | `12`, noted as `kg removed` |
 | Comma decimals, when the values prove them | `1.234,50`, `1,5` | `1234.5`, `1.5` |
 | Up to 5% stray values in a column of 20 or more | `10, 20, TBD` | `TBD` becomes missing, with a warning |
 | Placeholders in a text column | `N/A`, `null`, `--` | Missing |
@@ -355,8 +357,20 @@ The markers for otherwise numeric or date columns are `N/A`, `NA`, `#N/A`, `null
 `None`, `NaN`, `-`, `--`, `?` and common case variants. In text columns, `NA` stays
 a label because it can mean North America, and words that can be real categories,
 such as `unknown` or `None`, are kept and reported as `possible_missing_labels`.
-Columns named like identifiers (`id`, `code`, `sku`, `zip`, `phone`) never lose
-stray values, and leading zeros, mixed currencies and mixed units stay as text.
+Columns named like identifiers (`id`, `code`, `sku`, `zip`, `phone`, `key`, `ref`,
+`serial`) never lose stray values, and leading zeros, mixed currencies and mixed units
+stay as text.
+
+A number with letters after it can be a code instead of a quantity: `10M` can be a
+shoe size and `12A` a seat. K, M and B are expanded only when the column's name says
+it holds amounts, such as `salary` or `followers`, or the values show it with a
+currency mark or a decimal. A unit must be on a known list, and a one-letter unit
+such as `V` also needs a space before it or a measurement in the column's name, such
+as `voltage`. Columns named like labels (`size`, `seat`, `model`, `version` and
+similar) are never read this way. Currency codes need a space or a decimal, so
+`GBP100` stays as text, and numbers in brackets need another value to compare with,
+so a column of nothing but `(123)` stays as text. A column left as text because its
+values could be either gets an `ambiguous_numbers` warning.
 `1,234` alone is read as 1234 with a note to check it, unless the file is separated
 by semicolons, where it is read as 1.234. Plain numbers stored as JSON or Excel text
 are not converted. Labels that differ only by letter case or surrounding spaces,
@@ -614,8 +628,8 @@ Every website answer carries a trust level and the checks behind it:
 | Level | Meaning |
 | --- | --- |
 | Computed without AI | Fixed rules wrote the SQL because the question matched exact columns and values. |
-| Verified | The number equals its SQL result, the SQL audit found no known mistake, and an independent second query agreed. |
-| Number matches SQL only | The number equals its SQL result, but a check could not run. |
+| Verified | The number equals its SQL result, the SQL audit found no known mistake, and a second query, written differently from the first, agreed. |
+| Number matches SQL only | The number equals its SQL result, but a check could not run, or the second query only repeated the first. |
 | Needs review | A check failed. The page says which one and why. |
 | Not verified | No number could be tied to an executed result. |
 
@@ -655,11 +669,14 @@ shares the investigation's time budget.
 | `disagreed` | The numbers differ. Both values and the second SQL are kept. |
 | `not_assessed` | No comparison was possible: the answer has several claims, the second query failed or returned no single number, the provider was unavailable, or time ran out. |
 
-The website marks an answer as verified only on `agreed`. Agreement is evidence,
-not proof: both queries can make the same mistake, and that is more likely when
-one model writes both. Set `VERISIGHT_GEMINI_CROSS_CHECK_MODEL` to a different
-model to reduce that risk. `identical_sql` shows when the second query only
-repeated the first formulation. The CLI does not run this check.
+The website marks an answer as verified only on `agreed`, and only when the second
+query was written differently from the first. `identical_sql` records a repeat: the
+same query apart from aliases, quoting and the order of AND conditions. A repeat
+adds no evidence, so the answer stays at "Number matches SQL only". Agreement
+between different queries is still evidence, not proof: both can make the same
+mistake, and that is more likely when one model writes both. Set
+`VERISIGHT_GEMINI_CROSS_CHECK_MODEL` to a different model to reduce that risk. The
+CLI does not run this check.
 
 ## Partial results and safe diagnostics
 
@@ -812,7 +829,8 @@ Run the deterministic development benchmark:
 python -m pytest tests/test_verification_benchmark.py tests/test_analytical_correctness_benchmark.py tests/test_multistep_correctness_benchmark.py -q
 ```
 
-The [controlled correctness evaluation](docs/evaluation.md) adds ten questions
+The controlled correctness evaluation in
+`tests/test_analytical_correctness_benchmark.py` adds ten questions
 with control SQL and intentionally incorrect queries. It exercises the pipeline
 and scorer against independent expected answers; generation is scripted, so it
 does not measure live model accuracy. The bounded multi-step cases add
@@ -833,8 +851,7 @@ python -m scripts.live_evaluation --live --case all --request-timeout-seconds 60
 An additional `--case challenge` suite tests join duplication, a weighted mean,
 and a distinct-learner denominator on energy, research, and education schemas.
 Each case checks supplied control SQL against an independently specified answer
-before model generation. These are development fixtures, not held-out evidence;
-see [Evaluation](docs/evaluation.md) for the questions, arithmetic, and protocol.
+before model generation. These are development fixtures, not held-out evidence.
 
 Live calls require a key and may incur charges. The evaluator enables disclosure
 for its synthetic fixtures. Defaults remain 20 seconds per request and zero
@@ -846,11 +863,9 @@ tracked-change status, settings, timings, outcomes, audits, and available failur
 and generation metadata. Older reports may lack newer fields.
 
 Current synthetic reports include questions, conclusions, SQL, result cells,
-and claim details. The historical record includes successful caller-scoped and
-CLI runs as well as supported wrong-population answers, provider failures, and
-unmet output contracts. These are separate observations across revisions;
-they cannot be pooled into a general reliability rate. See
-[Evaluation](docs/evaluation.md) for the evidence checkpoints and remaining protocol.
+and claim details. Earlier hand-run reports remain in this repository's Git
+history. They are separate observations across revisions and cannot be pooled
+into a general reliability rate.
 
 `correct_numeric` scores the submitted metric; it does not certify prose or SQL
 semantics. `no_claims` is not automatically a justified abstention. Retain failed

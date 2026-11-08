@@ -25,6 +25,7 @@ class QualityIssueType(StrEnum):
     TOTAL_ROW = "total_row"
     REFORMATTED_DATES = "reformatted_dates"
     AMBIGUOUS_DATES = "ambiguous_dates"
+    AMBIGUOUS_NUMBERS = "ambiguous_numbers"
     STRAY_VALUES = "stray_values"
     POSSIBLE_MISSING_LABELS = "possible_missing_labels"
     REMOVED_ROWS = "removed_rows"

@@ -1,5 +1,3 @@
-from functools import lru_cache
-from pathlib import Path
 from threading import TIMEOUT_MAX
 from typing import Literal
 
@@ -18,8 +16,6 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    environment: Literal["development", "test", "production"] = "development"
-
     log_level: Literal[
         "DEBUG",
         "INFO",
@@ -27,8 +23,6 @@ class Settings(BaseSettings):
         "ERROR",
         "CRITICAL",
     ] = "INFO"
-
-    data_dir: Path = Path("data")
 
     max_upload_size_mb: int = Field(
         default=100,
@@ -101,10 +95,3 @@ class Settings(BaseSettings):
         gt=0,
         allow_inf_nan=False,
     )
-
-
-@lru_cache
-def get_settings() -> Settings:
-    """Return the cached application settings."""
-
-    return Settings()

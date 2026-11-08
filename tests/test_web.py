@@ -93,7 +93,7 @@ def _script(conclusion: str, expected: str, column: str = "total") -> list[str]:
                 ],
             }
         ),
-        "SELECT SUM(amount) AS cross_check_answer FROM data",
+        "SELECT SUM(a) AS cross_check_answer FROM (SELECT amount AS a FROM data) AS d",
     ]
 
 
@@ -355,7 +355,7 @@ def test_answer_is_verified_only_when_the_second_query_agrees() -> None:
 
     assert agreed["outcome"] == "verified"
     assert agreed["cross_check"]["status"] == "agreed"
-    assert agreed["cross_check"]["identical_sql"] is True
+    assert agreed["cross_check"]["identical_sql"] is False
     assert status == 200
     assert disagreed["outcome"] == "unverified"
     assert disagreed["assessment"]["accepted"] is True
@@ -364,6 +364,23 @@ def test_answer_is_verified_only_when_the_second_query_agrees() -> None:
     assert disagreed["cross_check"]["independent_value"] == "30"
     assert disagreed["cross_check"]["identical_sql"] is False
     assert "WHERE state" in disagreed["cross_check"]["sql"]
+
+
+def test_second_query_that_repeats_the_first_is_not_shown_as_verified() -> None:
+    app = create_app(settings=_settings("server-key"), web=WebSettings())
+    script = _script("The total is 930.", "930")
+    script[-1] = "SELECT SUM(amount) AS cross_check_answer FROM data"
+    with TestClient(app) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        with patch(GENERATE, side_effect=script):
+            status, answer = _ask(client, dataset["dataset_id"])
+
+    assert status == 200
+    assert answer["assessment"]["accepted"] is True
+    assert answer["cross_check"]["status"] == "agreed"
+    assert answer["cross_check"]["identical_sql"] is True
+    assert answer["outcome"] == "unverified"
+    assert answer["trust"]["level"] == "number_matched"
 
 
 def test_dashboard_is_computed_without_a_key_and_filters(client: TestClient) -> None:

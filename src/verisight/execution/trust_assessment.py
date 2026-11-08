@@ -52,6 +52,13 @@ def _second_query_check(result: InvestigationResult) -> TrustCheck:
             CheckStatus.NOT_ASSESSED,
             "No independent second calculation was available.",
         )
+    if check.status is CrossCheckStatus.AGREED and check.identical_sql:
+        return TrustCheck(
+            "second_query",
+            CheckStatus.NOT_ASSESSED,
+            "The second query was written the same way as the first, so its "
+            "agreement adds no independent evidence.",
+        )
     if check.status is CrossCheckStatus.AGREED:
         return TrustCheck(
             "second_query",

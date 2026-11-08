@@ -22,9 +22,6 @@ from verisight.execution.exceptions import (
 )
 from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
-from verisight.execution.generative_synthesis import (
-    GenerativeInvestigationSynthesizer,
-)
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
@@ -154,7 +151,9 @@ def test_real_duckdb_scalar_types_reach_synthesis_prompt() -> None:
         [_investigate_response(), _finish_response()]
     )
     synthesis_client = RecordingGenerationClient(
-        "The report date is January 15, 2026, and the amount is 1234.567890."
+        json.dumps(
+            {"conclusion": "The query returned a date and an amount.", "claims": []}
+        )
     )
     planner = ScalarQueryPlanner()
 
@@ -164,7 +163,7 @@ def test_real_duckdb_scalar_types_reach_synthesis_prompt() -> None:
             planner=planner,
         ),
         investigator=GenerativeInvestigator(investigator_client),
-        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        synthesizer=StructuredInvestigationSynthesizer(synthesis_client),
         max_steps=1,
     )
 
@@ -195,7 +194,7 @@ def test_real_duckdb_scalar_types_reach_synthesis_prompt() -> None:
 
     synthesis_prompt = synthesis_client.prompts[0]
 
-    assert "OBSERVATION 1" in synthesis_prompt
+    assert '"observations":[' in synthesis_prompt
     assert "report_date" in synthesis_prompt
     assert "created_at" in synthesis_prompt
     assert "amount" in synthesis_prompt

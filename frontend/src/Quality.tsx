@@ -11,6 +11,7 @@ const LABELS: Record<string, string> = {
   total_row: "Rows that hold totals",
   reformatted_dates: "Dates recognised",
   ambiguous_dates: "Unclear dates",
+  ambiguous_numbers: "Unclear numbers",
   stray_values: "Stray values",
   possible_missing_labels: "Possibly missing",
   removed_rows: "Summary row removed",

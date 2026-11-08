@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from threading import TIMEOUT_MAX
 from typing import Literal
 
@@ -7,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 from pydantic_settings import SettingsConfigDict
 
-from verisight.config import Settings, get_settings
+from verisight.config import Settings
 
 
 class SettingsWithoutEnvFile(Settings):
@@ -24,9 +23,7 @@ class SettingsWithoutEnvFile(Settings):
 def test_settings_have_expected_defaults() -> None:
     settings = SettingsWithoutEnvFile()
 
-    assert settings.environment == "development"
     assert settings.log_level == "INFO"
-    assert settings.data_dir == Path("data")
     assert settings.max_upload_size_mb == 100
     assert settings.max_query_result_rows == 10_000
     assert settings.max_query_memory_mb == 512
@@ -44,16 +41,8 @@ def test_settings_load_prefixed_environment_variables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
-        "VERISIGHT_ENVIRONMENT",
-        "test",
-    )
-    monkeypatch.setenv(
         "VERISIGHT_LOG_LEVEL",
         "DEBUG",
-    )
-    monkeypatch.setenv(
-        "VERISIGHT_DATA_DIR",
-        "custom-data",
     )
     monkeypatch.setenv(
         "VERISIGHT_MAX_UPLOAD_SIZE_MB",
@@ -90,9 +79,7 @@ def test_settings_load_prefixed_environment_variables(
 
     settings = SettingsWithoutEnvFile()
 
-    assert settings.environment == "test"
     assert settings.log_level == "DEBUG"
-    assert settings.data_dir == Path("custom-data")
     assert settings.max_upload_size_mb == 250
     assert settings.max_query_result_rows == 2500
     assert settings.max_query_memory_mb == 768
@@ -101,18 +88,6 @@ def test_settings_load_prefixed_environment_variables(
     assert settings.gemini_api_key == "test-api-key"
     assert settings.allow_llm_data_disclosure is True
     assert settings.gemini_model == "test-model"
-
-
-def test_settings_reject_invalid_environment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv(
-        "VERISIGHT_ENVIRONMENT",
-        "invalid",
-    )
-
-    with pytest.raises(ValidationError):
-        SettingsWithoutEnvFile()
 
 
 def test_settings_reject_non_positive_upload_limit(
@@ -125,17 +100,6 @@ def test_settings_reject_non_positive_upload_limit(
 
     with pytest.raises(ValidationError):
         SettingsWithoutEnvFile()
-
-
-def test_get_settings_returns_cached_instance() -> None:
-    get_settings.cache_clear()
-
-    first = get_settings()
-    second = get_settings()
-
-    assert first is second
-
-    get_settings.cache_clear()
 
 
 def test_settings_load_query_result_row_limit_from_environment(

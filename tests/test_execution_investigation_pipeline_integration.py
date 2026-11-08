@@ -14,9 +14,6 @@ from verisight.execution.exceptions import InvestigationError
 from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
-from verisight.execution.generative_synthesis import (
-    GenerativeInvestigationSynthesizer,
-)
 from verisight.execution.investigation_result import InvestigationStatus
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.planning import QueryPlan, QueryRequest
@@ -156,7 +153,7 @@ def test_investigator_provider_failure_stops_before_sql_execution() -> None:
             planner=planner,
         ),
         investigator=GenerativeInvestigator(investigator_client),
-        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        synthesizer=StructuredInvestigationSynthesizer(synthesis_client),
         max_steps=3,
     )
 
@@ -196,7 +193,7 @@ def test_synthesizer_provider_failure_preserves_sql_observation() -> None:
             planner=planner,
         ),
         investigator=GenerativeInvestigator(investigator_client),
-        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        synthesizer=StructuredInvestigationSynthesizer(synthesis_client),
         max_steps=1,
     )
 
@@ -217,7 +214,7 @@ def test_synthesizer_provider_failure_preserves_sql_observation() -> None:
 
     synthesis_prompt = synthesis_client.prompts[0]
 
-    assert "OBSERVATION 1" in synthesis_prompt
+    assert '"observations":[' in synthesis_prompt
     assert "Investigate the available data." in synthesis_prompt
     assert "record_count" in synthesis_prompt
     assert "[3]" in synthesis_prompt
@@ -314,7 +311,9 @@ def test_successful_generative_investigation_and_synthesis() -> None:
         ]
     )
     synthesis_client = RecordingGenerationClient(
-        response="  Three records are available.  "
+        response=json.dumps(
+            {"conclusion": "  Three records are available.  ", "claims": []}
+        )
     )
     planner = CountingPlanner()
 
@@ -324,7 +323,7 @@ def test_successful_generative_investigation_and_synthesis() -> None:
             planner=planner,
         ),
         investigator=GenerativeInvestigator(investigator_client),
-        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        synthesizer=StructuredInvestigationSynthesizer(synthesis_client),
         max_steps=1,
     )
 
@@ -349,7 +348,7 @@ def test_successful_generative_investigation_and_synthesis() -> None:
 
     synthesis_prompt = synthesis_client.prompts[0]
 
-    assert "OBSERVATION 1" in synthesis_prompt
+    assert '"observations":[' in synthesis_prompt
     assert "Investigate the available data." in synthesis_prompt
     assert "[3]" in synthesis_prompt
 
@@ -371,7 +370,7 @@ def test_investigator_invalid_response_stops_before_sql_execution() -> None:
             planner=planner,
         ),
         investigator=GenerativeInvestigator(investigator_client),
-        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        synthesizer=StructuredInvestigationSynthesizer(synthesis_client),
         max_steps=3,
     )
 
@@ -409,7 +408,7 @@ def test_empty_synthesis_conclusion_preserves_sql_observation() -> None:
             planner=planner,
         ),
         investigator=GenerativeInvestigator(investigator_client),
-        synthesizer=GenerativeInvestigationSynthesizer(synthesis_client),
+        synthesizer=StructuredInvestigationSynthesizer(synthesis_client),
         max_steps=1,
     )
 
@@ -425,4 +424,5 @@ def test_empty_synthesis_conclusion_preserves_sql_observation() -> None:
 
     assert len(investigator_client.prompts) == 1
     assert len(planner.requests) == 1
-    assert len(synthesis_client.prompts) == 1
+    # Malformed output gets the one format-repair attempt.
+    assert len(synthesis_client.prompts) == 2
