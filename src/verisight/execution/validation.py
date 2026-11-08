@@ -335,16 +335,23 @@ def _without_format_complements(question: str) -> str:
     )
 
 
+_MAX_CODE_LENGTH = 3
+
+
 def _question_mentions_category(question: str, value: str) -> bool:
     """Exact case-insensitive words only; direct negative mentions are skipped.
 
-    Words inside a reporting-format complement are not category mentions.
+    Words inside a reporting-format complement are not category mentions. A short
+    capitalised code must be written in capitals, so the word "in" does not name
+    the code ``IN``.
     """
     if not value.strip():
         return False
     question = _without_format_complements(question)
     literal = _plural_pattern(value)
-    if not re.search(rf"(?<!\w){literal}(?!\w)", question, re.IGNORECASE):
+    short_code = value.isupper() and len(value.strip()) <= _MAX_CODE_LENGTH
+    case = 0 if short_code else re.IGNORECASE
+    if not re.search(rf"(?<!\w){literal}(?!\w)", question, case):
         return False
     negative = (
         rf"\b(?:exclude|excluding|except|without|not|non[- ])\s*"

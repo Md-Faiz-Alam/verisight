@@ -173,6 +173,19 @@ def _complete_string_values(
     return tuple(sorted(values)) if values else None
 
 
+# A column may list more values when they repeat, as codes and labels do. Mostly
+# unique columns, such as names and identifiers, stay out of the prompt.
+_REPEATING_VALUES_PER_COLUMN = 64
+
+
+def _repeating_string_values(series: pd.Series) -> tuple[str, ...] | None:
+    """Return up to 64 values if each appears at least twice on average."""
+    values = _complete_string_values(series, _REPEATING_VALUES_PER_COLUMN)
+    if values is None or 2 * len(values) > int(series.notna().sum()):
+        return None
+    return values
+
+
 # Review-only category values: larger than the prompt list, never sent to a model.
 _REVIEW_VALUES_PER_COLUMN = 200
 _REVIEW_VALUES_BUDGET = 65_536
@@ -238,32 +251,38 @@ class QueryContextBuilder:
 
         The serialized category array is limited to 8,192 characters, including
         identifiers and JSON escaping. Individual columns are omitted in full
-        when limits prevent a complete nonmissing value set. This bounds retained
-        prompt context, not input size or the cost of scanning loaded columns.
+        when limits prevent a complete nonmissing value set. Small columns come
+        first, then larger columns whose values repeat, within what is left. This
+        bounds retained prompt context, not input size or the cost of scanning
+        loaded columns.
         """
         context = self.build(
             SchemaInferer().infer_dataset(dataset), population=population
         )
         categories: list[ObservedCategoryValues] = []
         used = 2
-        for table, relation in zip(dataset.tables, context.relations, strict=True):
-            for column in relation.columns:
-                if column.logical_type is not LogicalType.STRING:
-                    continue
-                values = _complete_string_values(table.data[column.name])
-                if values is None:
-                    continue
-                item = ObservedCategoryValues(
-                    relation=relation.relation_name,
-                    column=column.name,
-                    observed_nonmissing_values=values,
-                )
-                size = len(json.dumps(asdict(item), ensure_ascii=False))
-                size += 2 * bool(categories)
-                if used + size > 8_192:
-                    continue
-                categories.append(item)
-                used += size
+        listed: set[tuple[str, str]] = set()
+        for read_values in (_complete_string_values, _repeating_string_values):
+            for table, relation in zip(dataset.tables, context.relations, strict=True):
+                for column in relation.columns:
+                    key = (relation.relation_name, column.name)
+                    if column.logical_type is not LogicalType.STRING or key in listed:
+                        continue
+                    values = read_values(table.data[column.name])
+                    if values is None:
+                        continue
+                    item = ObservedCategoryValues(
+                        relation=relation.relation_name,
+                        column=column.name,
+                        observed_nonmissing_values=values,
+                    )
+                    size = len(json.dumps(asdict(item), ensure_ascii=False))
+                    size += 2 * bool(categories)
+                    if used + size > 8_192:
+                        continue
+                    categories.append(item)
+                    listed.add(key)
+                    used += size
         totals = [
             ObservedTotalRows(
                 relation=relation.relation_name,

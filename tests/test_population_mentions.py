@@ -107,6 +107,37 @@ def test_ambiguous_mentions_remain_unassessed(question: str) -> None:
 
 
 @pytest.mark.parametrize(
+    ("question", "value", "mentioned"),
+    [
+        ("How many records are in Ohio?", "IN", False),
+        ("Is a record missing or late?", "OR", False),
+        ("What is a typical amount?", "A", False),
+        ("How many records are in IN?", "IN", True),
+        ("How many students got grade A?", "A", True),
+        ("How many USAs are there?", "USA", True),
+        ("How many open records are there?", "OPEN", True),
+        ("How many records are Closed?", "closed", True),
+    ],
+)
+def test_short_codes_must_be_written_in_capitals(
+    question: str, value: str, mentioned: bool
+) -> None:
+    assert _question_mentions_category(question, value) is mentioned
+
+
+def test_the_word_in_raises_no_warning_about_a_code_column() -> None:
+    context = QueryContext(
+        relations=(),
+        observed_categories=(ObservedCategoryValues("places", "state", ("IN", "VT")),),
+    )
+    sql = "SELECT COUNT(*) FROM places WHERE state = 'VT'"
+
+    review = review_population("How many places are in Vermont?", sql, context)
+
+    assert review.status == "not_assessed"
+
+
+@pytest.mark.parametrize(
     ("column", "value"), [(" ", "no"), ("_", "no"), ("flagged", " ")]
 )
 def test_blank_assignment_parts_never_match(column: str, value: str) -> None:

@@ -209,6 +209,69 @@ def test_filters_in_another_order_are_the_same_query(
     assert check.identical_sql is identical
 
 
+FLIGHTS = (
+    "SELECT SUM(f.n) FROM flights AS f JOIN ports AS a ON f.origin = a.code "
+    "WHERE a.state = 'AK'"
+)
+ROUTES = (
+    "SELECT SUM(f.n) FROM flights AS f JOIN ports AS o ON f.origin = o.code "
+    "JOIN ports AS d ON f.dest = d.code WHERE o.state = 'TX' AND d.state = 'CA'"
+)
+INNER = "(SELECT amount AS total FROM sales)"
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "identical"),
+    [
+        (
+            FLIGHTS,
+            "SELECT SUM(x.n) FROM flights x JOIN ports y ON x.origin = y.code "
+            "WHERE y.state = 'AK'",
+            True,
+        ),
+        (
+            FLIGHTS,
+            "SELECT SUM(flights.n) FROM flights JOIN ports "
+            "ON flights.origin = ports.code WHERE ports.state = 'AK'",
+            True,
+        ),
+        (
+            FLIGHTS,
+            "SELECT SUM(f.n) FROM flights AS f JOIN ports AS a ON f.dest = a.code "
+            "WHERE a.state = 'AK'",
+            False,
+        ),
+        (
+            ROUTES,
+            ROUTES.replace("o.", "p.").replace("AS o", "AS p"),
+            True,
+        ),
+        (
+            ROUTES,
+            "SELECT SUM(f.n) FROM flights AS f JOIN ports AS o ON f.origin = o.code "
+            "JOIN ports AS d ON f.dest = d.code "
+            "WHERE o.state = 'CA' AND d.state = 'TX'",
+            False,
+        ),
+        (PRIMARY, "SELECT SUM(s.amount) FROM sales AS s", True),
+        (PRIMARY, "SELECT SUM(other.amount) FROM sales", False),
+        (
+            f"SELECT SUM(x.total) FROM {INNER} AS x",
+            f"SELECT SUM(y.total) FROM {INNER} AS y",
+            True,
+        ),
+    ],
+)
+def test_table_aliases_do_not_make_a_query_independent(
+    first: str, second: str, identical: bool
+) -> None:
+    check = IndependentCrossChecker(_Runner(sql=second)).check(
+        "How much?", ANSWER, first
+    )
+
+    assert check.identical_sql is identical
+
+
 class _Script:
     def __init__(self, items: list[str | Exception]) -> None:
         self.items = list(items)

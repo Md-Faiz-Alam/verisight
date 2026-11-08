@@ -226,6 +226,53 @@ def test_category_array_budget_counts_escaped_values_and_keeps_later_small_colum
     assert len(context.observed_categories[0].observed_nonmissing_values) == 8
 
 
+def test_repeating_columns_list_more_values_but_unique_ones_do_not(
+    categorical_dataset: LoadedDataset,
+) -> None:
+    categorical_dataset.tables[0].data = pd.DataFrame(
+        {
+            "name": [f"person {i}" for i in range(40)],
+            "code": [f"C{i % 20}" for i in range(40)],
+            "many": [f"M{i % 39}" for i in range(40)],
+        }
+    )
+
+    listed = QueryContextBuilder().build_from_dataset(categorical_dataset)
+
+    assert [c.column for c in listed.observed_categories] == ["code"]
+    assert len(listed.observed_categories[0].observed_nonmissing_values) == 20
+
+
+def test_small_columns_keep_their_place_before_repeating_ones(
+    categorical_dataset: LoadedDataset,
+) -> None:
+    categorical_dataset.tables[0].data = pd.DataFrame(
+        {
+            "code": [f"C{i % 20}" for i in range(40)],
+            "status": ["open", "closed"] * 20,
+        }
+    )
+
+    listed = QueryContextBuilder().build_from_dataset(categorical_dataset)
+
+    assert [c.column for c in listed.observed_categories] == ["status", "code"]
+
+
+def test_a_repeating_column_over_the_prompt_budget_is_left_out(
+    categorical_dataset: LoadedDataset,
+) -> None:
+    categorical_dataset.tables[0].data = pd.DataFrame(
+        {
+            f"wide_{n}": [f"{n}{i % 60:03d}" + "x" * 120 for i in range(120)]
+            for n in range(3)
+        }
+    )
+
+    listed = QueryContextBuilder().build_from_dataset(categorical_dataset)
+
+    assert [c.column for c in listed.observed_categories] == ["wide_0"]
+
+
 def test_dataset_builder_omits_high_cardinality_and_all_missing_columns(
     categorical_dataset: LoadedDataset,
 ) -> None:

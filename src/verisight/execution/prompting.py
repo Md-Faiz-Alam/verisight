@@ -30,6 +30,9 @@ LABEL_VARIANT_RULES = (
     "- Labels that differ only by letter case or surrounding spaces, such as "
     "'Open' and 'open ', are reported as label variants. Unless the "
     "question distinguishes them, compare such labels with LOWER(TRIM(column)).\n"
+    "- When OBSERVED CATEGORICAL VALUES lists a column, filter it with a value from "
+    "that list. If the question uses a full name and the list holds short codes, "
+    "or the reverse, use the listed form.\n"
 )
 
 

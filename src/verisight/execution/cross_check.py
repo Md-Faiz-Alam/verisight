@@ -65,8 +65,9 @@ CrossCheckReason = Literal[
 class CrossCheck:
     """A second calculation of one answer, kept beside the original evidence.
 
-    ``identical_sql`` is true when both queries are the same apart from aliases,
-    identifier quoting and the order of AND conditions. The second query then
+    ``identical_sql`` is true when both queries are the same apart from column
+    and table aliases, identifier quoting and the order of AND conditions. The
+    second query then
     repeated the first formulation instead of reaching the number another way,
     so its agreement adds no independent evidence.
     """
@@ -159,11 +160,33 @@ def _same_number(first: Decimal, second: Decimal) -> bool:
     return abs(first - second) <= margin
 
 
+def _number_sources(tree: exp.Expression) -> None:
+    """Replace table aliases with positions, so their names cannot differ.
+
+    Positions keep a table joined twice as two sources, so swapping their roles
+    still reads as a different query. With one source, qualifiers are dropped.
+    """
+    sources = [
+        node for node in tree.find_all(exp.Table, exp.Subquery) if node.alias_or_name
+    ]
+    positions: dict[str, str] = {}
+    for node in sources:
+        positions.setdefault(node.alias_or_name.casefold(), f"t{len(positions)}")
+    for column in tree.find_all(exp.Column):
+        position = positions.get(column.table.casefold())
+        if position is not None:
+            alone = len(positions) == 1
+            column.set("table", None if alone else exp.to_identifier(position))
+    for node in sources:
+        node.set("alias", None)
+
+
 def _canonical_sql(sql: str) -> str:
     """Render SQL without aliases, quoting or AND order, for comparison only."""
     tree = sqlglot.parse_one(sql, read="duckdb").transform(
         lambda node: node.this if isinstance(node, exp.Alias) else node
     )
+    _number_sources(tree)
     for identifier in tree.find_all(exp.Identifier):
         identifier.set("quoted", False)
     # Deepest first, so each outer run of conditions sorts on settled text.
