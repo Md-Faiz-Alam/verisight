@@ -173,7 +173,7 @@ export function Model({ dataset, links }: { dataset: Dataset; links: TableLink[]
     <div className="model">
       {tables.length < 2 && <p className="notice">Upload two or more files to see how they connect.</p>}
       {tables.length > 1 && links.length === 0 && (
-        <p className="notice">No shared keys were found. Tables connect when a column has the same name and overlapping values.</p>
+        <p className="notice">No shared keys were found. Tables connect through a column with the same name that is an ID, or that has one row per value in at least one table.</p>
       )}
       {links.map((link) => (
         <div className="link-row" key={`${link.left}.${link.left_column}-${link.right}`}>

@@ -548,7 +548,6 @@ def _two_tables(tmp_path: Path, first: str, second: str) -> DashboardBuilder:
         ("k,v\n1,x\n2,y\n3,z\n", "K,w\n1,p\n2,q\n", "one_to_one"),
         ("k,v\n1,x\n2,y\n3,z\n", "K,w\n1,p\n1,q\n2,r\n", "one_to_many"),
         ("k,v\n1,x\n1,y\n2,z\n3,t\n", "K,w\n1,p\n2,q\n", "many_to_one"),
-        ("k,v\n1,x\n1,y\n2,z\n3,t\n", "K,w\n1,p\n1,q\n2,r\n", "many_to_many"),
     ],
 )
 def test_shared_keys_are_found_with_their_shape(
@@ -561,9 +560,26 @@ def test_shared_keys_are_found_with_their_shape(
     assert links[0].overlap == 1.0
 
 
+def test_a_column_named_as_a_key_links_even_when_it_repeats(tmp_path: Path) -> None:
+    first = "customer_id,v\n1,x\n1,y\n2,z\n"
+    second = "customer_id,w\n1,p\n1,q\n2,r\n"
+
+    links = _two_tables(tmp_path, first, second).build().links
+
+    assert [(link.left_column, link.kind) for link in links] == [
+        ("customer_id", "many_to_many")
+    ]
+
+
 @pytest.mark.parametrize(
     ("first", "second"),
     [
+        # Shared labels that repeat in both tables, like job or age in two surveys.
+        ("status,v\na,1\na,2\nb,3\n", "status,w\na,1\nb,2\nb,3\n"),
+        # Unique measurements that happen to match.
+        ("score,v\n1.5,x\n2.5,y\n", "score,w\n1.5,p\n2.5,q\n"),
+        # One small table's few values inside a much wider column.
+        ("n,v\n1,x\n2,y\n", "n,w\n1,p\n2,q\n3,r\n4,s\n5,t\n6,u\n"),
         # Same name, different values.
         ("k,v\n1,x\n2,y\n", "k,w\n8,p\n9,q\n"),
         # Too few distinct values to mean anything.

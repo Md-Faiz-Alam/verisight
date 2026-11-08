@@ -14,6 +14,7 @@ from decimal import Decimal
 from itertools import combinations
 
 import pandas as pd
+from pandas.api.types import is_float_dtype
 
 from verisight.analytics.domains import (
     Domain,
@@ -126,6 +127,7 @@ _MIN_CORRELATION_ROWS = 30
 _MIN_CORRELATION = 0.5
 _MIN_TREND_POINTS_FOR_PEAK = 3
 _MIN_LINK_OVERLAP = 0.5
+_KEY_WORDS = frozenset({"id", "uuid", "guid", "key", "code", "sku", "ref"})
 
 
 class DashboardRequestError(ValueError):
@@ -495,7 +497,12 @@ def _key_values(series: pd.Series) -> pd.Series:
 
 
 def _shared_keys(left: LoadedTable, right: LoadedTable) -> Iterator[TableLink]:
-    """Yield columns named alike whose values mostly overlap."""
+    """Yield columns named alike that can really join the two tables.
+
+    Sharing a name and values is not enough: two surveys both have ``age``.
+    A column must be named as a key, or hold one row per value on one side
+    with mostly the same values on both.
+    """
     others = {str(column).casefold(): column for column in right.data.columns}
     for column in left.data.columns:
         match = others.get(str(column).casefold())
@@ -509,6 +516,17 @@ def _shared_keys(left: LoadedTable, right: LoadedTable) -> Iterator[TableLink]:
             continue
         one_left = ours.is_unique
         one_right = theirs.is_unique
+        whole_values = not (
+            is_float_dtype(left.data[column]) or is_float_dtype(right.data[match])
+        )
+        mostly_shared = len(common) / max(ours.nunique(), theirs.nunique())
+        looks_like_lookup = (
+            (one_left or one_right)
+            and whole_values
+            and mostly_shared >= _MIN_LINK_OVERLAP
+        )
+        if not looks_like_lookup and not _KEY_WORDS & set(name_tokens(str(column))):
+            continue
         kind = {
             (True, True): "one_to_one",
             (True, False): "one_to_many",
