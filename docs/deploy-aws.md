@@ -161,6 +161,8 @@ All settings are environment variables in the `environment` block:
 | `VERISIGHT_WEB_MAX_DATASETS` | 100 | Stored uploads; the oldest is removed only when a new upload is valid |
 | `VERISIGHT_WEB_QUESTIONS_PER_HOUR` | 30 | Questions per visitor address |
 | `VERISIGHT_WEB_UPLOADS_PER_HOUR` | 60 | Uploads per visitor address |
+| `VERISIGHT_WEB_DASHBOARDS_PER_HOUR` | 1200 | Dashboard updates per visitor address |
+| `VERISIGHT_WEB_MAX_PREPARED_DATASETS` | 4 | Datasets kept in memory so chart filters respond at once |
 | `VERISIGHT_WEB_MAX_CONCURRENT_QUESTIONS` | 2 | Questions answered at once |
 | `VERISIGHT_WEB_PROVIDER_RETRIES` | 3 | Retries after a Gemini 503 |
 | `VERISIGHT_MAX_EXCEL_UNCOMPRESSED_MB` | 200 | Largest unpacked size of an `.xlsx` workbook |

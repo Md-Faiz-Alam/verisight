@@ -60,8 +60,9 @@ model. Get a key from [Google AI Studio](https://aistudio.google.com/apikey).
 
 ## Website
 
-VeriSight also runs as a website: upload files or try the demo data, review the
-data-quality findings, ask questions, and see the SQL behind every verified
+VeriSight also runs as a website: upload files or try the demo data, get an
+automatic dashboard you can filter by clicking, review the data-quality
+findings, ask questions, and see the SQL behind every figure and verified
 answer. It is a FastAPI REST API with interactive docs at `/docs`, plus a single
 page with no external scripts.
 
@@ -102,6 +103,7 @@ review the SQL. Narrative verification remains explicitly false.
 | --- | --- |
 | CSV, JSON, and Excel ingestion | Implemented |
 | Website and REST API with uploads, data-quality view and verified answers | Implemented |
+| Automatic multi-domain dashboards computed without a model | Implemented |
 | Reported cleaning of missing markers, separators, currency, percent, padded headers | Implemented |
 | ISO date and date-time columns in CSV and JSON | Implemented |
 | Schema inference, profiling, and data-quality analysis | Implemented |
@@ -244,6 +246,33 @@ contract, incomplete investigation, or operation failure; 2 for invalid command
 input or export failure, and 130 for a handled keyboard interruption. Exit code 0
 is not an answer-correctness verdict. Keyboard interruption does not promise
 recovery of an in-progress investigation or completed report.
+
+## Automatic dashboards
+
+Every upload gets a dashboard with headline figures, a trend over time, category
+breakdowns, value spreads and short findings. It is computed by validated SQL
+without any model call, so no data leaves the server, and each figure can show
+its query. In Python, use `VeriSight().dashboard_builder(paths).build()`.
+
+The table's subject area is recognised from its relation and column names:
+retail, finance, healthcare, HR, marketing, logistics, education, energy,
+manufacturing, real estate, environment, economy or sports. A table with too
+little evidence stays "General data". The area only decides which measures lead
+and how the page is titled; it never changes a number, and it is a guess from
+names, so check that it fits.
+
+Three rules protect the figures:
+
+- Rows detected as totals of other rows are left out, and the page says so.
+- A measure is summed only when its name says it can be, such as `amount` or
+  `quantity`. Everything else, including prices, rates and unfamiliar names, is
+  averaged, and every figure is labelled "Total" or "Average".
+- Labels that differ only by case or outer spaces are grouped together.
+
+Clicking a category filters the whole dashboard. Column names decide what is
+treated as an ID, a date or a measure, so an unusually named column can be
+charted the wrong way. Footer rows that the total-row check cannot detect, such
+as a single `TOTAL` line at the end of a file, are still counted.
 
 ## Local analysis and SQL
 

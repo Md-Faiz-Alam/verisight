@@ -8,9 +8,11 @@ from verisight.analysis.result import (
     DatasetAnalysisResult,
 )
 from verisight.analysis.service import DatasetAnalyzer
+from verisight.analytics.dashboard import DashboardBuilder
 from verisight.config import Settings
 from verisight.execution.context import PopulationFilter
 from verisight.execution.cross_check import IndependentCrossChecker
+from verisight.execution.engine import DuckDBExecutor
 from verisight.execution.exceptions import (
     InvestigationError,
     QueryPlanningError,
@@ -249,6 +251,21 @@ class VeriSight:
         analysis = self._dataset_analyzer.analyze(dataset)
 
         return self._result_builder.build(analysis)
+
+    def dashboard_builder(
+        self, paths: str | Path | Iterable[str | Path]
+    ) -> DashboardBuilder:
+        """Load files for dashboards, which are computed without a model."""
+        return DashboardBuilder(
+            self._load_dataset(paths),
+            DuckDBExecutor(
+                max_result_rows=1_000,
+                max_result_bytes=self._settings.max_query_result_bytes,
+                memory_limit_mb=self._settings.max_query_memory_mb,
+                execution_timeout_seconds=self._settings.max_query_execution_seconds,
+                temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,
+            ),
+        )
 
     def plan(
         self,

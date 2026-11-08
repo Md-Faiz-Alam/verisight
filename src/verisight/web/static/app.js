@@ -19,7 +19,16 @@ function h(tag, attrs = {}, ...children) {
   return node;
 }
 
-const state = { config: null, dataset: null, demo: false };
+const state = {
+  config: null,
+  dataset: null,
+  demo: false,
+  dashboard: null,
+  relation: null,
+  filters: [],
+  charts: [],
+  dashboardRequest: 0,
+};
 
 const DEMO_QUESTIONS = [
   "How many orders were shipped?",
@@ -240,21 +249,10 @@ function showAllFindings() {
   $("more-findings").hidden = true;
 }
 
-function suggestions(profile) {
-  if (state.demo) return DEMO_QUESTIONS;
-  const table = profile.schema.tables[0];
-  const numeric = table.columns.find((c) => ["integer", "float", "decimal"].includes(c.logical_type) && !/id$/i.test(c.name));
-  const label = table.columns.find((c) => c.logical_type === "string");
-  const list = [`How many rows does ${table.relation_name} have?`];
-  if (numeric) list.push(`What is the average ${numeric.name}?`);
-  if (numeric && label) list.push(`Which ${label.name} has the highest total ${numeric.name}?`);
-  return list;
-}
-
-function renderExamples(profile) {
+function renderExamples(profile, computed) {
   const container = $("examples");
   container.replaceChildren();
-  for (const question of suggestions(profile)) {
+  for (const question of state.demo ? DEMO_QUESTIONS : computed) {
     container.append(h("button", {
       class: "chip",
       type: "button",
@@ -264,17 +262,285 @@ function renderExamples(profile) {
   }
 }
 
+/* ---------- views ---------- */
+
+const VIEWS = ["overview", "ask", "data"];
+
+function selectView(name, focusTab = false) {
+  for (const view of VIEWS) {
+    const active = view === name;
+    const tab = $(`tab-${view}`);
+    tab.setAttribute("aria-selected", String(active));
+    tab.tabIndex = active ? 0 : -1;
+    $(`view-${view}`).hidden = !active;
+    if (active && focusTab) tab.focus();
+  }
+  // A hidden container has no width, so charts are drawn once it is visible.
+  if (name === "overview" && state.dashboard) drawCharts();
+}
+
+function moveTab(event) {
+  const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+  if (!step) return;
+  event.preventDefault();
+  const current = VIEWS.findIndex((view) => $(`tab-${view}`).getAttribute("aria-selected") === "true");
+  selectView(VIEWS[(current + step + VIEWS.length) % VIEWS.length], true);
+}
+
+/* ---------- dashboard ---------- */
+
+const prefersStill = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function countUp(node, value) {
+  const target = VSCharts.toNumber(value);
+  const finish = () => { node.textContent = VSCharts.compact(value); };
+  if (target === null || prefersStill()) { finish(); return; }
+  const started = performance.now();
+  const tick = (now) => {
+    const progress = Math.min(1, (now - started) / 450);
+    if (progress === 1 || !node.isConnected) { finish(); return; }
+    node.textContent = VSCharts.compact(target * (1 - (1 - progress) ** 3));
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function dataTable(columns, rows) {
+  return h("div", { class: "data-table-wrap" },
+    h("table", { class: "result" },
+      h("thead", {}, h("tr", {}, columns.map((c) => h("th", { text: c })))),
+      h("tbody", {}, rows.map((row) => h("tr", {}, row.map((cell) => h("td", { text: formatCell(cell) })))))));
+}
+
+// One disclosure row per card, so the query and the values are always reachable.
+function cardTools(sql, table) {
+  const panel = h("div", { class: "tool-panel", hidden: true });
+  const buttons = [];
+  const open = (button, make) => {
+    const showing = button.getAttribute("aria-expanded") === "true";
+    for (const other of buttons) other.setAttribute("aria-expanded", "false");
+    panel.hidden = showing;
+    if (!showing) {
+      button.setAttribute("aria-expanded", "true");
+      panel.replaceChildren(make());
+    }
+  };
+  const add = (text, make) => {
+    const button = h("button", { class: "tool", type: "button", text, "aria-expanded": "false", onclick: () => open(button, make) });
+    buttons.push(button);
+  };
+  if (table) add("Table", table);
+  add("SQL", () => codeBlock(sql));
+  return [h("div", { class: "card-tools" }, buttons), panel];
+}
+
+function card(size, title, subtitle, body, sql, table) {
+  return h("article", { class: `card ${size}` },
+    h("h3", { class: "card-title", text: title }),
+    subtitle ? h("p", { class: "card-sub", text: subtitle }) : null,
+    h("div", { class: "card-body" }, body),
+    ...cardTools(sql, table));
+}
+
+function kpiRow(kpis) {
+  return h("section", { class: "kpi-row", "aria-label": "Key figures" }, kpis.map((kpi) => {
+    const value = h("p", { class: "kpi-value", title: formatCell(kpi.value) });
+    countUp(value, kpi.value);
+    return h("div", { class: "kpi" },
+      h("p", { class: "kpi-label", text: kpi.label }),
+      value,
+      ...cardTools(kpi.sql, null));
+  }));
+}
+
+function activeFilter(column) {
+  return state.filters.find((f) => f.column === column);
+}
+
+function toggleFilter(column, key, label) {
+  const same = activeFilter(column)?.value === key;
+  state.filters = state.filters.filter((f) => f.column !== column);
+  if (!same) state.filters.push({ column, value: key, label });
+  loadDashboard();
+}
+
+function breakdownCard(item) {
+  const values = item.bars.map((bar) => VSCharts.toNumber(bar.value) ?? 0);
+  const widest = Math.max(...values.map(Math.abs), Number.MIN_VALUE);
+  const selected = activeFilter(item.column);
+  const rows = item.bars.map((bar, index) => {
+    const fill = h("span", { class: "bar-fill" });
+    fill.style.width = `${(Math.abs(values[index]) / widest) * 100}%`;
+    const pressed = selected?.value === bar.key;
+    return h("button", {
+      class: "bar-row",
+      type: "button",
+      "aria-pressed": String(pressed),
+      title: `${bar.label}: ${formatCell(bar.value)} from ${bar.rows.toLocaleString("en-US")} rows. Select to filter.`,
+      onclick: () => toggleFilter(item.column, bar.key, bar.label),
+    },
+      h("span", { class: "bar-label", text: bar.label }),
+      h("span", { class: "bar-track" }, fill),
+      h("span", { class: "bar-value", text: VSCharts.compact(bar.value) }));
+  });
+  const shown = item.categories > item.bars.length
+    ? `Top ${item.bars.length} of ${item.categories}`
+    : `${item.categories} categories`;
+  return card("", item.title, `${shown} · select one to filter`,
+    h("div", { class: `bars${selected ? " has-selection" : ""}` }, rows), item.sql,
+    () => dataTable(["Category", "Value", "Rows"], item.bars.map((b) => [b.label, b.value, b.rows])));
+}
+
+function drawCharts() {
+  for (const { node, draw } of state.charts) {
+    const width = node.clientWidth;
+    if (width && width !== node.dataset.drawn) {
+      node.dataset.drawn = width;
+      draw(node);
+    }
+  }
+}
+
+function addChart(draw) {
+  const node = h("div", { class: "chart" });
+  state.charts.push({ node, draw });
+  return node;
+}
+
+function renderRelations(data) {
+  const box = $("relations");
+  box.hidden = data.relations.length < 2;
+  box.replaceChildren(h("span", { text: "Table" }), ...data.relations.map((relation) => h("button", {
+    class: "pill-button",
+    type: "button",
+    "aria-pressed": String(relation.name === data.relation),
+    text: relation.name,
+    onclick: () => {
+      if (relation.name === state.relation) return;
+      state.relation = relation.name;
+      state.filters = [];
+      loadDashboard();
+    },
+  })));
+}
+
+function renderFilters() {
+  const box = $("filters");
+  box.hidden = !state.filters.length;
+  box.replaceChildren(
+    h("span", { text: "Showing only" }),
+    ...state.filters.map((filter) => h("button", {
+      class: "filter-chip",
+      type: "button",
+      "aria-label": `Remove filter ${filter.column} ${filter.label}`,
+      onclick: () => toggleFilter(filter.column, filter.value, filter.label),
+    }, filter.column.replace(/_/g, " "), " is ", h("b", { text: filter.label }), h("i", { "aria-hidden": "true", text: "×" }))),
+    h("button", { class: "link-button", type: "button", text: "Clear all", onclick: () => { state.filters = []; loadDashboard(); } }),
+  );
+}
+
+function renderDomain(data) {
+  const { domain } = data;
+  $("domain-name").textContent = domain.label;
+  const names = state.dataset.files.map((f) => f.name).join(", ");
+  const why = domain.matched.length ? ` · recognised from ${domain.matched.join(", ")}` : "";
+  $("domain-detail").textContent = `${domain.focus} · ${names}${why}`;
+}
+
+function renderDashboard(data) {
+  state.dashboard = data;
+  state.relation = data.relation;
+  state.charts = [];
+  renderDomain(data);
+  renderRelations(data);
+  renderFilters();
+  const note = $("totals-note");
+  note.hidden = !data.excluded_totals.length;
+  note.textContent = `Rows that hold totals of other rows are left out of these charts so nothing is counted twice: ${data.excluded_totals.join("; ")}.`;
+
+  const parts = [];
+  if (data.kpis.length) parts.push(kpiRow(data.kpis));
+  if (data.trend) {
+    const { trend } = data;
+    const body = addChart((node) => VSCharts.line(node, { points: trend.points, label: trend.title }));
+    parts.push(card(data.insights.length ? "wide" : "full", trend.title, `${trend.points.length} ${trend.grain}s`, body, trend.sql,
+      () => dataTable(["Period", "Value", "Rows"], trend.points.map((p) => [p.period, p.value, p.rows]))));
+  }
+  if (data.insights.length) {
+    const list = h("ul", { class: "insights" }, data.insights.map((insight) => h("li", {},
+      h("p", { text: insight.text }),
+      ...cardTools(insight.sql, null))));
+    parts.push(h("article", { class: `card ${data.trend ? "side" : "full"}` },
+      h("h3", { class: "card-title", text: "What stands out" }),
+      h("p", { class: "card-sub", text: "Calculated from the data, not written by AI" }),
+      list));
+  }
+  parts.push(...data.breakdowns.map(breakdownCard));
+  for (const spread of data.histograms) {
+    const body = addChart((node) => VSCharts.histogram(node, { bins: spread.bins, label: spread.title }));
+    parts.push(card("", spread.title, `Number of rows in ${spread.bins.length} equal ranges`, body, spread.sql,
+      () => dataTable(["From", "To", "Rows"], spread.bins.map((b) => [b.low, b.high, b.rows]))));
+  }
+  const dashboard = $("dashboard");
+  dashboard.replaceChildren(...parts);
+  drawCharts();
+  renderExamples(state.dataset.profile, data.suggestions);
+}
+
+function dashboardSkeleton() {
+  $("dashboard").replaceChildren(
+    h("div", { class: "skeleton-card kpi-skeleton" }),
+    ...[0, 1, 2, 3].map(() => h("div", { class: "skeleton-card" })),
+  );
+}
+
+async function loadDashboard() {
+  const request = ++state.dashboardRequest;
+  const dashboard = $("dashboard");
+  const error = $("dashboard-error");
+  error.hidden = true;
+  if (state.dashboard) dashboard.classList.add("updating");
+  else dashboardSkeleton();
+  try {
+    const data = await api(`/api/datasets/${state.dataset.dataset_id}/dashboard`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        relation: state.relation,
+        filters: state.filters.map(({ column, value }) => ({ column, value })),
+      }),
+    });
+    // A slower earlier response must not replace a newer selection.
+    if (request === state.dashboardRequest) renderDashboard(data);
+  } catch (err) {
+    if (request !== state.dashboardRequest) return;
+    if (err.code === "dataset_not_found") { removeDataset(); return; }
+    error.textContent = err.message;
+    error.hidden = false;
+    if (!state.dashboard) dashboard.replaceChildren();
+  } finally {
+    if (request === state.dashboardRequest) dashboard.classList.remove("updating");
+  }
+}
+
 function showDataset(data) {
   state.dataset = data;
+  state.dashboard = null;
+  state.relation = null;
+  state.filters = [];
+  state.charts = [];
   $("hero").hidden = true;
   $("workspace").hidden = false;
   const names = data.files.map((f) => f.name).join(", ");
+  $("domain-name").textContent = "Reading your data";
+  $("domain-detail").textContent = names;
   $("dataset-expiry").textContent = `${names} · deleted automatically after ${Math.round(data.expires_in_seconds / 60)} minutes`;
   renderTables(data.profile);
   renderFindings(data.profile.quality_findings);
-  renderExamples(data.profile);
+  renderExamples(data.profile, []);
   $("answers").replaceChildren();
-  $("question").focus();
+  selectView("overview");
+  loadDashboard();
 }
 
 async function upload(fileList, demo = false) {
@@ -309,6 +575,8 @@ async function removeDataset() {
     try { await api(`/api/datasets/${state.dataset.dataset_id}`, { method: "DELETE" }); } catch { /* already gone */ }
   }
   state.dataset = null;
+  state.dashboard = null;
+  state.dashboardRequest += 1;
   $("workspace").hidden = true;
   $("hero").hidden = false;
 }
@@ -527,6 +795,11 @@ async function start() {
   $("remove-button").addEventListener("click", removeDataset);
   $("more-findings").addEventListener("click", showAllFindings);
   $("ask-form").addEventListener("submit", ask);
+  for (const view of VIEWS) {
+    $(`tab-${view}`).addEventListener("click", () => selectView(view));
+    $(`tab-${view}`).addEventListener("keydown", moveTab);
+  }
+  new ResizeObserver(() => drawCharts()).observe($("view-overview"));
   $("question").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("ask-form").requestSubmit(); }
   });

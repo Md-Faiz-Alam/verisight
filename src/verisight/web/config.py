@@ -28,6 +28,9 @@ class WebSettings(BaseSettings):
     max_concurrent_questions: int = Field(default=2, gt=0, le=32)
     questions_per_hour: int = Field(default=30, gt=0)
     uploads_per_hour: int = Field(default=60, gt=0)
+    dashboards_per_hour: int = Field(default=1200, gt=0)
+    # Datasets kept loaded in memory so that chart filters respond at once.
+    max_prepared_datasets: int = Field(default=4, gt=0, le=32)
     max_question_chars: int = Field(default=1000, gt=0, le=10_000)
     max_investigation_seconds: float = Field(
         default=180.0, gt=0, le=900, allow_inf_nan=False

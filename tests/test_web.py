@@ -2,6 +2,7 @@
 
 import json
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+from verisight.analytics.dashboard import DashboardBuilder
 from verisight.config import Settings
 from verisight.exceptions import ConfigurationError
 from verisight.execution.context import PopulationFilter
@@ -27,7 +29,12 @@ from verisight.web import create_app
 from verisight.web.__main__ import main as serve
 from verisight.web.app import _browser_safe
 from verisight.web.config import WebSettings
-from verisight.web.store import DatasetStore, RateLimiter, safe_file_name
+from verisight.web.store import (
+    DatasetStore,
+    RateLimiter,
+    StoredDataset,
+    safe_file_name,
+)
 
 GENERATE = "verisight.execution.gemini.GeminiTextGenerationClient.generate"
 CSV = b"state,amount\nactive,10\nother,900\nactive,20\n"
@@ -100,7 +107,8 @@ def test_page_config_and_security_headers(client: TestClient) -> None:
     docs = client.get("/docs")
 
     assert page.status_code == 200
-    assert "Get answers you can verify" in page.text
+    assert "See what your data says" in page.text
+    assert client.get("/static/charts.js").status_code == 200
     assert "script-src 'self'" in page.headers["content-security-policy"]
     assert page.headers["x-frame-options"] == "DENY"
     assert "content-security-policy" not in docs.headers
@@ -342,6 +350,144 @@ def test_answer_is_verified_only_when_the_second_query_agrees() -> None:
     assert disagreed["cross_check"]["independent_value"] == "30"
     assert disagreed["cross_check"]["identical_sql"] is False
     assert "WHERE state" in disagreed["cross_check"]["sql"]
+
+
+def test_dashboard_is_computed_without_a_key_and_filters(client: TestClient) -> None:
+    dataset = _upload(client, ("data.csv", CSV))
+    url = f"/api/datasets/{dataset['dataset_id']}/dashboard"
+
+    with patch(GENERATE, side_effect=AssertionError("no model call")):
+        whole = client.post(url, json={})
+        narrowed = client.post(
+            url,
+            json={
+                "relation": "data",
+                "filters": [{"column": "state", "value": "active"}],
+            },
+        )
+
+    assert whole.status_code == 200
+    assert whole.json()["relation"] == "data"
+    assert whole.json()["computed_by"] == "sql_without_model"
+    total = {tile["label"]: tile["value"] for tile in whole.json()["kpis"]}
+    assert total == {"Rows": 3, "Total amount": 930}
+    kept = {tile["label"]: tile["value"] for tile in narrowed.json()["kpis"]}
+    assert kept == {"Rows": 2, "Total amount": 30}
+    assert narrowed.json()["filters"] == [{"column": "state", "value": "active"}]
+
+
+def test_dashboard_loads_a_dataset_once() -> None:
+    made: list[VeriSight] = []
+
+    def factory(settings: Settings) -> VeriSight:
+        assert settings.gemini_api_key is None
+        made.append(VeriSight(settings=settings))
+        return made[-1]
+
+    app = create_app(settings=_settings(), web=WebSettings(), factory=factory)
+    with TestClient(app) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        before = len(made)
+        url = f"/api/datasets/{dataset['dataset_id']}/dashboard"
+        assert client.post(url, json={}).status_code == 200
+        assert client.post(url, json={}).status_code == 200
+
+    assert len(made) == before + 1
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"relation": "missing"},
+        {"filters": [{"column": "amount", "value": "1"}]},
+    ],
+)
+def test_dashboard_refuses_unknown_tables_and_columns(
+    client: TestClient, body: dict[str, object]
+) -> None:
+    dataset = _upload(client, ("data.csv", CSV))
+
+    response = client.post(
+        f"/api/datasets/{dataset['dataset_id']}/dashboard", json=body
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalid_dashboard"
+
+
+def test_dashboard_for_unknown_dataset(client: TestClient) -> None:
+    response = client.post("/api/datasets/nope/dashboard", json={})
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "dataset_not_found"
+
+
+def test_dashboard_rate_limit() -> None:
+    with _client(dashboards_per_hour=1) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        url = f"/api/datasets/{dataset['dataset_id']}/dashboard"
+        assert client.post(url, json={}).status_code == 200
+        limited = client.post(url, json={})
+
+    assert (limited.status_code, limited.json()["code"]) == (429, "rate_limited")
+
+
+def test_dashboard_reports_a_failed_load() -> None:
+    class _NoDashboard(VeriSight):
+        def dashboard_builder(self, paths: object) -> DashboardBuilder:
+            raise ConfigurationError("secret detail")
+
+    app = create_app(
+        settings=_settings(),
+        web=WebSettings(),
+        factory=lambda settings: _NoDashboard(settings=settings),
+    )
+    with TestClient(app) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        response = client.post(
+            f"/api/datasets/{dataset['dataset_id']}/dashboard", json={}
+        )
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "configuration_error"
+    assert "secret" not in response.text
+
+
+def _stored(store: DatasetStore) -> StoredDataset:
+    dataset_id, directory = store.create_directory()
+    item = StoredDataset(dataset_id, directory, (), created=time.monotonic())
+    store.add(item)
+    return item
+
+
+def test_prepared_datasets_are_reused_limited_and_dropped() -> None:
+    store = DatasetStore(ttl_seconds=60, max_datasets=5, max_prepared=2)
+    first, second, third = _stored(store), _stored(store), _stored(store)
+
+    assert store.prepared(first, lambda: "one") == "one"
+    assert store.prepared(second, lambda: "two") == "two"
+    assert store.prepared(first, lambda: "again") == "one"
+    assert store.prepared(third, lambda: "three") == "three"
+
+    # The least recently used dataset gives up its memory first.
+    assert second.prepared is None
+    assert first.prepared == "one"
+    store.delete(first.dataset_id)
+    assert store.prepared(second, lambda: "rebuilt") == "rebuilt"
+    assert third.prepared == "three"
+    store.clear()
+
+
+def test_dataset_removed_while_preparing_keeps_nothing() -> None:
+    store = DatasetStore(ttl_seconds=60, max_datasets=5)
+    item = _stored(store)
+
+    def removed_meanwhile() -> str:
+        store.delete(item.dataset_id)
+        return "value"
+
+    assert store.prepared(item, removed_meanwhile) == "value"
+    assert item.prepared is None
 
 
 def test_unavailable_second_check_withholds_verified() -> None:

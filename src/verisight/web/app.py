@@ -26,6 +26,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from verisight.analysis.result import DatasetAnalysisResult
+from verisight.analytics.dashboard import (
+    DashboardBuilder,
+    DashboardFilter,
+    DashboardRequestError,
+)
 from verisight.config import Settings
 from verisight.error_reporting import ErrorCode
 from verisight.execution.claim_verification import ClaimOperation, VerificationStatus
@@ -293,6 +298,20 @@ class WebError(HTTPException):
         super().__init__(status_code=status, detail={"code": code, "message": message})
 
 
+class DashboardFilterRequest(BaseModel):
+    """Keep rows where a column has one category."""
+
+    column: str = Field(min_length=1, max_length=256)
+    value: str = Field(max_length=512)
+
+
+class DashboardRequest(BaseModel):
+    """Which table to chart and which categories to keep."""
+
+    relation: str | None = Field(default=None, max_length=256)
+    filters: list[DashboardFilterRequest] = Field(default=[], max_length=8)
+
+
 class AskRequest(BaseModel):
     """A question about an uploaded dataset."""
 
@@ -407,9 +426,11 @@ def create_app(
         ttl_seconds=limits.dataset_ttl_seconds,
         max_datasets=limits.max_datasets,
         clock=clock,
+        max_prepared=limits.max_prepared_datasets,
     )
     upload_limiter = RateLimiter(limits.uploads_per_hour, clock=clock)
     question_limiter = RateLimiter(limits.questions_per_hour, clock=clock)
+    dashboard_limiter = RateLimiter(limits.dashboards_per_hour, clock=clock)
     slots = question_slots or threading.BoundedSemaphore(
         limits.max_concurrent_questions
     )
@@ -615,6 +636,48 @@ def create_app(
         if not datasets.delete(dataset_id):
             raise WebError(404, "dataset_not_found", "This dataset no longer exists.")
         return Response(status_code=204)
+
+    def build_dashboard(
+        stored: StoredDataset, body: DashboardRequest
+    ) -> dict[str, object]:
+        def prepare() -> DashboardBuilder:
+            engine = factory(
+                core.model_copy(
+                    update={"allow_llm_data_disclosure": False, "gemini_api_key": None}
+                )
+            )
+            return engine.dashboard_builder(stored.paths)
+
+        operation = run_public_operation(lambda: datasets.prepared(stored, prepare))
+        if operation.error is not None:
+            report = operation.error
+            raise WebError(
+                _ENGINE_STATUS.get(report.code, 422), report.code.value, report.message
+            )
+        assert operation.value is not None
+        filters = tuple(DashboardFilter(f.column, f.value) for f in body.filters)
+        try:
+            built = operation.value.build(body.relation, filters)
+        except DashboardRequestError as error:
+            raise WebError(400, "invalid_dashboard", str(error)) from None
+        return cast(dict[str, object], _browser_safe(to_jsonable(built)))
+
+    @app.post("/api/datasets/{dataset_id}/dashboard")
+    async def dashboard(
+        dataset_id: str, body: DashboardRequest, request: Request
+    ) -> dict[str, object]:
+        stored = datasets.get(dataset_id)
+        if stored is None:
+            raise WebError(
+                404,
+                "dataset_not_found",
+                "This dataset has expired or was removed. Upload it again.",
+            )
+        if not dashboard_limiter.allow(client_of(request)):
+            raise WebError(
+                429, "rate_limited", "Too many chart updates. Try again in an hour."
+            )
+        return await run_in_threadpool(build_dashboard, stored, body)
 
     @app.post("/api/datasets/{dataset_id}/ask")
     async def ask(

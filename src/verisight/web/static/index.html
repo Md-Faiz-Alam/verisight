@@ -3,16 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VeriSight · Verified answers from your data</title>
-  <meta name="description" content="Ask questions about CSV, Excel and JSON files in plain English. VeriSight shows the SQL it ran and verifies every number against the query result.">
+  <title>VeriSight · Analytics you can check</title>
+  <meta name="description" content="Drop in a CSV, Excel or JSON file from any field. VeriSight builds a dashboard from SQL you can read, and answers plain-English questions with numbers it cross-checks.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/charts.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="/" aria-label="VeriSight home">
-      <img src="/static/favicon.svg" alt="" width="28" height="28">
+      <img src="/static/favicon.svg" alt="" width="26" height="26">
       <span>VeriSight</span>
     </a>
     <nav class="topnav" aria-label="Links">
@@ -27,43 +28,59 @@
 
   <main>
     <section class="hero" id="hero">
-      <p class="eyebrow">AI data analyst · every number checked</p>
-      <h1>Ask your data anything.<br><span class="accent">Get answers you can verify.</span></h1>
-      <p class="lede">Upload a CSV, Excel or JSON file from any domain. VeriSight cleans and profiles it, Gemini writes the SQL, and every number in the answer is checked against the query result before you see it.</p>
-
-      <label class="dropzone" id="dropzone" for="file-input">
-        <input type="file" id="file-input" multiple accept=".csv,.json,.xlsx,.xls">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-        <strong>Drop files here or choose files</strong>
-        <span id="dropzone-hint">CSV, JSON, XLSX or XLS · several files can be joined</span>
-      </label>
-      <div class="hero-actions">
-        <button class="button secondary" id="demo-button" type="button">Try the demo: messy orders + customers</button>
+      <div class="hero-copy">
+        <h1>See what your data says. <em>Check how we know.</em></h1>
+        <p class="lede">Drop in a spreadsheet from any field. VeriSight recognises what it is, builds a dashboard without AI, and shows the SQL behind every figure.</p>
+        <label class="dropzone" id="dropzone" for="file-input">
+          <input type="file" id="file-input" multiple accept=".csv,.json,.xlsx,.xls">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          <span class="drop-text"><strong>Drop files or browse</strong><span id="dropzone-hint">CSV, JSON, XLSX or XLS</span></span>
+        </label>
+        <div class="hero-actions">
+          <button class="button secondary" id="demo-button" type="button">Open the sample dashboard</button>
+          <span class="muted small">Messy orders and customers, no account needed</span>
+        </div>
+        <p class="error" id="upload-error" role="alert" hidden></p>
       </div>
-      <p class="error" id="upload-error" role="alert" hidden></p>
 
-      <ul class="features" aria-label="Features">
-        <li><b>Verified</b><span>Each number must match the executed SQL and a second, separately written query.</span></li>
-        <li><b>Messy data</b><span>N/A, $1,234.50, 10% and label variants handled and reported.</span></li>
-        <li><b>Safe SQL</b><span>One read-only query over your files only, with limits.</span></li>
-        <li><b>Honest</b><span>If an answer cannot be verified, it says so.</span></li>
-      </ul>
+      <ol class="trust" aria-label="How VeriSight works">
+        <li><b>Cleans in the open</b><span>N/A, $1,234.50, 10% and label variants are handled, and every change is listed.</span></li>
+        <li><b>Charts without AI</b><span>Dashboards are plain SQL over your file. Open any figure to read its query.</span></li>
+        <li><b>Answers cross-checked</b><span>A number earns ✓ only when a second, separately written query reaches it too.</span></li>
+        <li><b>Refuses to guess</b><span>If an answer cannot be checked, it says so.</span></li>
+      </ol>
+
+      <div class="domains" aria-label="Recognised fields">
+        <span>Recognises</span>
+        <ul>
+          <li>Retail</li><li>Finance</li><li>Healthcare</li><li>HR</li><li>Marketing</li><li>Logistics</li><li>Education</li><li>Energy</li><li>Manufacturing</li><li>Real estate</li><li>Environment</li><li>Economy</li><li>Sports</li><li>Anything else, as general data</li>
+        </ul>
+      </div>
     </section>
 
     <section class="workspace" id="workspace" hidden>
-      <aside class="panel dataset" aria-labelledby="dataset-title">
-        <div class="panel-head">
-          <h2 id="dataset-title">Your data</h2>
-          <button class="link-button" id="remove-button" type="button">Remove</button>
+      <div class="workbar">
+        <div class="identity">
+          <p class="domain-name" id="domain-name">Your data</p>
+          <p class="muted small" id="domain-detail"></p>
         </div>
-        <p class="muted small" id="dataset-expiry"></p>
-        <div id="tables"></div>
-        <h3 class="section-title">Data quality <span class="count" id="finding-count"></span></h3>
-        <ul class="findings" id="findings"></ul>
-        <button class="button ghost more" id="more-findings" type="button" hidden>Show all findings</button>
-      </aside>
+        <div class="tabs" role="tablist" aria-label="Views">
+          <button role="tab" id="tab-overview" aria-controls="view-overview" aria-selected="true" type="button">Dashboard</button>
+          <button role="tab" id="tab-ask" aria-controls="view-ask" aria-selected="false" tabindex="-1" type="button">Ask</button>
+          <button role="tab" id="tab-data" aria-controls="view-data" aria-selected="false" tabindex="-1" type="button">Data and quality <span class="count" id="finding-count"></span></button>
+        </div>
+        <button class="link-button" id="remove-button" type="button">Remove data</button>
+      </div>
 
-      <div class="main-column">
+      <div class="view" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
+        <div class="relations" id="relations" role="group" aria-label="Table" hidden></div>
+        <div class="filters" id="filters" hidden></div>
+        <p class="notice info" id="totals-note" hidden></p>
+        <p class="error" id="dashboard-error" role="alert" hidden></p>
+        <div class="dashboard" id="dashboard" aria-live="polite"></div>
+      </div>
+
+      <div class="view" id="view-ask" role="tabpanel" aria-labelledby="tab-ask" tabindex="0" hidden>
         <form class="panel ask" id="ask-form">
           <label class="ask-label" for="question">Ask a question about your data</label>
           <textarea id="question" rows="2" maxlength="1000" placeholder="e.g. How many orders were shipped?" required></textarea>
@@ -91,11 +108,24 @@
         </form>
         <div class="answers" id="answers" aria-live="polite"></div>
       </div>
+
+      <div class="view data-view" id="view-data" role="tabpanel" aria-labelledby="tab-data" tabindex="0" hidden>
+        <section class="panel">
+          <h2>Tables</h2>
+          <p class="muted small" id="dataset-expiry"></p>
+          <div id="tables"></div>
+        </section>
+        <section class="panel">
+          <h2>Data quality</h2>
+          <ul class="findings" id="findings"></ul>
+          <button class="button ghost more" id="more-findings" type="button" hidden>Show all findings</button>
+        </section>
+      </div>
     </section>
   </main>
 
   <footer class="footer">
-    <p>VeriSight proves each number came from an executed SQL result. It does not prove the SQL means what you asked, so review the SQL. <a href="https://github.com/Md-Faiz-Alam/verisight#scope-and-limits" target="_blank" rel="noopener">Scope and limits</a></p>
+    <p>Charts show what SQL returned from your file. An answer's ✓ means two separately written queries agreed, which is strong evidence but not proof, so review the SQL. <a href="https://github.com/Md-Faiz-Alam/verisight#scope-and-limits" target="_blank" rel="noopener">Scope and limits</a></p>
   </footer>
 </body>
 </html>
