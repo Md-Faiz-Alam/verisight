@@ -322,6 +322,21 @@ const FAILURE_TEXT = {
   synthesis_error: "The model's answer could not be matched to the SQL results, so it is not presented as verified.",
 };
 
+const CROSS_CHECK_FAILURE = {
+  multiple_claims: "This answer has several numbers, and the independent second check covers one number at a time, so it is not shown as verified.",
+  not_a_single_number: "The number matches its SQL, but a second query did not return one number to compare it with, so it is not shown as verified.",
+  provider_failed: "The number matches its SQL, but Gemini was unavailable for the independent second check, so it is not shown as verified.",
+  query_failed: "The number matches its SQL, but the independent second query could not be run, so it is not shown as verified.",
+  time_budget_exhausted: "The number matches its SQL, but time ran out before the independent second check finished, so it is not shown as verified.",
+};
+
+function crossCheckFailure(check) {
+  if (check.status === "disagreed") {
+    return `A second query, written without seeing the first, returned ${exactNumber(check.independent_value)} instead of ${exactNumber(check.primary_value)}. Compare both queries below before using either number.`;
+  }
+  return CROSS_CHECK_FAILURE[check.reason];
+}
+
 function failureText(answer) {
   const failure = answer.failure || {};
   if (failure.kind && FAILURE_TEXT[failure.kind]) return FAILURE_TEXT[failure.kind];
@@ -331,6 +346,7 @@ function failureText(answer) {
   if (answer.assessment && Array.isArray(answer.assessment.violations) && answer.assessment.violations.length) {
     return "The answer did not include a verified number of the requested kind. Try “Anything” or rephrase the question.";
   }
+  if (answer.cross_check) return crossCheckFailure(answer.cross_check);
   return "At least one number in the answer does not match the SQL result, so it is not shown as verified.";
 }
 
@@ -393,6 +409,9 @@ function renderAnswer(card, question, answer) {
   if (verified && claims.length === 1) {
     body.append(headline(claims[0]));
   }
+  if (verified) {
+    body.append(h("p", { class: "verified-note", text: "Cross-checked: a second query, written without seeing the first, returned the same number." }));
+  }
   if (answer.answer) {
     body.append(h("p", { class: verified ? "answer-text" : "answer-text muted", text: answer.answer }));
   }
@@ -411,6 +430,10 @@ function renderAnswer(card, question, answer) {
         codeBlock(step.sql),
         resultTable(step, index, cited)));
     });
+  }
+  if (answer.cross_check && answer.cross_check.sql) {
+    body.append(h("h4", { class: "steps-title", text: "Independent second query" }));
+    body.append(h("div", { class: "step" }, codeBlock(answer.cross_check.sql)));
   }
   const calls = (answer.model_calls || []).length;
   const meta = [`${answer.elapsed_seconds}s`];

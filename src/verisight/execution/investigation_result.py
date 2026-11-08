@@ -16,6 +16,7 @@ from verisight.execution.claim_verification import (
     VerificationStatus,
 )
 from verisight.execution.context import PopulationFilter
+from verisight.execution.cross_check import CrossCheck
 from verisight.execution.exceptions import (
     SynthesisValidationError,
     SynthesisValidationReason,
@@ -198,6 +199,7 @@ class InvestigationResult:
     failed_attempts: tuple[FailedQueryAttempt, ...] = field(default=(), kw_only=True)
     synthesis_recovery: SynthesisRecovery | None = field(default=None, kw_only=True)
     initial_query_required: bool = field(default=False, kw_only=True)
+    cross_check: CrossCheck | None = field(default=None, kw_only=True)
     narrative_verified: bool = field(default=False, init=False)
     verified_claims: tuple["VerifiedNumericalClaim", ...] = field(init=False)
     quantitative_statements: tuple["ClaimLinkedStatement", ...] = field(init=False)

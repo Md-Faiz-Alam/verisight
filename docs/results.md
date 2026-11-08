@@ -226,6 +226,9 @@ because `NOT IN` never matches null.
 
 ## What these results do and do not show
 
+- Every run above predates the independent second-query cross-check, so none of
+  these numbers measures it. Held-out evaluations go through the website's API,
+  so a new run will count an answer as accepted only when both queries agree.
 - An accepted number is proven to come from an executed SQL result. The
   verifier does not prove that the SQL means what the question asked. The
   evaluations measure that separately, against independent answers and traps.

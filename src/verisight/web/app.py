@@ -29,6 +29,7 @@ from verisight.analysis.result import DatasetAnalysisResult
 from verisight.config import Settings
 from verisight.error_reporting import ErrorCode
 from verisight.execution.claim_verification import ClaimOperation, VerificationStatus
+from verisight.execution.cross_check import CrossCheckStatus
 from verisight.execution.generation_telemetry import (
     GenerationCallReport,
     capture_generation_calls,
@@ -354,10 +355,13 @@ def _answer_view(
         assessment is None or assessment.accepted
     )
     claims = result.verified_claims
+    # A number matching its own SQL does not show the SQL answered the question.
     verified = (
         accepted
         and bool(claims)
         and all(claim.verification.status in _VERIFIED for claim in claims)
+        and result.cross_check is not None
+        and result.cross_check.status is CrossCheckStatus.AGREED
     )
     view: dict[str, object] = {
         "outcome": "verified" if verified else "unverified",
@@ -376,6 +380,7 @@ def _answer_view(
         ],
         "assessment": to_jsonable(assessment),
         "review_required": summarize_advisory_reviews(result).review_required,
+        "cross_check": to_jsonable(result.cross_check),
         "failure": to_jsonable(
             result.synthesis_failure or result.investigation_failure
         ),
@@ -681,7 +686,11 @@ def create_app(
         with capture_generation_calls() as calls:
             operation = run_public_operation(
                 lambda: engine.investigate(
-                    paths, question, max_steps=3, claim_output_contract=contract
+                    paths,
+                    question,
+                    max_steps=3,
+                    claim_output_contract=contract,
+                    cross_check=True,
                 )
             )
         if operation.error is not None:

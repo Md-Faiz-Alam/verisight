@@ -10,6 +10,7 @@ from verisight.analysis.result import (
 from verisight.analysis.service import DatasetAnalyzer
 from verisight.config import Settings
 from verisight.execution.context import PopulationFilter
+from verisight.execution.cross_check import IndependentCrossChecker
 from verisight.execution.exceptions import (
     InvestigationError,
     QueryPlanningError,
@@ -179,6 +180,15 @@ class VeriSight:
 
         return StructuredInvestigationSynthesizer.from_settings(settings)
 
+    def _cross_check_planner(self, planner: QueryPlanner | None) -> QueryPlanner | None:
+        """Use the configured cross-check model, or else the main planner."""
+        model = self._settings.gemini_cross_check_model
+        if model is None:
+            return planner
+        return self._build_gemini_planner(
+            self._settings.model_copy(update={"gemini_model": model})
+        )
+
     def _build_execution_service(
         self,
         dataset: LoadedDataset,
@@ -308,8 +318,14 @@ class VeriSight:
         max_steps: int = 5,
         population: tuple[PopulationFilter, ...] = (),
         claim_output_contract: ClaimOutputContract | None = None,
+        cross_check: bool = False,
     ) -> InvestigationResult:
-        """Run a bounded autonomous investigation against dataset files."""
+        """Run a bounded autonomous investigation against dataset files.
+
+        With ``cross_check``, an answer that passes every other check is
+        recalculated by a second query planned without seeing the first, at
+        the cost of at least one more model call. See ``result.cross_check``.
+        """
 
         dataset = self._load_dataset(paths)
 
@@ -352,6 +368,13 @@ class VeriSight:
             timeout_seconds=self._settings.max_investigation_seconds,
             population=population,
             claim_output_contract=claim_output_contract,
+            cross_checker=(
+                IndependentCrossChecker(
+                    execution_service.with_planner(self._cross_check_planner(planner))
+                )
+                if cross_check
+                else None
+            ),
         )
 
         return orchestrator.investigate(

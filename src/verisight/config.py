@@ -80,6 +80,10 @@ class Settings(BaseSettings):
 
     gemini_model: str = "gemini-3.1-flash-lite"
 
+    # A different model for the independent cross-check makes a shared mistake
+    # less likely. Unset, the cross-check uses gemini_model.
+    gemini_cross_check_model: str | None = Field(default=None, min_length=1)
+
     gemini_request_timeout_seconds: float = Field(
         default=30.0,
         gt=0,

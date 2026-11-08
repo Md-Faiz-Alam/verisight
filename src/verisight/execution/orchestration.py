@@ -1,12 +1,19 @@
 """Orchestration for autonomous analytical investigations."""
 
 from dataclasses import dataclass, replace
-from typing import Literal
+from decimal import Decimal
+from typing import Literal, cast
 
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.error_reporting import to_public_error
 from verisight.execution.analytical import AnalyticalQueryRunner
+from verisight.execution.claim_verification import VerificationStatus
 from verisight.execution.context import PopulationFilter
+from verisight.execution.cross_check import (
+    CrossCheck,
+    CrossCheckStatus,
+    IndependentCrossChecker,
+)
 from verisight.execution.deadline import (
     InvestigationDeadlineExceeded,
     check_deadline,
@@ -87,6 +94,7 @@ class InvestigationOrchestrator:
         timeout_seconds: float = 300.0,
         population: tuple[PopulationFilter, ...] = (),
         claim_output_contract: ClaimOutputContract | None = None,
+        cross_checker: IndependentCrossChecker | None = None,
     ) -> None:
         """Initialize the investigation orchestrator."""
 
@@ -98,6 +106,7 @@ class InvestigationOrchestrator:
 
         self._population = population
         self._claim_output_contract = claim_output_contract
+        self._cross_checker = cross_checker
         self._timeout_seconds = timeout_seconds
         self._execution_service = execution_service
         self._investigator = investigator
@@ -120,7 +129,42 @@ class InvestigationOrchestrator:
             raise InvestigationError("Investigation question must not be empty.")
 
         with investigation_deadline(self._timeout_seconds):
-            return self._investigate(question=question, analysis=analysis)
+            result = self._investigate(question=question, analysis=analysis)
+            return self._with_cross_check(result)
+
+    def _with_cross_check(self, result: InvestigationResult) -> InvestigationResult:
+        """Recalculate an answer that passed every other check, under one budget."""
+        checker = self._cross_checker
+        contract = self._claim_output_contract
+        claims = result.verified_claims
+        if (
+            checker is None
+            or result.status is not InvestigationStatus.COMPLETE
+            or not claims
+            or any(
+                item.verification.status is not VerificationStatus.SUPPORTED
+                for item in claims
+            )
+            or (contract is not None and not result.assess_output(contract).accepted)
+        ):
+            return result
+        if len(claims) > 1:
+            return replace(
+                result,
+                cross_check=CrossCheck(
+                    status=CrossCheckStatus.NOT_ASSESSED, reason="multiple_claims"
+                ),
+            )
+        claim = claims[0]
+        # A supported verdict guarantees the value and its observation exist.
+        return replace(
+            result,
+            cross_check=checker.check(
+                result.question,
+                cast(Decimal, claim.verification.actual),
+                result.observations[claim.claim.left.observation_index].sql,
+            ),
+        )
 
     def _investigate(
         self,

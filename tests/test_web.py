@@ -85,6 +85,7 @@ def _script(conclusion: str, expected: str, column: str = "total") -> list[str]:
                 ],
             }
         ),
+        "SELECT SUM(amount) AS cross_check_answer FROM data",
     ]
 
 
@@ -317,6 +318,48 @@ def test_contradicted_number_is_not_verified(client: TestClient) -> None:
     assert answer["outcome"] == "unverified"
 
 
+def test_answer_is_verified_only_when_the_second_query_agrees() -> None:
+    app = create_app(settings=_settings("server-key"), web=WebSettings())
+    with TestClient(app) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        with patch(GENERATE, side_effect=_script("The total is 930.", "930")):
+            _, agreed = _ask(client, dataset["dataset_id"])
+        script = _script("The total is 930.", "930")
+        script[-1] = (
+            "SELECT SUM(amount) AS cross_check_answer FROM data WHERE state = 'active'"
+        )
+        with patch(GENERATE, side_effect=script):
+            status, disagreed = _ask(client, dataset["dataset_id"])
+
+    assert agreed["outcome"] == "verified"
+    assert agreed["cross_check"]["status"] == "agreed"
+    assert agreed["cross_check"]["identical_sql"] is True
+    assert status == 200
+    assert disagreed["outcome"] == "unverified"
+    assert disagreed["assessment"]["accepted"] is True
+    assert disagreed["cross_check"]["status"] == "disagreed"
+    assert disagreed["cross_check"]["primary_value"] == "930"
+    assert disagreed["cross_check"]["independent_value"] == "30"
+    assert disagreed["cross_check"]["identical_sql"] is False
+    assert "WHERE state" in disagreed["cross_check"]["sql"]
+
+
+def test_unavailable_second_check_withholds_verified() -> None:
+    app = create_app(settings=_settings("server-key"), web=WebSettings())
+    script: list[object] = list(_script("The total is 930.", "930"))
+    script[-1] = GeminiTransientError("secret")
+    with TestClient(app) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        with patch(GENERATE, side_effect=script):
+            status, answer = _ask(client, dataset["dataset_id"])
+
+    assert status == 200
+    assert answer["outcome"] == "unverified"
+    assert answer["cross_check"]["status"] == "not_assessed"
+    assert answer["cross_check"]["reason"] == "provider_failed"
+    assert "secret" not in json.dumps(answer)
+
+
 def test_free_answers_need_no_contract(client: TestClient) -> None:
     dataset = _upload(client, ("data.csv", CSV))
     with patch(GENERATE, side_effect=_script("The total is 930.", "930")):
@@ -418,6 +461,7 @@ class _Failing(VeriSight):
         max_steps: int = 5,
         population: tuple[PopulationFilter, ...] = (),
         claim_output_contract: ClaimOutputContract | None = None,
+        cross_check: bool = False,
     ) -> InvestigationResult:
         raise self.error
 

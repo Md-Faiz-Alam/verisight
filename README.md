@@ -19,8 +19,10 @@ checked against the executed result.*
 
 - **Verified, not just generated.** Gemini plans the SQL and states each number
   as a claim on a result cell. VeriSight checks the claim against the executed
-  query and refuses numbers it cannot support. When it cannot verify an answer,
-  it says so instead of guessing.
+  query and refuses numbers it cannot support. On the website, a second query
+  written without seeing the first must reach the same number before an answer
+  is marked verified. When it cannot verify an answer, it says so instead of
+  guessing.
 - **Messy data handled in the open.** `N/A`, `$1,234.50`, `10%`, `Shipped ` /
   `shipped` and padded headers are cleaned under strict rules, and every change
   is reported as a data-quality finding.
@@ -106,6 +108,7 @@ review the SQL. Narrative verification remains explicitly false.
 | Validated DuckDB queries with configured resource limits | Implemented |
 | Gemini planning, query repair, and bounded investigations | Implemented |
 | Structured synthesis and numerical claim verification | Implemented |
+| Independent second-query cross-check of single-number answers | Implemented; required for the website's verified label, not yet evaluated live |
 | Application-rendered statements linked to claims | Implemented |
 | Limited narrative token audit and Unicode digit coverage | Implemented |
 | Evidence recovery for tested expected workflow failures | Implemented |
@@ -551,6 +554,29 @@ operations and count, support, workflow completion, and limited numeric audits.
 Its scope remains `claim_shape_and_numeric_evidence_only`, with
 `task_semantics_verified=false`. Without a selected contract, CLI exit status
 remains workflow-based. See [Output contracts](docs/output-contracts.md).
+
+## Independent cross-check
+
+A number that matches its own SQL can still answer the wrong question. With
+`investigate(..., cross_check=True)`, which the website always uses, an answer
+that passed every other check is calculated again by a second query. That query
+is planned from the question and dataset alone: the planner never sees the first
+SQL, its result or the conclusion. It costs at least one more model call and
+shares the investigation's time budget.
+
+`result.cross_check` records one of three outcomes:
+
+| Status | Meaning |
+| --- | --- |
+| `agreed` | Both numbers match, allowing only for binary floating-point noise. A rounded value does not match. |
+| `disagreed` | The numbers differ. Both values and the second SQL are kept. |
+| `not_assessed` | No comparison was possible: the answer has several claims, the second query failed or returned no single number, the provider was unavailable, or time ran out. |
+
+The website marks an answer as verified only on `agreed`. Agreement is evidence,
+not proof: both queries can make the same mistake, and that is more likely when
+one model writes both. Set `VERISIGHT_GEMINI_CROSS_CHECK_MODEL` to a different
+model to reduce that risk. `identical_sql` shows when the second query only
+repeated the first formulation. The CLI does not run this check.
 
 ## Partial results and safe diagnostics
 

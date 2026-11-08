@@ -1,5 +1,7 @@
 """High-level analytical execution services for VeriSight."""
 
+from copy import copy
+
 from verisight.error_reporting import to_public_error
 from verisight.execution.context import (
     PopulationFilter,
@@ -79,6 +81,14 @@ class AnalyticalExecutionService:
         """Return the formatted deterministic query context."""
 
         return self._formatted_context
+
+    def with_planner(
+        self, planner: QueryPlanner | None
+    ) -> "AnalyticalExecutionService":
+        """Return a service on the same data and limits with another planner."""
+        service = copy(self)
+        service._planner = planner
+        return service
 
     def execute(self, query: str) -> QueryResult:
         """Execute an analytical query against the loaded dataset."""

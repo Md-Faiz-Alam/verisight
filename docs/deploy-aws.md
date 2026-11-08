@@ -165,6 +165,7 @@ All settings are environment variables in the `environment` block:
 | `VERISIGHT_WEB_PROVIDER_RETRIES` | 3 | Retries after a Gemini 503 |
 | `VERISIGHT_MAX_EXCEL_UNCOMPRESSED_MB` | 200 | Largest unpacked size of an `.xlsx` workbook |
 | `VERISIGHT_GEMINI_MODEL` | `gemini-3.1-flash-lite` | Gemini model |
+| `VERISIGHT_GEMINI_CROSS_CHECK_MODEL` | same as above | Model for the independent second query |
 
 An upload request larger than `MAX_UPLOAD_MB` × `MAX_FILES` (plus 1 MB) is
 refused before any file is saved. On `micro`, also set
