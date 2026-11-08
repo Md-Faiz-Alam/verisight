@@ -40,6 +40,31 @@ _ABOVE = re.compile(
 )
 _PERCENT = re.compile(r"\bpercent(?:age)?\b", re.IGNORECASE)
 _ORDERED = re.compile(r"\b(?:minus|than)\b", re.IGNORECASE)
+_MINUS = re.compile(r"([^.?!,]+?)\s+minus\s+([^.?!,]+)", re.IGNORECASE)
+_MONTH_NAMES = (
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+)
+_MONTHS = {name: number for number, name in enumerate(_MONTH_NAMES, start=1)}
+_MONTH_DAY = re.compile(rf"\b({'|'.join(_MONTHS)}) ([0-9]{{1,2}})\b", re.IGNORECASE)
+_DISTINCT_WANTED = re.compile(
+    r"\bhow many (?:different|distinct|unique)\b", re.IGNORECASE
+)
+_RANGE = re.compile(r"\bfrom ([0-9]+(?:\.[0-9]+)?) to ([0-9]+(?:\.[0-9]+)?)\b", re.I)
+_PARTIAL_MATCH_WANTED = re.compile(
+    r"\b(?:contain\w*|includ\w*|start\w*|begin\w*|end\w*|like|any kind)\b",
+    re.IGNORECASE,
+)
 _CALCULATION = re.compile(
     r"\b(average|mean|total|sum of|highest|maximum|lowest|minimum)\s+"
     r"(?:(?:of|the)\s+)*",
@@ -103,14 +128,17 @@ def audit_sql(
             *_uncounted_total_rows(tree, used, total_rows),
             *_filter_values(tree, used),
             *_named_value(question, tree, categories),
+            *_broad_match(question, tree, categories),
+            *_distinct_count(question, tree),
             *_calculation(question, tree, tables),
             *_median(question, tree),
             *_missing_as_zero(question, tree, used),
             *_missing_values(question, tree),
             *_period(question, tree, tables),
             *_thresholds(question, tree),
+            *_range_ends(question, tree),
             *_scale(question, tree),
-            *_subtraction_order(question, tree, categories),
+            *_subtraction_order(question, tree, tables, categories),
         ),
     )
 
@@ -436,6 +464,42 @@ def _named_value(
             )
 
 
+def _broad_match(
+    question: str,
+    tree: exp.Expression,
+    categories: Sequence[ObservedCategoryValues],
+) -> Iterator[AuditFinding]:
+    """Find a LIKE that also takes in values the question did not name."""
+    if _PARTIAL_MATCH_WANTED.search(question):
+        return
+    for item, value in _mentions(question, categories):
+        for column, _, literal in _comparisons(tree, broad=True):
+            if column.name.casefold() != item.column.casefold() or "%" not in literal:
+                continue
+            shape = re.escape(literal.casefold()).replace("%", ".*").replace("_", ".")
+            others = [
+                other
+                for other in item.observed_nonmissing_values
+                if other.casefold() != value.casefold()
+                and re.fullmatch(shape, other.casefold())
+            ]
+            if others:
+                yield AuditFinding(
+                    "filter_too_broad",
+                    f"The question asks about {value!r}, but {literal!r} also "
+                    f"selects {others[0]!r}.",
+                )
+
+
+def _distinct_count(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+    """Find a question about different things answered by adding up rows."""
+    if _DISTINCT_WANTED.search(question) and tree.find(exp.Distinct, exp.Group) is None:
+        yield AuditFinding(
+            "distinct_not_counted",
+            "The question counts different values, but the query counts rows.",
+        )
+
+
 def _calculation(
     question: str, tree: exp.Expression, tables: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
@@ -514,7 +578,10 @@ def _missing_as_zero(
 def _missing_values(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
     """Compare a question about missing or known values with the query's filters."""
     if _NO_VALUE.search(question):
-        if not any(isinstance(n.expression, exp.Null) for n in tree.find_all(exp.Is)):
+        if not any(
+            isinstance(n.expression, exp.Null) and not isinstance(n.parent, exp.Not)
+            for n in tree.find_all(exp.Is)
+        ):
             yield AuditFinding(
                 "missing_values_ignored",
                 "The question is about missing values, but the query never tests "
@@ -593,6 +660,20 @@ def _thresholds(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
                 )
 
 
+def _range_ends(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+    """Find "from 2000 to 2010" written so that either end is left out."""
+    for match in _RANGE.finditer(question):
+        low, high = float(match[1]), float(match[2])
+        if any(
+            _numeric_literal(n.expression) == low for n in tree.find_all(exp.GT)
+        ) or any(_numeric_literal(n.expression) == high for n in tree.find_all(exp.LT)):
+            yield AuditFinding(
+                "range_end_left_out",
+                f"The question runs from {match[1]} to {match[2]}, but the query "
+                "leaves out one of those ends.",
+            )
+
+
 def _scale(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
     """Find a percentage question whose answer was divided down to a fraction."""
     if not _PERCENT.search(question) or tree.find(exp.Mul) is not None:
@@ -605,9 +686,75 @@ def _scale(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
             )
 
 
+def _holds(texts: set[str], anchors: set[str]) -> bool:
+    return any(
+        re.search(rf"(?<![a-z0-9_]){re.escape(anchor)}(?![a-z0-9_])", text)
+        for anchor in anchors
+        for text in texts
+    )
+
+
+def _sql_words(node: exp.Expression) -> set[str]:
+    return {text.casefold() for text in _literal_texts(node)} | _names(node)
+
+
+def _anchors(side: str, named: set[str], columns: dict[str, str]) -> set[str]:
+    """What identifies one side of a subtraction: years, dates, values, columns."""
+    lowered = side.casefold()
+    found = set(_YEAR.findall(side))
+    found |= {
+        f"{_MONTHS[month.casefold()]:02d}-{int(day):02d}"
+        for month, day in _MONTH_DAY.findall(side)
+    }
+    found |= {value for value in named if _holds({lowered}, {value})}
+    # Longest first, so "alt price" is not also read as "price".
+    for words, name in sorted(columns.items(), key=lambda item: -len(item[0])):
+        if _holds({lowered}, {words}):
+            found.add(name)
+            lowered = lowered.replace(words, " ")
+    return found
+
+
+def _stated_order(
+    sides: re.Match[str],
+    tree: exp.Expression,
+    tables: dict[str, LoadedTable],
+    named: set[str],
+) -> Iterator[AuditFinding]:
+    """Compare "give A minus B" with what each side of each subtraction selects."""
+    columns = {
+        str(c).replace("_", " ").casefold(): str(c).casefold()
+        for table in tables.values()
+        for c in table.data.columns
+    }
+    # A label held by two columns is not "named", but the query shows which it is.
+    filtered = {n.this.casefold() for n in tree.find_all(exp.Literal) if n.is_string}
+    first = _anchors(sides[1], named | filtered, columns)
+    second = _anchors(sides[2], named | filtered, columns)
+    first, second = first - second, second - first
+    for subtraction in tree.find_all(exp.Sub):
+        left = _sql_words(subtraction.left)
+        right = _sql_words(subtraction.right)
+        # What both sides of the subtraction share cannot tell them apart.
+        one = {a for a in first if not (_holds(left, {a}) and _holds(right, {a}))}
+        two = {a for a in second if not (_holds(left, {a}) and _holds(right, {a}))}
+        if (
+            _holds(right, one)
+            and _holds(left, two)
+            and not _holds(left, one)
+            and not _holds(right, two)
+        ):
+            yield AuditFinding(
+                "reversed_subtraction",
+                f"The question asks for {sorted(one)[0]} minus {sorted(two)[0]}, "
+                "but the query calculates them the other way round.",
+            )
+
+
 def _subtraction_order(
     question: str,
     tree: exp.Expression,
+    tables: dict[str, LoadedTable],
     categories: Sequence[ObservedCategoryValues],
 ) -> Iterator[AuditFinding]:
     """Find ``A minus B`` written in the query as ``B - A``."""
@@ -615,6 +762,10 @@ def _subtraction_order(
         return
     lowered = question.casefold()
     named = {value.casefold() for _, value in _mentions(question, categories)}
+    stated = _MINUS.search(question)
+    if stated is not None:
+        yield from _stated_order(stated, tree, tables, named)
+        return
     for subtraction in tree.find_all(exp.Sub):
         lefts = named & {text.casefold() for text in _literal_texts(subtraction.left)}
         rights = named & {text.casefold() for text in _literal_texts(subtraction.right)}

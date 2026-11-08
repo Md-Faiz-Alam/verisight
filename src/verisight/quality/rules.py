@@ -383,6 +383,27 @@ _NOTE_ISSUES: dict[str, tuple[QualityIssueType, QualitySeverity, str]] = {
         "A summary row at the end of the file matched the rows above it and "
         "was removed so nothing is counted twice.",
     ),
+    "blank_rows": (
+        QualityIssueType.REMOVED_ROWS,
+        QualitySeverity.WARNING,
+        "Rows with no value in any column were removed so they are not counted.",
+    ),
+    "repeated_header_rows": (
+        QualityIssueType.REMOVED_ROWS,
+        QualitySeverity.WARNING,
+        "Rows that repeat the column names were removed, as they are not data.",
+    ),
+    "note_rows": (
+        QualityIssueType.REMOVED_ROWS,
+        QualitySeverity.WARNING,
+        "A label or note at the end of the file, with no values beside it, "
+        "was removed.",
+    ),
+    "minus_signs": (
+        QualityIssueType.FORMATTED_NUMBERS,
+        QualitySeverity.INFO,
+        "Unusual minus signs were standardised, so 5- became -5.",
+    ),
     "skipped_title_rows": (
         QualityIssueType.FILE_STRUCTURE,
         QualitySeverity.WARNING,

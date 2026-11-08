@@ -369,8 +369,6 @@ def test_average_footer_is_removed(tmp_path: Path) -> None:
         "Total,,999",
         # Not a summary label.
         "INV99,R1,550",
-        # No number at all.
-        "Total,,",
         # Zero proves nothing.
         "Total,,0",
     ],

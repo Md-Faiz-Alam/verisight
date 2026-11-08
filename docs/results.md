@@ -217,6 +217,28 @@ Two limits apply:
   these saved answers, 11 stay verified and 17 become "Number matches SQL only",
   with the same correct numbers.
 
+### Held-out v3 (27 questions, 9 more unseen datasets)
+
+Riot deaths, bird strikes, zip codes, flights joined to airports, population,
+health spending, planets and US employment, in CSV, JSON and Excel. Questions,
+independently calculated answers, control SQL and trap SQL were frozen by hash at
+`2cecbbb` before one live run, and no case was repeated. Answers are scored by
+the trust level the website showed.
+
+| Trust level shown | Right number | Wrong number |
+| --- | --- | --- |
+| Verified | 12 | 0 |
+| Number matches SQL only | 9 | 0 |
+| Needs review | 4 | 1 |
+| No number | 1 question | |
+
+25 of 27 numbers were right, with no provider errors. One run of 27 questions
+gives a wide range: the true rate could reasonably be about 77% to 98%. The wrong
+answer counted the deaths *not* related to the riots, and the second query's
+different number marked it for review. The run found two bugs, since fixed, that
+caused 3 false warnings and the one missing number. These questions helped find
+those bugs, so they no longer measure new code.
+
 ## Examples from live runs
 
 **Label variants (v2 run 3).** *How many orders were shipped?* The status column
@@ -279,7 +301,7 @@ because `NOT IN` never matches null.
   but not every one. Formats outside the documented cleaning rules stay as text.
 - Provider errors depend on the free model tier's load and are excluded from the
   correct and wrong counts, not hidden: they appear in every table.
-- 240 attempts across 67 questions is evidence, not a reliability guarantee.
+- 267 attempts across 94 questions is evidence, not a reliability guarantee.
 
 ## Reproduce
 

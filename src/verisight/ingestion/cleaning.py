@@ -11,7 +11,7 @@ from typing import Any
 
 import pandas as pd
 
-from verisight.ingestion.footers import remove_footer_rows
+from verisight.ingestion.footers import remove_footer_rows, remove_non_data_rows
 from verisight.ingestion.loaders.csv import CsvLoader
 from verisight.ingestion.models import LoadedTable, NoteRule, ValueNote
 from verisight.ingestion.temporal import (
@@ -56,7 +56,11 @@ _CURRENCY_CODES = ("USD", "EUR", "GBP", "INR", "JPY", "CAD", "AUD", "CHF", "CNY"
 _CURRENCY = "|".join(re.escape(mark) for mark in (*CURRENCY_SYMBOLS, *_CURRENCY_CODES))
 _CURRENCY_FIRST = re.compile(rf"(-?)\s*({_CURRENCY})\s*(.+)")
 _CURRENCY_LAST = re.compile(rf"(.+?)\s*({_CURRENCY})")
-_GROUPED = re.compile(r"[+-]?[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?")
+_GROUPED = re.compile(
+    r"[+-]?(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,2}(?:,[0-9]{2})+,[0-9]{3})(?:\.[0-9]+)?"
+)
+_ODD_MINUS = re.compile("[\u2212\u2013]")
+_TRAILING_MINUS = re.compile(r"[0-9][0-9.,]*-")
 _BRACKETED = re.compile(r"\(([^()]+)\)")
 _PLAIN = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?")
 _ABBREVIATED = re.compile(r"([+-]?[0-9]+(?:\.[0-9]+)?)\s*([KkMB])")
@@ -65,7 +69,9 @@ _WITH_UNIT = re.compile(r"([+-]?[0-9][0-9.,]*)\s*([A-Za-z°µ²³/]{1,8})")
 _COMMA_DECIMAL = re.compile(r"[+-]?[0-9]{1,3}(?:\.[0-9]{3})*,[0-9]+")
 _DOT_GROUPED = re.compile(r"[+-]?[0-9]{1,3}(?:\.[0-9]{3})+")
 _THREE_AFTER_COMMA = re.compile(r"[+-]?[0-9]{1,3},[0-9]{3}")
-_NUMBER_SHAPE = rf"[(+-]?(?:{_CURRENCY})?\s*[0-9][0-9.,]*\s*(?:%|{_CURRENCY})?\)?"
+_NUMBER_SHAPE = (
+    rf"[(+\u2212\u2013-]?(?:{_CURRENCY})?\s*[0-9][0-9.,]*-?\s*(?:%|{_CURRENCY})?\)?"
+)
 _DATE_SHAPE = r"[0-9]{1,4}[/.-][0-9]{1,2}[/.-][0-9]{1,4}.*"
 _MIN_ROWS_FOR_STRAYS = 20
 _MAX_STRAY_SHARE = 0.05
@@ -207,6 +213,7 @@ def clean_table(table: LoadedTable) -> None:
     Notes a loader already recorded, such as generated header names, are kept.
     """
     notes: list[ValueNote] = list(table.value_notes)
+    notes.extend(remove_non_data_rows(table))
     notes.extend(remove_footer_rows(table))
     notes.extend(_trim_headers(table))
     semicolons = table.source.csv_delimiter == ";"
@@ -269,6 +276,12 @@ def _clean_text(
         if found is not None:
             converted = _parse_text(candidate.mask(found), semicolons, words)
             strays = found if converted is not None else strays
+    if converted is None:
+        # Beside numbers or dates, "unknown" or "TBD" can only mean no value.
+        possible = stripped.isin(_POSSIBLY_MISSING)
+        if possible.any() and candidate.mask(possible).notna().any():
+            converted = _parse_text(candidate.mask(possible), semicolons, words)
+            markers = markers | possible if converted is not None else markers
     if converted is None:
         return _text_column(data, column, series, words)
     typed, rule, detail, formatted = converted
@@ -361,6 +374,7 @@ def _parse_text(values: pd.Series, semicolons: bool, words: set[str]) -> _Parsed
         return flexible[0], "date_format", flexible[1], present
     text = values.str.strip()
     steps: list[tuple[NoteRule, str]] = []
+    text = _standard_minus(text, steps, words)
     text = _bracketed_negatives(text, steps, words)
     if all(value.endswith("%") for value in text.dropna()):
         text = text.str.removesuffix("%").str.strip()
@@ -399,6 +413,21 @@ def _grouping_detail(values: pd.Series) -> str:
     return "comma group separators removed"
 
 
+def _standard_minus(
+    text: pd.Series, steps: list[tuple[NoteRule, str]], words: set[str]
+) -> pd.Series:
+    """Rewrite the true minus sign, the en dash and the trailing minus as ``-``."""
+    if words & _IDENTIFIER_WORDS:
+        return text
+    standard = text.str.replace(_ODD_MINUS, "-", regex=True)
+    trailing = standard.str.fullmatch(_TRAILING_MINUS, na=False).astype(bool)
+    standard = standard.mask(trailing, "-" + standard.str[:-1])
+    if standard.dropna().eq(text.dropna()).all():
+        return text
+    steps.append(("minus_signs", "minus signs written another way read as negative"))
+    return standard
+
+
 def _bracketed_negatives(
     text: pd.Series, steps: list[tuple[NoteRule, str]], words: set[str]
 ) -> pd.Series:
@@ -425,20 +454,28 @@ def _split_currency(value: str) -> tuple[str, str] | None:
 def _without_currency(
     text: pd.Series, steps: list[tuple[NoteRule, str]], words: set[str]
 ) -> pd.Series:
-    """Remove a currency mark only when every value carries the same one."""
-    parts = text.dropna().map(_split_currency)
-    if parts.isna().any() or words & _LABEL_WORDS:
+    """Remove one currency mark, shown on some or all of a column's numbers."""
+    present = text.dropna()
+    parts = present.map(_split_currency)
+    marked = parts.notna()
+    bare = present[~marked]
+    if (
+        not marked.any()
+        or words & _LABEL_WORDS
+        or not (bare.str.fullmatch(_PLAIN) | bare.str.fullmatch(_GROUPED)).all()
+    ):
         return text
-    marks = {part[0] for part in parts}
+    carried = parts[marked]
+    marks = {part[0] for part in carried}
     if len(marks) != 1:
         return text
     mark = next(iter(marks))
     # GBP100 may be a voucher code; GBP 100, GBP100.50 and £100 read as money.
-    if mark.isalpha() and not text.dropna().str.contains(r"[\s.,]").all():
+    if mark.isalpha() and not present[marked].str.contains(r"[\s.,]").all():
         return text
     steps.append(("currency_symbol", f"{mark} removed"))
-    numbers = parts.map(lambda part: part[1])
-    return numbers.reindex(text.index)
+    numbers = carried.map(lambda part: part[1])
+    return text.mask(text.index.isin(numbers.index), numbers.reindex(text.index))
 
 
 def _european(

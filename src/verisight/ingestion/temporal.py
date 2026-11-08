@@ -33,6 +33,9 @@ _NAMED_MONTH_FORMATS = (
 )
 
 
+_YEAR_FIRST_FORMATS = ("%Y/%m/%d", "%Y.%m.%d")
+
+
 def parse_iso_datetimes(values: pd.Series) -> pd.Series | None:
     """Return a datetime column only when every present value is an ISO date.
 
@@ -96,6 +99,18 @@ def _numeric_format(match: re.Match[str], day_first: bool) -> str:
     return f"{parts[0]}{separator}{parts[1]}{separator}{year}{time}"
 
 
+def _parse_each(stripped: pd.Series) -> pd.Series | None:
+    """Read a column of mixed formats, each of which has only one reading."""
+    result = pd.Series(pd.NaT, index=stripped.index, dtype="datetime64[ns]")
+    for date_format in ("%Y-%m-%d", *_YEAR_FIRST_FORMATS, *_NAMED_MONTH_FORMATS):
+        waiting = result.isna() & stripped.notna()
+        found: Any = pd.to_datetime(
+            stripped[waiting], format=date_format, errors="coerce"
+        )
+        result.loc[found.index] = found
+    return None if (result.isna() & stripped.notna()).any() else result
+
+
 def parse_flexible_dates(values: pd.Series) -> tuple[pd.Series, str] | None:
     """Read one unambiguous non-ISO format, returning the column and a description.
 
@@ -128,8 +143,16 @@ def parse_flexible_dates(values: pd.Series) -> tuple[pd.Series, str] | None:
         result = _parse(stripped, _numeric_format(matches[0], day_first))
         order = "day first" if day_first else "month first"
         return None if result is None else (result, f"read as {order}")
+    for date_format in _YEAR_FIRST_FORMATS:
+        result = _parse(stripped, date_format)
+        if result is not None:
+            return result, "year-first dates"
     for date_format in _NAMED_MONTH_FORMATS:
         result = _parse(stripped, date_format)
         if result is not None:
             return result, "month names read as dates"
-    return None
+    mixed = _parse_each(stripped)
+    if mixed is None:
+        return None
+    mixed.name = values.name
+    return mixed, "several clear date formats read as dates"

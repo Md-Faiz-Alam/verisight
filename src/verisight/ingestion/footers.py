@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from verisight.ingestion.loaders.csv import CsvLoader
-from verisight.ingestion.models import LoadedTable, ValueNote
+from verisight.ingestion.models import LoadedTable, NoteRule, ValueNote
 
 _MAX_FOOTER_ROWS = 3
 _MIN_BODY_ROWS = 3
@@ -25,6 +25,13 @@ _LABEL = re.compile(
     r"(?:grand\s*|sub\s*|overall\s*)?totals?(?:\s.*)?|sum|average|mean", re.IGNORECASE
 )
 _SYMBOLS = re.compile(r"[$€£₹¥,%\s]")
+_NOTE = re.compile(
+    r"(?:sources?|notes?|copyright|disclaimer|generated|prepared|compiled)\b.*"
+    r"|[*†©].*",
+    re.IGNORECASE,
+)
+_MIN_REPEATED_NAMES = 2
+_MIN_COLUMNS = 2
 
 
 def _number(value: object) -> float | None:
@@ -76,6 +83,88 @@ def _retyped(table: LoadedTable, data: pd.DataFrame) -> pd.DataFrame:
     for column in typed.columns:
         data[column] = typed[column]
     return data
+
+
+def _blank_cells(data: pd.DataFrame) -> pd.DataFrame:
+    blank = data.isna()
+    for column in data.select_dtypes(include=object):
+        spaces = data[column].map(lambda v: type(v) is str and not v.strip())
+        blank[column] = blank[column] | spaces.astype(bool)
+    return blank
+
+
+def _repeats_header(data: pd.DataFrame, blank: pd.DataFrame, position: int) -> bool:
+    filled = [c for c in data.columns if not blank.iloc[position][c]]
+    return len(filled) >= _MIN_REPEATED_NAMES and all(
+        str(data.iloc[position][c]).strip().casefold() == str(c).strip().casefold()
+        for c in filled
+    )
+
+
+def _repeated_headers(data: pd.DataFrame, blank: pd.DataFrame) -> list[int]:
+    first = data.columns[0]
+    name = str(first).strip().casefold()
+    same = data[first].astype(str).str.strip().str.casefold().eq(name)
+    return [
+        int(p) for p in np.flatnonzero(same) if _repeats_header(data, blank, int(p))
+    ]
+
+
+def _trailing_notes(
+    data: pd.DataFrame, blank: pd.DataFrame, candidates: list[int]
+) -> list[int]:
+    """Last rows holding only a note or a bare summary label, and nothing else."""
+    found: list[int] = []
+    for position in reversed(candidates[-_MAX_FOOTER_ROWS:]):
+        cells = data.iloc[position][~blank.iloc[position]]
+        text = cells.iloc[0] if len(cells) == 1 else None
+        if type(text) is not str or not (
+            _NOTE.fullmatch(text.strip()) or _LABEL.fullmatch(text.strip())
+        ):
+            break
+        found.append(position)
+    return [] if len(candidates) - len(found) < _MIN_BODY_ROWS else found
+
+
+def _counted(
+    rule: NoteRule, rows: list[int], examples: tuple[str, ...]
+) -> tuple[NoteRule, int, tuple[str, ...]]:
+    return rule, len(rows), examples
+
+
+def remove_non_data_rows(table: LoadedTable) -> list[ValueNote]:
+    """Drop blank rows, repeated headers and closing notes, and report each kind.
+
+    A table of one column is left alone: an empty cell there is a missing value.
+    """
+    data = table.data
+    if data.shape[1] < _MIN_COLUMNS or data.empty:
+        return []
+    blank = _blank_cells(data)
+    empty = [int(p) for p in np.flatnonzero(blank.all(axis=1))]
+    if len(empty) == len(data):
+        return []
+    headers = _repeated_headers(data, blank)
+    gone = {*empty, *headers}
+    remaining = [p for p in range(len(data)) if p not in gone]
+    notes = _trailing_notes(data, blank, remaining)
+    if not gone and not notes:
+        return []
+    first = str(data.columns[0])
+    written = [str(data.iloc[p][~blank.iloc[p]].iloc[0]) for p in notes]
+    found: tuple[tuple[NoteRule, list[int], tuple[str, ...]], ...] = (
+        ("blank_rows", empty, ("blank row",)),
+        ("repeated_header_rows", headers, (first,)),
+        ("note_rows", notes, tuple(written[:3])),
+    )
+    report = [
+        ValueNote(first, *_counted(rule, rows, text))
+        for rule, rows, text in found
+        if rows
+    ]
+    kept = data.drop(index=data.index[[*gone, *notes]]).reset_index(drop=True)
+    table.data = _retyped(table, kept)
+    return report
 
 
 def remove_footer_rows(table: LoadedTable) -> list[ValueNote]:

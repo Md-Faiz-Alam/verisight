@@ -174,10 +174,19 @@ class RateLimiter:
         self._clock = clock
         self._lock = threading.Lock()
         self._events: defaultdict[str, deque[float]] = defaultdict(deque)
+        self._next_sweep = 0.0
+
+    def _forget_idle_clients(self, now: float) -> None:
+        """Keep memory bounded when many clients ask once and never return."""
+        self._next_sweep = now + 3600
+        for client in [c for c, e in self._events.items() if now - e[-1] >= 3600]:
+            del self._events[client]
 
     def allow(self, client: str) -> bool:
         now = self._clock()
         with self._lock:
+            if now >= self._next_sweep:
+                self._forget_idle_clients(now)
             events = self._events[client]
             while events and now - events[0] >= 3600:
                 events.popleft()

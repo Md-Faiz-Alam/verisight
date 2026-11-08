@@ -47,6 +47,7 @@ from verisight.execution.investigation_result import (
 )
 from verisight.execution.metric_display import summarize_advisory_reviews
 from verisight.execution.trust import TrustLevel
+from verisight.logging import configure_logging
 from verisight.public_api import run_public_operation
 from verisight.serialization import to_jsonable
 from verisight.service import VeriSight
@@ -456,6 +457,7 @@ def create_app(
 ) -> FastAPI:
     """Build the web application. Arguments exist for tests and embedding."""
     core = settings if settings is not None else Settings()
+    configure_logging(core)
     limits = web if web is not None else WebSettings()
     datasets = store or DatasetStore(
         ttl_seconds=limits.dataset_ttl_seconds,

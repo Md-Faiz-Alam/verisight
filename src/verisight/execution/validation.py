@@ -336,6 +336,8 @@ def _without_format_complements(question: str) -> str:
 
 
 _MAX_CODE_LENGTH = 3
+# "How many of the deaths" names the whole set, not a kind of row.
+_PARTITIVE = re.compile(r"\bhow many of the\s+\w+", re.IGNORECASE)
 
 
 def _question_mentions_category(question: str, value: str) -> bool:
@@ -347,7 +349,7 @@ def _question_mentions_category(question: str, value: str) -> bool:
     """
     if not value.strip():
         return False
-    question = _without_format_complements(question)
+    question = _PARTITIVE.sub("", _without_format_complements(question))
     literal = _plural_pattern(value)
     short_code = value.isupper() and len(value.strip()) <= _MAX_CODE_LENGTH
     case = 0 if short_code else re.IGNORECASE

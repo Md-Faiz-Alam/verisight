@@ -38,10 +38,11 @@ _FUNCTIONS = {
     "highest": "MAX",
     "minimum": "MIN",
     "lowest": "MIN",
+    "median": "MEDIAN",
 }
-_WORD = {"SUM": "total", "AVG": "average", "MAX": "highest", "MIN": "lowest"}
 _MEASURE = re.compile(
-    r"what (?:is|was) the (total|sum of|average|mean|maximum|highest|minimum|lowest) "
+    r"what (?:is|was) the "
+    r"(total|sum of|average|mean|median|maximum|highest|minimum|lowest) "
     r"(?:of )?(?:the )?(.+)",
     re.IGNORECASE,
 )
@@ -52,9 +53,13 @@ _COUNT_TABLE = re.compile(
 _COUNT_EQUAL = re.compile(
     r"how many (?:rows|records) have (.+?) (?:equal to|of) (.+)", re.IGNORECASE
 )
+_COUNT_DISTINCT = re.compile(
+    r"how many (?:different|distinct|unique) (.+?)(?: (?:for|in) (.+))?", re.IGNORECASE
+)
 _COUNT_STATE = re.compile(r"how many (.+?) (?:were|are|is|was) (.+)", re.IGNORECASE)
 _WHERE = re.compile(r" where (.+?) (?:is|equals|=) (.+)$", re.IGNORECASE)
 _FOR = re.compile(r" (?:for|in) (.+)$", re.IGNORECASE)
+_CONDITION_BREAK = re.compile(r" (?:for|in) ", re.IGNORECASE)
 _PERIOD = re.compile(r"[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?")
 _PERIOD_FORMATS = {4: "%Y", 7: "%Y-%m", 10: "%Y-%m-%d"}
 _DIRECT_CONCLUSION = "Calculated directly from your data, without AI."
@@ -84,7 +89,7 @@ class DirectAnswer:
 @dataclass(frozen=True, slots=True)
 class _Filter:
     condition: str
-    column: str
+    columns: tuple[str, ...]
 
 
 def _quote(name: str) -> str:
@@ -140,7 +145,12 @@ class DirectAnswerer:
     def answer(self, question: str) -> DirectAnswer | Clarification | None:
         """Return a result, a question to ask, or ``None`` for the model workflow."""
         text = _clean(question)
-        for attempt in (self._count_table, self._count_equal, self._count_state):
+        for attempt in (
+            self._count_table,
+            self._count_equal,
+            self._count_distinct,
+            self._count_state,
+        ):
             compiled = attempt(text)
             if compiled is not None:
                 return self._finish(question, compiled)
@@ -171,7 +181,7 @@ class DirectAnswerer:
         ]
         return found[0] if len(found) == 1 else None
 
-    def _exclusions(self, table: LoadedTable, kept: str | None) -> list[str]:
+    def _exclusions(self, table: LoadedTable, kept: tuple[str, ...]) -> list[str]:
         if table.relation_name not in self._totals:
             columns = SchemaInferer().infer_table(table).columns
             self._totals[table.relation_name] = tuple(
@@ -181,11 +191,11 @@ class DirectAnswerer:
         return [
             f"{_quote(column)} IS DISTINCT FROM {_literal(value)}"
             for column, value in self._totals[table.relation_name]
-            if column != kept
+            if column not in kept
         ]
 
     def _sql(self, expression: str, table: LoadedTable, chosen: _Filter | None) -> str:
-        kept = None if chosen is None else chosen.column
+        kept = () if chosen is None else chosen.columns
         conditions = self._exclusions(table, kept)
         conditions += [] if chosen is None else [chosen.condition]
         where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
@@ -203,8 +213,22 @@ class DirectAnswerer:
         owner = self._column_owner(match[1])
         if owner is None or not _value_matches(owner[0].data[owner[1]], match[2]):
             return None
-        chosen = _Filter(_equals(owner[1], match[2]), owner[1])
+        chosen = _Filter(_equals(owner[1], match[2]), (owner[1],))
         return self._sql("COUNT(*)", owner[0], chosen)
+
+    def _count_distinct(self, text: str) -> str | None:
+        match = _COUNT_DISTINCT.fullmatch(text)
+        if match is None:
+            return None
+        owner = self._column_owner(match[1]) or self._column_owner(_singular(match[1]))
+        if owner is None:
+            return None
+        table, column = owner
+        expression = f"COUNT(DISTINCT {_quote(column)})"
+        if match[2] is None:
+            return self._sql(expression, table, None)
+        chosen = self._filters(table, match[2], text, match[1], "count")
+        return self._sql(expression, table, chosen) if type(chosen) is _Filter else None
 
     def _count_state(self, text: str) -> str | None:
         match = _COUNT_STATE.fullmatch(text)
@@ -219,7 +243,7 @@ class DirectAnswerer:
         if len(columns) != 1:
             return None
         return self._sql(
-            "COUNT(*)", table, _Filter(_equals(columns[0], match[2]), columns[0])
+            "COUNT(*)", table, _Filter(_equals(columns[0], match[2]), (columns[0],))
         )
 
     def _measure(self, question: str, text: str) -> str | Clarification | None:
@@ -254,14 +278,29 @@ class DirectAnswerer:
                 or not _value_matches(table.data[target[1]], where[2])
             ):
                 return None
-            chosen = _Filter(_equals(target[1], where[2]), target[1])
+            chosen = _Filter(_equals(target[1], where[2]), (target[1],))
             return self._sql(expression, table, chosen)
-        resolved = self._filter_for(
+        resolved = self._filters(
             table, short[1] if short else "", question, name, match[1]
         )
         if resolved is None or isinstance(resolved, Clarification):
             return resolved
         return self._sql(expression, table, resolved)
+
+    def _filters(
+        self, table: LoadedTable, value: str, question: str, measure: str, word: str
+    ) -> _Filter | Clarification | None:
+        """Resolve one condition or several, each on a column of its own."""
+        whole = self._filter_for(table, value, question, measure, word)
+        parts = _CONDITION_BREAK.split(value)
+        if whole is not None or len(parts) == 1:
+            return whole
+        chosen = [self._filter_for(table, p, question, measure, word) for p in parts]
+        filters = [item for item in chosen if type(item) is _Filter]
+        columns = tuple(column for item in filters for column in item.columns)
+        if len(filters) != len(parts) or len(set(columns)) != len(columns):
+            return None
+        return _Filter(" AND ".join(item.condition for item in filters), columns)
 
     def _filter_for(
         self, table: LoadedTable, value: str, question: str, measure: str, word: str
@@ -273,18 +312,20 @@ class DirectAnswerer:
                 for name, kind in self._types[table.relation_name].items()
                 if kind is LogicalType.DATETIME
             ]
-            if len(dates) != 1:
+            if dates and self._year_columns(table):
                 return None
+            if len(dates) != 1:
+                return self._year_filter(table, value)
             shape = _PERIOD_FORMATS[len(value)]
             condition = f"strftime({_quote(dates[0])}, '{shape}') = {_literal(value)}"
-            return _Filter(condition, dates[0])
+            return _Filter(condition, (dates[0],))
         columns = [
             str(c) for c in table.data.columns if _value_matches(table.data[c], value)
         ]
         if not columns:
             return None
         if len(columns) == 1:
-            return _Filter(_equals(columns[0], value), columns[0])
+            return _Filter(_equals(columns[0], value), (columns[0],))
         return Clarification(
             question=question,
             prompt=f"{value!r} appears in more than one column. Which did you mean?",
@@ -294,6 +335,20 @@ class DirectAnswerer:
                 for column in columns
             ),
         )
+
+    def _year_columns(self, table: LoadedTable) -> list[str]:
+        return [
+            name
+            for name, kind in self._types[table.relation_name].items()
+            if kind is LogicalType.INTEGER and _readable(name) == "year"
+        ]
+
+    def _year_filter(self, table: LoadedTable, value: str) -> _Filter | None:
+        """A plain year on a table that keeps years in a whole-number column."""
+        years = self._year_columns(table)
+        if len(value) != 4 or len(years) != 1:
+            return None
+        return _Filter(f"{_quote(years[0])} = {value}", (years[0],))
 
     def _finish(self, question: str, sql: str) -> DirectAnswer | None:
         try:
