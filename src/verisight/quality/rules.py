@@ -316,6 +316,87 @@ _NOTE_ISSUES: dict[str, tuple[QualityIssueType, QualitySeverity, str]] = {
         "The column had no header in the file, so it was named after its "
         "position. Check what it holds before relying on it.",
     ),
+    "accounting_negatives": (
+        QualityIssueType.FORMATTED_NUMBERS,
+        QualitySeverity.INFO,
+        "Numbers in brackets were read as negative, so (5) became -5.",
+    ),
+    "abbreviated_numbers": (
+        QualityIssueType.FORMATTED_NUMBERS,
+        QualitySeverity.INFO,
+        "Abbreviated numbers were expanded, so 1.2K became 1200.",
+    ),
+    "unit_suffix": (
+        QualityIssueType.FORMATTED_NUMBERS,
+        QualitySeverity.INFO,
+        "One unit was removed from every value to read the column as numbers.",
+    ),
+    "european_numbers": (
+        QualityIssueType.FORMATTED_NUMBERS,
+        QualitySeverity.WARNING,
+        "Commas were read as decimal marks, so 1.234,50 became 1234.5.",
+    ),
+    "padded_numbers": (
+        QualityIssueType.FORMATTED_NUMBERS,
+        QualitySeverity.INFO,
+        "Spaces around numbers were removed to read the column as numbers.",
+    ),
+    "date_format": (
+        QualityIssueType.REFORMATTED_DATES,
+        QualitySeverity.INFO,
+        "One clear date format was recognised and the column was read as dates.",
+    ),
+    "ambiguous_dates": (
+        QualityIssueType.AMBIGUOUS_DATES,
+        QualitySeverity.WARNING,
+        "Dates could be day-first or month-first, so the column stayed as text "
+        "instead of guessing.",
+    ),
+    "non_numeric_values": (
+        QualityIssueType.STRAY_VALUES,
+        QualitySeverity.WARNING,
+        "A few values in a numeric column were not numbers and were treated "
+        "as missing.",
+    ),
+    "text_missing_labels": (
+        QualityIssueType.MISSING_VALUE_MARKERS,
+        QualitySeverity.WARNING,
+        "Placeholders such as N/A in a text column were treated as missing.",
+    ),
+    "possible_missing_labels": (
+        QualityIssueType.POSSIBLE_MISSING_LABELS,
+        QualitySeverity.INFO,
+        "These labels may mean a value is missing. They were kept, because "
+        "they can also be real categories.",
+    ),
+    "footer_total_rows": (
+        QualityIssueType.REMOVED_ROWS,
+        QualitySeverity.WARNING,
+        "A summary row at the end of the file matched the rows above it and "
+        "was removed so nothing is counted twice.",
+    ),
+    "skipped_title_rows": (
+        QualityIssueType.FILE_STRUCTURE,
+        QualitySeverity.WARNING,
+        "Lines above the column headers were skipped.",
+    ),
+    "renamed_duplicate_column": (
+        QualityIssueType.FILE_STRUCTURE,
+        QualitySeverity.WARNING,
+        "Two columns shared a name, so the later one was renamed. Check what "
+        "it holds before relying on it.",
+    ),
+    "guessed_encoding": (
+        QualityIssueType.FILE_STRUCTURE,
+        QualitySeverity.WARNING,
+        "The file was not UTF-8 and was read as Windows-1252. Check accented "
+        "or non-English text.",
+    ),
+    "reshaped_json": (
+        QualityIssueType.FILE_STRUCTURE,
+        QualitySeverity.INFO,
+        "The JSON was reshaped into one row per record.",
+    ),
 }
 
 

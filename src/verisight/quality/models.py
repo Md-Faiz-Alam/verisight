@@ -23,6 +23,12 @@ class QualityIssueType(StrEnum):
     TRIMMED_COLUMN_NAME = "trimmed_column_name"
     NAMED_BLANK_COLUMN = "named_blank_column"
     TOTAL_ROW = "total_row"
+    REFORMATTED_DATES = "reformatted_dates"
+    AMBIGUOUS_DATES = "ambiguous_dates"
+    STRAY_VALUES = "stray_values"
+    POSSIBLE_MISSING_LABELS = "possible_missing_labels"
+    REMOVED_ROWS = "removed_rows"
+    FILE_STRUCTURE = "file_structure"
 
 
 class QualitySeverity(StrEnum):

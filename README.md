@@ -60,11 +60,20 @@ model. Get a key from [Google AI Studio](https://aistudio.google.com/apikey).
 
 ## Website
 
-VeriSight also runs as a website: upload files or try the demo data, get an
-automatic dashboard you can filter by clicking, review the data-quality
-findings, ask questions, and see the SQL behind every figure and verified
-answer. It is a FastAPI REST API with interactive docs at `/docs`, plus a single
-page with no external scripts.
+VeriSight also runs as a website with five views: a Dashboard you can filter by
+clicking or by date, Ask with an evidence panel for every answer, Explore for
+browsing and searching rows, Quality for what was changed and what to check, and
+Model for how your files connect. It is a FastAPI REST API with interactive docs
+at `/docs`, plus a React app that loads nothing from outside your server.
+
+The built app is committed under `src/verisight/web/static`, so running the website
+needs only Python. To change the interface, install Node.js, then run these in
+`frontend/`:
+
+```powershell
+npm install
+npm run build
+```
 
 ```powershell
 python -m pip install -e ".[web]"
@@ -101,7 +110,7 @@ review the SQL. Narrative verification remains explicitly false.
 
 | Capability | Status |
 | --- | --- |
-| CSV, JSON, and Excel ingestion | Implemented |
+| CSV, TSV, JSON, JSON Lines, and Excel ingestion | Implemented |
 | Website and REST API with uploads, data-quality view and verified answers | Implemented |
 | Automatic multi-domain dashboards computed without a model | Implemented |
 | Reported cleaning of missing markers, separators, currency, percent, padded headers | Implemented |
@@ -271,8 +280,7 @@ Three rules protect the figures:
 
 Clicking a category filters the whole dashboard. Column names decide what is
 treated as an ID, a date or a measure, so an unusually named column can be
-charted the wrong way. Footer rows that the total-row check cannot detect, such
-as a single `TOTAL` line at the end of a file, are still counted.
+charted the wrong way.
 
 ## Local analysis and SQL
 
@@ -315,12 +323,13 @@ Inputs accept a string path, a `Path`, or an iterable of either. Empty inputs
 and invalid entries are rejected. `ask()` does not expose planning or repair
 history in its return value.
 
-CSV and JSON text columns become datetime columns only when every present value
-is an ISO 8601 calendar date, such as `2026-01-31`, optionally with a time such as
-`2026-01-31 10:15` or `2026-01-31T10:15:30.5`. Each value must be a real date in
-pandas' timestamp range (years 1677 to 2262). A single other value keeps the whole
-column as text. Regional formats such as `03/04/2026` are never guessed, and values
-with time-zone offsets stay text because no zone is attached or converted. Date
+Text columns become datetime columns when every present value fits one clear
+format: an ISO 8601 date such as `2026-01-31`, with or without a time; a date with
+a time zone, such as `2026-01-31T10:15:00Z`, which is converted to UTC; a spelled-out
+month such as `Jan 5, 2024`; or a numeric date such as `25/12/2026` when some value
+in the column proves the day and month order. If nothing proves the order, as with
+`03/04/2026`, the column stays text and an `ambiguous_dates` warning is reported.
+Each value must be a real date in pandas' timestamp range (years 1677 to 2262). Date
 columns profile as `datetime` and support SQL date functions such as `YEAR()`,
 `strftime` and `date_diff`; Excel date cells were already loaded as datetimes.
 
@@ -331,24 +340,37 @@ one clear rule, in CSV, JSON and Excel alike, and every change is reported:
 | --- | --- | --- |
 | Missing-value markers in a column that is otherwise numbers or ISO dates | `3, N/A, 2` | `N/A` becomes missing |
 | Comma group separators | `1,234.50` | `1234.5` |
-| One currency symbol (`$`, `€`, `£`, `₹`, `¥`) on every value | `$12.00` | `12.0`, noted as `$ removed` |
+| One currency mark on every value, before or after the number | `$12.00`, `USD 100`, `100 €` | `12.0`, noted as `$ removed` |
 | A percent sign on every value | `10%` | `10`, in percent points |
+| Numbers in brackets | `(1,234.50)` | `-1234.5` |
+| K, M or B after a number | `1.2K` | `1200` |
+| One unit on every value | `12 kg` | `12`, noted as `kg removed` |
+| Comma decimals, when the values prove them | `1.234,50`, `1,5` | `1234.5`, `1.5` |
+| Up to 5% stray values in a column of 20 or more | `10, 20, TBD` | `TBD` becomes missing, with a warning |
+| Placeholders in a text column | `N/A`, `null`, `--` | Missing |
+| A last row labelled as a summary whose number matches the rows above | `Total,,550` | Row removed, with a warning |
 | Leading or trailing spaces in a column name | `" Amount "` | `Amount`, when the name stays distinct |
 
-The markers are `N/A`, `NA`, `#N/A`, `null`, `None`, `NaN`, `-`, `--`, `?` and
-common case variants. Text columns, such as a region column where `NA` means North
-America, are never changed. Leading zeros, mixed currencies, European formats such
-as `1.234,50` and malformed grouping stay as text. Plain numbers stored as JSON or
-Excel text are not converted. Labels that differ only by letter case or
-surrounding spaces, such as `Shipped` and `shipped `, are never changed; they are
-reported as label variants, and SQL planning compares them with
-`LOWER(TRIM(column))` unless the question distinguishes them. Each change or
-variant appears as a data-quality finding (`missing_value_markers`,
-`formatted_numbers`, `label_variants` or `trimmed_column_name`) with the column,
-the number of affected values and up to three original examples. A CSV column
-with a blank header, such as the unnamed index column of a pandas export, is
-named `unnamed_<position>` and reported as `named_blank_column`; Excel workbooks
-still need every used column to have a header.
+The markers for otherwise numeric or date columns are `N/A`, `NA`, `#N/A`, `null`,
+`None`, `NaN`, `-`, `--`, `?` and common case variants. In text columns, `NA` stays
+a label because it can mean North America, and words that can be real categories,
+such as `unknown` or `None`, are kept and reported as `possible_missing_labels`.
+Columns named like identifiers (`id`, `code`, `sku`, `zip`, `phone`) never lose
+stray values, and leading zeros, mixed currencies and mixed units stay as text.
+`1,234` alone is read as 1234 with a note to check it, unless the file is separated
+by semicolons, where it is read as 1.234. Plain numbers stored as JSON or Excel text
+are not converted. Labels that differ only by letter case or surrounding spaces,
+such as `Shipped` and `shipped `, are never changed; they are reported as label
+variants, and SQL planning compares them with `LOWER(TRIM(column))` unless the
+question distinguishes them. Each change or variant appears as a data-quality
+finding with the column, the number of affected values and up to three original
+examples.
+
+File layouts are repaired and reported too. Title lines above the headers are
+skipped when a lower row is clearly the header. Blank headers become
+`unnamed_<position>`, and repeated headers become `name_2`. JSON can be an array of
+rows, an object of columns, one wrapper object holding the rows, or one object per
+line, and nested objects become columns such as `user.age`.
 
 Rows that hold the total of other rows, such as a `Total` region per month or an
 `All causes` entity per year, are detected when a category value's measure equals
@@ -372,8 +394,8 @@ formula definitions or independently identify missing or stale formula caches.
 Recalculate and save affected workbooks, or export corrected values before loading.
 
 The data boundary rejects blank or NUL-containing column names and names that
-collide under DuckDB's ASCII case-insensitive identifier rules (CSV blank headers
-are named first, as described above). Names are
+collide under DuckDB's ASCII case-insensitive identifier rules (CSV and Excel
+headers are repaired first, as described above). Names are
 rechecked before SQL registration because loaded DataFrames remain mutable.
 Valid punctuation and distinct Unicode identifiers are preserved. CSV inputs
 that pandas would turn into an implicit row index are rejected. JSON duplicate
@@ -399,9 +421,10 @@ support for arbitrary file formats, data sizes, or domain semantics.
 ## CSV parsing choices
 
 Automatic CSV loading validates UTF-8 (with or without its BOM) or BOM-marked
-UTF-16. It no longer guesses CP1252 or Latin-1 after invalid UTF-8. Declare
-legacy encodings explicitly; a successful decode cannot establish the original
-encoding. Explicit encoding names use Python's installed codecs and strict
+UTF-16. A file that is neither is read as Windows-1252, the default for Excel on
+Windows, and a `guessed_encoding` warning is reported because other encodings can
+decode to the wrong letters. Declare the encoding explicitly when you know it.
+Explicit encoding names use Python's installed codecs and strict
 decoding. Incorrect caller declarations can still produce incorrect text.
 
 Delimiter detection considers comma, semicolon, tab, and pipe using a sample
@@ -583,6 +606,37 @@ operations and count, support, workflow completion, and limited numeric audits.
 Its scope remains `claim_shape_and_numeric_evidence_only`, with
 `task_semantics_verified=false`. Without a selected contract, CLI exit status
 remains workflow-based. See [Output contracts](docs/output-contracts.md).
+
+## Trust levels
+
+Every website answer carries a trust level and the checks behind it:
+
+| Level | Meaning |
+| --- | --- |
+| Computed without AI | Fixed rules wrote the SQL because the question matched exact columns and values. |
+| Verified | The number equals its SQL result, the SQL audit found no known mistake, and an independent second query agreed. |
+| Number matches SQL only | The number equals its SQL result, but a check could not run. |
+| Needs review | A check failed. The page says which one and why. |
+| Not verified | No number could be tied to an executed result. |
+
+**Answers without AI.** Plainly worded questions, such as "What is the total amount
+for East?" or "How many orders were shipped?", are compiled directly to SQL and need
+no API key. When a value fits several columns, VeriSight asks which one you meant.
+Anything else goes to the model-backed workflow.
+
+**SQL audit.** Each model-written query is checked against the loaded rows, through
+CTEs and subqueries, for joins that copy rows into a sum, totals counted twice, filter
+values the column does not contain or only partly matches, values the question names
+but the query skips, the wrong column or calculation, missing values counted as zero
+or left in, a named year left out, thresholds such as "at least 5", percentages divided
+down, and subtractions in the wrong order.
+
+On the correct and trap queries of the evaluations, measured offline without a model,
+the audit flagged no correct query after one fix and caught 24 of 37 development traps
+and 18 of 30 held-out traps. Before that fix it wrongly flagged 1 held-out correct query.
+The rules were written after reading the development traps, so the held-out figure is
+the fairer one. Mistakes such as a wrong denominator or an unusual date boundary are not
+caught by these rules, and no level proves an answer is right.
 
 ## Independent cross-check
 

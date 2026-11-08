@@ -61,6 +61,21 @@ NoteRule = Literal[
     "label_variants",
     "trimmed_column_name",
     "named_blank_column",
+    "accounting_negatives",
+    "abbreviated_numbers",
+    "unit_suffix",
+    "european_numbers",
+    "padded_numbers",
+    "date_format",
+    "ambiguous_dates",
+    "non_numeric_values",
+    "text_missing_labels",
+    "possible_missing_labels",
+    "footer_total_rows",
+    "skipped_title_rows",
+    "renamed_duplicate_column",
+    "guessed_encoding",
+    "reshaped_json",
 ]
 
 

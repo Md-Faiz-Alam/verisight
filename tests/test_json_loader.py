@@ -105,10 +105,9 @@ def test_json_loader_preserves_nested_values(tmp_path: Path) -> None:
     loader = JsonLoader(Settings())
     table = loader.load(file_path)
 
-    assert table.data.loc[0, "address"] == {
-        "city": "Patna",
-        "country": "India",
-    }
+    assert table.data.loc[0, "address.city"] == "Patna"
+    assert table.data.loc[0, "address.country"] == "India"
+    assert [note.rule for note in table.value_notes] == ["reshaped_json"]
 
 
 def test_json_loader_supports_utf8_bom(tmp_path: Path) -> None:
@@ -484,13 +483,10 @@ def test_json_loader_preserves_nested_decimals(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     table = JsonLoader(Settings()).load(path)
-    nested = table.data["nested"].iloc[0]
-    assert nested["value"] == Decimal("9007199254740993.0")
-    assert nested["items"] == [Decimal("1e-400"), 0.5]
-    assert to_jsonable(nested) == {
-        "value": "9007199254740993.0",
-        "items": ["1E-400", 0.5],
-    }
+    assert table.data["nested.value"].iloc[0] == Decimal("9007199254740993.0")
+    items = table.data["nested.items"].iloc[0]
+    assert items == [Decimal("1e-400"), 0.5]
+    assert to_jsonable(items) == ["1E-400", 0.5]
 
 
 @pytest.mark.parametrize(

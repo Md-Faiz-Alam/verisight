@@ -12,6 +12,8 @@ from verisight.analytics.dashboard import (
     DashboardBuilder,
     DashboardFilter,
     DashboardRequestError,
+    DateRange,
+    TimeSpan,
 )
 from verisight.analytics.domains import detect_domain, name_tokens
 from verisight.config import Settings
@@ -339,13 +341,23 @@ def test_columns_that_cannot_be_charted_are_skipped(tmp_path: Path) -> None:
     assert dashboard.suggestions == ("How many rows does data have?",)
 
 
-def test_nested_json_columns_are_ignored(tmp_path: Path) -> None:
-    data = [{"kind": "a", "extra": {"x": 1}}, {"kind": "b", "extra": {"x": 2}}]
+def test_nested_fields_are_charted_and_lists_are_ignored(tmp_path: Path) -> None:
+    data = [
+        {"kind": "a", "extra": {"x": 1}, "tags": ["p"]},
+        {"kind": "b", "extra": {"x": 2}, "tags": ["q"]},
+    ]
     dashboard = _dashboard(tmp_path, json.dumps(data), "data.json")
 
     assert [b.column for b in dashboard.breakdowns] == ["kind"]
-    bar = dashboard.breakdowns[0].bars[0]
-    assert bar.value == 1
+    assert [bar.value for bar in dashboard.breakdowns[0].bars] == [2.0, 1.0]
+    assert _kpis(dashboard) == {"Rows": 2, "Average extra.x": 1.5}
+
+
+def test_categories_without_measures_count_rows(tmp_path: Path) -> None:
+    data = [{"kind": "a", "tags": ["p"]}, {"kind": "b", "tags": ["q"]}]
+    dashboard = _dashboard(tmp_path, json.dumps(data), "data.json")
+
+    assert dashboard.breakdowns[0].title == "Rows by kind"
     assert dashboard.suggestions == (
         "How many rows does data have?",
         "How many rows have kind equal to a?",
@@ -475,3 +487,126 @@ def test_each_figure_can_fail_alone(tmp_path: Path) -> None:
     no_correlation = _failing(tmp_path, text, lambda sql: "CORR(" in sql).build()
     assert not any("correlation" in i.text for i in no_correlation.insights)
     assert no_correlation.kpis != ()
+
+
+def test_date_range_narrows_every_figure_and_reports_the_span(tmp_path: Path) -> None:
+    builder = _builder(tmp_path, "orders.csv", ORDERS)
+
+    whole = builder.build()
+    narrow = builder.build(dates=DateRange("2024-02-01", "2024-02-29"))
+
+    assert whole.time is not None
+    assert (whole.time.column, whole.time.earliest, whole.time.latest) == (
+        "order_date",
+        "2024-01-05",
+        "2024-03-09",
+    )
+    assert _kpis(narrow)["Total amount"] == 25
+    assert narrow.date_range == DateRange("2024-02-01", "2024-02-29")
+    only_start = builder.build(dates=DateRange(start="2024-02-01"))
+    assert _kpis(only_start)["Total amount"] == 50
+    only_end = builder.build(dates=DateRange(end="2024-01-05"))
+    assert _kpis(only_end)["Total amount"] == 100
+
+
+def test_date_range_works_on_year_columns(tmp_path: Path) -> None:
+    builder = _builder(
+        tmp_path, "data.csv", "year,deaths\n2001,5\n2002,6\n2003,7\n2004,1\n"
+    )
+
+    narrow = builder.build(dates=DateRange("2002-01-01", "2003-12-31"))
+
+    assert _kpis(narrow)["Total deaths"] == 13
+    assert builder.build().time == TimeSpan("year", "2001-01-01", "2004-12-31")
+
+
+@pytest.mark.parametrize(
+    ("text", "dates", "message"),
+    [
+        (ORDERS, DateRange("nonsense"), "not a valid date"),
+        ("kind,cost\na,1\nb,2\n", DateRange("2024-01-01"), "no dates"),
+    ],
+)
+def test_bad_date_ranges_are_refused(
+    tmp_path: Path, text: str, dates: DateRange, message: str
+) -> None:
+    with pytest.raises(DashboardRequestError, match=message):
+        _builder(tmp_path, "data.csv", text).build(dates=dates)
+
+
+def _two_tables(tmp_path: Path, first: str, second: str) -> DashboardBuilder:
+    a = tmp_path / "a.csv"
+    a.write_text(first, encoding="utf-8")
+    b = tmp_path / "b.csv"
+    b.write_text(second, encoding="utf-8")
+    return VeriSight(settings=SETTINGS).dashboard_builder([a, b])
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "kind"),
+    [
+        ("k,v\n1,x\n2,y\n3,z\n", "K,w\n1,p\n2,q\n", "one_to_one"),
+        ("k,v\n1,x\n2,y\n3,z\n", "K,w\n1,p\n1,q\n2,r\n", "one_to_many"),
+        ("k,v\n1,x\n1,y\n2,z\n3,t\n", "K,w\n1,p\n2,q\n", "many_to_one"),
+        ("k,v\n1,x\n1,y\n2,z\n3,t\n", "K,w\n1,p\n1,q\n2,r\n", "many_to_many"),
+    ],
+)
+def test_shared_keys_are_found_with_their_shape(
+    tmp_path: Path, first: str, second: str, kind: str
+) -> None:
+    links = _two_tables(tmp_path, first, second).build().links
+
+    assert [(link.left_column, link.right_column) for link in links] == [("k", "K")]
+    assert links[0].kind == kind
+    assert links[0].overlap == 1.0
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        # Same name, different values.
+        ("k,v\n1,x\n2,y\n", "k,w\n8,p\n9,q\n"),
+        # Too few distinct values to mean anything.
+        ("k,v\n1,x\n1,y\n", "k,w\n1,p\n1,q\n"),
+        # No column name in common.
+        ("k,v\n1,x\n2,y\n", "j,w\n1,p\n2,q\n"),
+    ],
+)
+def test_unrelated_columns_are_not_linked(
+    tmp_path: Path, first: str, second: str
+) -> None:
+    assert _two_tables(tmp_path, first, second).build().links == ()
+
+
+def test_rows_page_sorts_searches_and_counts(tmp_path: Path) -> None:
+    builder = _builder(tmp_path, "orders.csv", ORDERS)
+
+    first = builder.rows("orders", limit=2, sort="amount", descending=True)
+    assert first.total == 4
+    assert [row[0] for row in first.rows] == [1, 2]
+    assert first.columns[0].logical_type == "integer"
+    ascending = builder.rows("orders", limit=1, offset=1, sort="order_id")
+    assert ascending.rows[0][0] == 2
+    assert ascending.offset == 1
+    found = builder.rows("orders", search="PENDING")
+    assert (found.total, found.rows[0][0]) == (1, 4)
+    assert builder.rows("orders", search="it's").total == 0
+    assert "SELECT" in builder.rows("orders").sql
+
+
+def test_rows_page_hides_nested_columns(tmp_path: Path) -> None:
+    data = [{"kind": "a", "tags": ["p"]}]
+    page = _builder(tmp_path, "data.json", json.dumps(data)).rows("data")
+
+    assert [column.name for column in page.columns] == ["kind"]
+
+
+@pytest.mark.parametrize(
+    ("relation", "sort", "message"),
+    [("missing", None, "not in this dataset"), ("orders", "nope", "cannot be sorted")],
+)
+def test_rows_page_refuses_unknown_names(
+    tmp_path: Path, relation: str, sort: str | None, message: str
+) -> None:
+    with pytest.raises(DashboardRequestError, match=message):
+        _builder(tmp_path, "orders.csv", ORDERS).rows(relation, sort=sort)

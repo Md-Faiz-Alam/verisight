@@ -120,23 +120,17 @@ def test_single_formats_convert(
     "values",
     [
         ["NA", "Europe", "Asia"],
-        ["007", "N/A", "012"],
+        ["007", "012"],
         ["$5.00", "€6.00"],
-        ["1.234,50", "2.000,00"],
-        ["1,23", "4,56"],
         ["N/A", "n/a"],
         ["12%", "13"],
-        ["abc", "N/A"],
     ],
     ids=[
         "na-is-a-label",
         "leading-zeros",
         "mixed-currencies",
-        "european-format",
-        "bad-grouping",
         "only-markers",
         "partial-percent",
-        "text-with-marker",
     ],
 )
 def test_uncertain_columns_stay_text(tmp_path: Path, values: list[str]) -> None:

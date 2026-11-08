@@ -13,7 +13,7 @@ from verisight import VeriSight
 from verisight.config import Settings
 from verisight.error_reporting import ErrorCode
 from verisight.execution.engine import DuckDBExecutor
-from verisight.ingestion.exceptions import DataLoadError, TableValidationError
+from verisight.ingestion.exceptions import TableValidationError
 from verisight.ingestion.models import LoadedDataset, LoadedTable, SourceMetadata
 from verisight.public_api import run_public_operation
 from verisight.quality.models import QualityIssueType, QualitySeverity
@@ -48,21 +48,13 @@ def test_loaded_table_rejects_sql_identifier_collisions(
     pd.testing.assert_frame_equal(data, original)
 
 
-@pytest.mark.parametrize("extension", ["csv", "json", "xlsx"])
 @pytest.mark.parametrize("operation", ["analyze", "execute", "ask", "investigate"])
-def test_public_workflows_reject_ambiguous_columns_before_generation(
+def test_public_workflows_reject_ambiguous_json_fields_before_generation(
     tmp_path: Path,
-    extension: str,
     operation: Literal["analyze", "execute", "ask", "investigate"],
 ) -> None:
-    path = tmp_path / f"measurements.{extension}"
-    if extension == "csv":
-        path.write_text("Amount,amount\n10,900\n", encoding="utf-8")
-    elif extension == "json":
-        path.write_text(json.dumps([{"Amount": 10, "amount": 900}]), encoding="utf-8")
-    else:
-        pd.DataFrame({"Amount": [10], "amount": [900]}).to_excel(path, index=False)
-
+    path = tmp_path / "measurements.json"
+    path.write_text(json.dumps([{"Amount": 10, "amount": 900}]), encoding="utf-8")
     planner = Mock()
     investigator = Mock()
     synthesizer = Mock()
@@ -72,7 +64,7 @@ def test_public_workflows_reject_ambiguous_columns_before_generation(
         investigator=investigator,
         synthesizer=synthesizer,
     )
-    with pytest.raises((DataLoadError, TableValidationError)) as caught:
+    with pytest.raises(TableValidationError, match="ambiguous SQL column names"):
         if operation == "analyze":
             app.analyze(path)
         elif operation == "execute":
@@ -82,9 +74,6 @@ def test_public_workflows_reject_ambiguous_columns_before_generation(
         else:
             app.investigate(path, "Return the lowercase amount column.", max_steps=1)
 
-    failure = caught.value.__cause__ if extension == "xlsx" else caught.value
-    assert isinstance(failure, TableValidationError)
-    assert "ambiguous SQL column names" in str(failure)
     assert planner.mock_calls == []
     assert investigator.mock_calls == []
     assert synthesizer.mock_calls == []
@@ -106,8 +95,10 @@ def test_distinct_unicode_identifiers_remain_queryable(
 
 
 def test_ambiguous_column_failure_has_a_safe_public_error(tmp_path: Path) -> None:
-    path = tmp_path / "private_source.csv"
-    path.write_text("PrivateAmount,privateamount\n10,900\n", encoding="utf-8")
+    path = tmp_path / "private_source.json"
+    path.write_text(
+        json.dumps([{"PrivateAmount": 10, "privateamount": 900}]), encoding="utf-8"
+    )
     app = VeriSight(settings=_settings())
 
     outcome = run_public_operation(lambda: app.analyze(path))
@@ -121,26 +112,33 @@ def test_ambiguous_column_failure_has_a_safe_public_error(tmp_path: Path) -> Non
 
 
 @pytest.mark.parametrize(
-    ("extension", "headers"),
+    ("extension", "headers", "names"),
     [
-        ("csv", ("amount", "amount")),
-        ("xlsx", ("amount", "amount")),
-        ("xlsx", ("", "amount")),
-        ("xlsx", ("amount", "")),
-        ("xlsx", ("amount", "   ")),
+        ("csv", ("amount", "amount"), ("amount", "amount_2")),
+        ("csv", ("Amount", "amount"), ("Amount", "amount_2")),
+        ("xlsx", ("amount", "amount"), ("amount", "amount_2")),
+        ("xlsx", ("Amount", "amount"), ("Amount", "amount_2")),
+        ("xlsx", ("", "amount"), ("unnamed_1", "amount")),
+        ("xlsx", ("amount", ""), ("amount", "unnamed_2")),
+        ("xlsx", ("amount", "   "), ("amount", "unnamed_2")),
     ],
     ids=[
         "csv-duplicate",
+        "csv-case",
         "xlsx-duplicate",
+        "xlsx-case",
         "xlsx-blank-first",
         "xlsx-blank-last",
         "xlsx-whitespace",
     ],
 )
-def test_raw_headers_are_rejected_before_generation(
-    tmp_path: Path, extension: str, headers: tuple[str, str]
+def test_unusable_headers_are_renamed_and_reported(
+    tmp_path: Path,
+    extension: str,
+    headers: tuple[str, str],
+    names: tuple[str, str],
 ) -> None:
-    path = tmp_path / f"private_measurements.{extension}"
+    path = tmp_path / f"measurements.{extension}"
     if extension == "csv":
         with path.open("w", encoding="utf-8", newline="") as file:
             writer = csv.writer(file)
@@ -148,30 +146,12 @@ def test_raw_headers_are_rejected_before_generation(
             writer.writerow([10, 900])
     else:
         pd.DataFrame([[10, 900]], columns=list(headers)).to_excel(path, index=False)
-    planner = Mock()
-    investigator = Mock()
-    synthesizer = Mock()
-    app = VeriSight(
-        settings=_settings(),
-        planner=planner,
-        investigator=investigator,
-        synthesizer=synthesizer,
-    )
-    for operation in (
-        lambda: app.analyze(path),
-        lambda: app.execute(path, "SELECT * FROM private_measurements"),
-        lambda: app.ask(path, "Get the amount"),
-        lambda: app.investigate(path, "Get the amount", max_steps=1),
-    ):
-        public = run_public_operation(operation)
-        assert not public.succeeded
-        assert public.value is None
-        assert public.error is not None
-        assert public.error.code is ErrorCode.DATA_LOAD_ERROR
-        assert "private_measurements" not in public.error.message
-    assert planner.mock_calls == []
-    assert investigator.mock_calls == []
-    assert synthesizer.mock_calls == []
+
+    analysis = VeriSight(settings=_settings()).analyze(path).analysis
+
+    assert tuple(c.name for c in analysis.schema.tables[0].columns) == names
+    kinds = {issue.issue_type.value for issue in analysis.issues}
+    assert kinds & {"file_structure", "named_blank_column"}
 
 
 @pytest.mark.parametrize("extension", ["csv", "xlsx", "json"])
@@ -212,15 +192,17 @@ def test_valid_source_headers_remain_exact_and_queryable(
     assert result.rows == ((10, 900),)
 
 
-def test_excel_checks_headers_on_every_sheet(tmp_path: Path) -> None:
+def test_excel_repairs_headers_on_every_sheet(tmp_path: Path) -> None:
     path = tmp_path / "measurements.xlsx"
     with pd.ExcelWriter(path) as writer:
         pd.DataFrame({"value": [10]}).to_excel(writer, sheet_name="valid", index=False)
         pd.DataFrame([[10, 900]], columns=["value", "value"]).to_excel(
-            writer, sheet_name="invalid", index=False
+            writer, sheet_name="repeated", index=False
         )
-    with pytest.raises(DataLoadError, match="duplicate source column headers"):
-        VeriSight(settings=_settings()).analyze(path)
+
+    schema = VeriSight(settings=_settings()).analyze(path).analysis.schema
+
+    assert [c.name for c in schema.tables[1].columns] == ["value", "value_2"]
 
 
 def test_excel_empty_sheet_remains_supported(tmp_path: Path) -> None:
@@ -232,13 +214,15 @@ def test_excel_empty_sheet_remains_supported(tmp_path: Path) -> None:
     assert table.column_count == 0
 
 
-def test_excel_rejects_later_values_without_source_headers(tmp_path: Path) -> None:
+def test_excel_names_columns_that_only_have_later_values(tmp_path: Path) -> None:
     path = tmp_path / "measurements.xlsx"
     pd.DataFrame([["value", None], [10, None], [20, 900]], dtype=object).to_excel(
         path, index=False, header=False
     )
-    with pytest.raises(DataLoadError, match="fields without source headers"):
-        VeriSight(settings=_settings()).analyze(path)
+
+    schema = VeriSight(settings=_settings()).analyze(path).analysis.schema
+
+    assert [c.name for c in schema.tables[0].columns] == ["value", "unnamed_2"]
 
 
 def _relation_tables(names: tuple[str, ...]) -> list[LoadedTable]:

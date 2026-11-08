@@ -35,6 +35,7 @@ from verisight.execution.narrative_audit import (
 from verisight.execution.narrative_context import audit_conclusion
 from verisight.execution.observations import QueryObservation
 from verisight.execution.prompt_budget import PromptBudgetExceededError
+from verisight.execution.trust import TrustReport
 
 
 class InvestigationStatus(StrEnum):
@@ -200,6 +201,7 @@ class InvestigationResult:
     synthesis_recovery: SynthesisRecovery | None = field(default=None, kw_only=True)
     initial_query_required: bool = field(default=False, kw_only=True)
     cross_check: CrossCheck | None = field(default=None, kw_only=True)
+    trust: TrustReport | None = field(default=None, kw_only=True)
     narrative_verified: bool = field(default=False, init=False)
     verified_claims: tuple["VerifiedNumericalClaim", ...] = field(init=False)
     quantitative_statements: tuple["ClaimLinkedStatement", ...] = field(init=False)

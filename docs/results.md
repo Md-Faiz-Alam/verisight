@@ -226,6 +226,8 @@ because `NOT IN` never matches null.
 
 ## What these results do and do not show
 
+- Every run above predates the SQL audit and trust levels as well, and held-out
+  live runs have not been repeated with them.
 - Every run above predates the independent second-query cross-check, so none of
   these numbers measures it. Held-out evaluations go through the website's API,
   so a new run will count an answer as accepted only when both queries agree.

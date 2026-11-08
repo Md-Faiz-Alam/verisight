@@ -6,13 +6,19 @@ each change is recorded as a ``ValueNote``. Anything uncertain stays as loaded.
 
 import re
 from collections import defaultdict
+from decimal import Decimal
 from typing import Any
 
 import pandas as pd
 
+from verisight.ingestion.footers import remove_footer_rows
 from verisight.ingestion.loaders.csv import CsvLoader
 from verisight.ingestion.models import LoadedTable, NoteRule, ValueNote
-from verisight.ingestion.temporal import parse_iso_datetimes
+from verisight.ingestion.temporal import (
+    has_ambiguous_dates,
+    parse_flexible_dates,
+    parse_iso_datetimes,
+)
 
 # Spreadsheet and export placeholders for a missing value. They are treated as
 # missing only in a column whose other values are all numbers or ISO dates, so
@@ -37,22 +43,52 @@ MISSING_MARKERS = frozenset(
         "?",
     }
 )
+# In a text column these can only mean "no value". Words that can be real
+# categories are kept and reported instead.
+_TEXT_MISSING = frozenset(
+    {"N/A", "n/a", "N/a", "#N/A", "null", "NULL", "Null", "NaN", "nan", "--"}
+)
+_POSSIBLY_MISSING = frozenset(
+    {"unknown", "Unknown", "UNKNOWN", "none", "None", "NONE", "-", "?", "TBD", "tbd"}
+)
 CURRENCY_SYMBOLS = ("$", "€", "£", "₹", "¥")
+_CURRENCY_CODES = ("USD", "EUR", "GBP", "INR", "JPY", "CAD", "AUD", "CHF", "CNY")
+_CURRENCY = "|".join(re.escape(mark) for mark in (*CURRENCY_SYMBOLS, *_CURRENCY_CODES))
+_CURRENCY_FIRST = re.compile(rf"(-?)\s*({_CURRENCY})\s*(.+)")
+_CURRENCY_LAST = re.compile(rf"(.+?)\s*({_CURRENCY})")
 _GROUPED = re.compile(r"[+-]?[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?")
+_BRACKETED = re.compile(r"\(([^()]+)\)")
+_PLAIN = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?")
+_ABBREVIATED = re.compile(r"([+-]?[0-9]+(?:\.[0-9]+)?)\s*([KkMB])")
+_MULTIPLIERS = {"K": 1_000, "k": 1_000, "M": 1_000_000, "B": 1_000_000_000}
+_WITH_UNIT = re.compile(r"([+-]?[0-9][0-9.,]*)\s*([A-Za-z°µ²³/]{1,8})")
+_COMMA_DECIMAL = re.compile(r"[+-]?[0-9]{1,3}(?:\.[0-9]{3})*,[0-9]+")
+_DOT_GROUPED = re.compile(r"[+-]?[0-9]{1,3}(?:\.[0-9]{3})+")
+_THREE_AFTER_COMMA = re.compile(r"[+-]?[0-9]{1,3},[0-9]{3}")
+_NUMBER_SHAPE = rf"[(+-]?(?:{_CURRENCY})?\s*[0-9][0-9.,]*\s*(?:%|{_CURRENCY})?\)?"
+_DATE_SHAPE = r"[0-9]{1,4}[/.-][0-9]{1,2}[/.-][0-9]{1,4}.*"
+_MIN_ROWS_FOR_STRAYS = 20
+_MAX_STRAY_SHARE = 0.05
+_MAX_STRAY_LABELS = 5
+_IDENTIFIER_WORDS = frozenset({"id", "uuid", "guid", "code", "sku", "zip", "phone"})
 _MAX_EXAMPLES = 3
 _MAX_SAFE_INTEGER = 2**53 - 1
 _MAX_VARIANT_GROUPS = 5
 
+_Parsed = tuple[pd.Series, NoteRule | None, str | None, pd.Series]
+
 
 def clean_table(table: LoadedTable) -> None:
-    """Trim padded headers, then convert or report messy values in place.
+    """Drop summary rows and trim headers, then convert or report messy values.
 
     Notes a loader already recorded, such as generated header names, are kept.
     """
     notes: list[ValueNote] = list(table.value_notes)
+    notes.extend(remove_footer_rows(table))
     notes.extend(_trim_headers(table))
+    semicolons = table.source.csv_delimiter == ";"
     for column in table.data.columns:
-        notes.extend(_clean_column(table.data, str(column)))
+        notes.extend(_clean_column(table.data, str(column), semicolons))
     table.value_notes = tuple(notes)
 
 
@@ -82,7 +118,7 @@ def _trim_headers(table: LoadedTable) -> list[ValueNote]:
     ]
 
 
-def _clean_column(data: pd.DataFrame, column: str) -> list[ValueNote]:
+def _clean_column(data: pd.DataFrame, column: str, semicolons: bool) -> list[ValueNote]:
     series = data[column]
     if series.dtype != object:
         return []
@@ -90,24 +126,35 @@ def _clean_column(data: pd.DataFrame, column: str) -> list[ValueNote]:
     if present.empty:
         return []
     if all(type(value) is str for value in present):
-        return _clean_text(data, column, series)
+        return _clean_text(data, column, series, semicolons)
     return _clean_mixed(data, column, series, present)
 
 
-def _clean_text(data: pd.DataFrame, column: str, series: pd.Series) -> list[ValueNote]:
-    markers = series.isin(MISSING_MARKERS)
+def _clean_text(
+    data: pd.DataFrame, column: str, series: pd.Series, semicolons: bool
+) -> list[ValueNote]:
+    stripped = series.str.strip()
+    markers = stripped.isin(MISSING_MARKERS) | stripped.eq("")
     candidate = series.mask(markers)
     if candidate.dropna().empty:
         return _label_variants(column, series)
-    converted = _parse_text(candidate)
+    converted = _parse_text(candidate, semicolons)
+    strays = pd.Series(False, index=series.index)
     if converted is None:
-        return _label_variants(column, series)
+        found = _stray_values(column, candidate)
+        if found is not None:
+            converted = _parse_text(candidate.mask(found), semicolons)
+            strays = found if converted is not None else strays
+    if converted is None:
+        return _text_column(data, column, series)
     typed, rule, detail, formatted = converted
     notes: list[ValueNote] = []
     if markers.any():
         notes.append(_note(column, "missing_value_markers", series[markers]))
     if rule is not None:
         notes.append(_note(column, rule, series[formatted], detail))
+    if strays.any():
+        notes.append(_note(column, "non_numeric_values", series[strays]))
     if not notes:
         # Plain numbers or dates stored as text are left exactly as loaded.
         return _label_variants(column, series)
@@ -115,61 +162,177 @@ def _clean_text(data: pd.DataFrame, column: str, series: pd.Series) -> list[Valu
     return notes
 
 
-def _parse_text(
-    values: pd.Series,
-) -> tuple[pd.Series, NoteRule | None, str | None, pd.Series] | None:
-    """Type strings as dates or numbers, removing one consistent format.
+def _stray_values(column: str, candidate: pd.Series) -> pd.Series | None:
+    """Mark a few values that stop an otherwise numeric or date column.
 
-    Returns the typed column, the format rule applied, its description, and a
-    mask of the values that carried that format.
+    Identifier columns are excluded, where a code such as ``A12`` is as real
+    as ``123``. The caller still requires the remaining values to parse.
+    """
+    words = {word.casefold() for word in re.split(r"[^A-Za-z0-9]+", column)}
+    present = candidate.dropna().str.strip()
+    if words & _IDENTIFIER_WORDS or len(present) < _MIN_ROWS_FOR_STRAYS:
+        return None
+    shaped = present.str.fullmatch(_NUMBER_SHAPE) | present.str.fullmatch(_DATE_SHAPE)
+    outliers = present[~shaped]
+    if (
+        outliers.empty
+        or len(outliers) > _MAX_STRAY_SHARE * len(present)
+        or outliers.nunique() > _MAX_STRAY_LABELS
+    ):
+        return None
+    return pd.Series(candidate.index.isin(outliers.index), index=candidate.index)
+
+
+def _text_column(data: pd.DataFrame, column: str, series: pd.Series) -> list[ValueNote]:
+    """Clear placeholders from a text column and report what could not be read."""
+    stripped = series.str.strip()
+    notes: list[ValueNote] = []
+    placeholders = stripped.isin(_TEXT_MISSING) | stripped.eq("")
+    cleared = series.mask(placeholders)
+    if placeholders.any():
+        data[column] = cleared
+        notes.append(_note(column, "text_missing_labels", series[placeholders]))
+    possible = stripped.isin(_POSSIBLY_MISSING)
+    if possible.any():
+        notes.append(_note(column, "possible_missing_labels", series[possible]))
+    if has_ambiguous_dates(cleared):
+        notes.append(_note(column, "ambiguous_dates", cleared.dropna()))
+    return notes + _label_variants(column, cleared)
+
+
+def _parse_text(values: pd.Series, semicolons: bool) -> _Parsed | None:
+    """Type strings as dates or numbers, removing consistent formatting.
+
+    Returns the typed column, the first format rule applied, a description of
+    every step, and a mask of the values that carried a format.
     """
     present = values.notna()
     none = pd.Series(False, index=values.index)
     dates = parse_iso_datetimes(values)
     if dates is not None:
         return dates, None, None, none
-    text = values
-    rule: NoteRule | None = None
-    detail: str | None = None
-    formatted = none
-    if all(value.endswith("%") for value in values.dropna()):
-        text = text.str.removesuffix("%")
-        rule, detail, formatted = (
-            "percent_sign",
-            "values are percent points; 10% became 10",
-            present,
-        )
+    flexible = parse_flexible_dates(values)
+    if flexible is not None:
+        return flexible[0], "date_format", flexible[1], present
+    text = values.str.strip()
+    steps: list[tuple[NoteRule, str]] = []
+    text = _bracketed_negatives(text, steps)
+    if all(value.endswith("%") for value in text.dropna()):
+        text = text.str.removesuffix("%").str.strip()
+        steps.append(("percent_sign", "values are percent points; 10% became 10"))
     else:
-        symbols = {_currency(value) for value in values.dropna()}
-        if len(symbols) == 1 and None not in symbols:
-            symbol = next(iter(symbols))
-            assert symbol is not None
-            text = text.str.replace(symbol, "", n=1, regex=False)
-            rule, detail, formatted = "currency_symbol", f"{symbol} removed", present
+        text = _without_currency(text, steps)
+    text = _european(text, semicolons, steps)
+    text = _expanded(text, steps)
+    text = _without_unit(text, steps)
     grouped = text.str.fullmatch(_GROUPED, na=False).astype(bool)
     if grouped.any():
         text = text.mask(grouped, text.str.replace(",", "", regex=False))
-        if rule is None:
-            rule, detail, formatted = (
-                "thousands_separators",
-                "comma group separators removed",
-                grouped,
-            )
-        else:
-            detail = f"{detail}; comma group separators removed"
+        steps.append(("thousands_separators", _grouping_detail(values)))
     typed = CsvLoader._infer_safe_column_types(pd.DataFrame({"value": text}))["value"]
     if typed.dtype == object:
         return None
     typed.name = values.name
-    return typed, rule, detail, formatted
+    if not steps:
+        padded = present & values.ne(values.str.strip())
+        if not padded.any():
+            return typed, None, None, none
+        return typed, "padded_numbers", "outer spaces removed", padded
+    only_groups = len(steps) == 1 and steps[0][0] == "thousands_separators"
+    marked = grouped if only_groups else present
+    return typed, steps[0][0], "; ".join(detail for _, detail in steps), marked
 
 
-def _currency(value: str) -> str | None:
-    body = value[1:] if value.startswith("-") else value
-    for symbol in CURRENCY_SYMBOLS:
-        if body.startswith(symbol):
-            return symbol
-    return None
+def _grouping_detail(values: pd.Series) -> str:
+    """Flag the one reading that could really be a European decimal."""
+    present = values.dropna().str.strip()
+    if present.str.fullmatch(_THREE_AFTER_COMMA).all():
+        return (
+            "comma group separators removed; 1,234 was read as 1234, so check "
+            "this if the file uses commas as decimal marks"
+        )
+    return "comma group separators removed"
+
+
+def _bracketed_negatives(
+    text: pd.Series, steps: list[tuple[NoteRule, str]]
+) -> pd.Series:
+    bracketed = text.str.fullmatch(_BRACKETED, na=False).astype(bool)
+    if not bracketed.any():
+        return text
+    steps.append(("accounting_negatives", "numbers in brackets read as negative"))
+    return text.mask(bracketed, "-" + text.str[1:-1])
+
+
+def _split_currency(value: str) -> tuple[str, str] | None:
+    """Return the currency mark and the number written with it."""
+    first = _CURRENCY_FIRST.fullmatch(value)
+    if first is not None:
+        return first[2], first[1] + first[3]
+    last = _CURRENCY_LAST.fullmatch(value)
+    return None if last is None else (last[2], last[1])
+
+
+def _without_currency(text: pd.Series, steps: list[tuple[NoteRule, str]]) -> pd.Series:
+    """Remove a currency mark only when every value carries the same one."""
+    parts = text.dropna().map(_split_currency)
+    if parts.isna().any():
+        return text
+    marks = {part[0] for part in parts}
+    if len(marks) != 1:
+        return text
+    steps.append(("currency_symbol", f"{next(iter(marks))} removed"))
+    numbers = parts.map(lambda part: part[1])
+    return numbers.reindex(text.index)
+
+
+def _european(
+    text: pd.Series, semicolons: bool, steps: list[tuple[NoteRule, str]]
+) -> pd.Series:
+    """Read comma decimals only when the column's own values prove them.
+
+    A comma followed by anything but three digits cannot be a group separator.
+    ``1,234`` alone is ambiguous, and counts only in a semicolon-separated file.
+    """
+    present = text.dropna()
+    decimal = present.str.fullmatch(_COMMA_DECIMAL)
+    fits = (
+        decimal
+        | present.str.fullmatch(_DOT_GROUPED)
+        | present.str.fullmatch(r"[+-]?[0-9]+")
+    )
+    proof = decimal & (semicolons | ~present.str.fullmatch(_THREE_AFTER_COMMA))
+    if not fits.all() or not proof.any():
+        return text
+    steps.append(("european_numbers", "commas read as decimal marks"))
+    return text.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+
+
+def _expanded(text: pd.Series, steps: list[tuple[NoteRule, str]]) -> pd.Series:
+    present = text.dropna()
+    short = present.str.fullmatch(_ABBREVIATED)
+    if not short.any() or not (short | present.str.fullmatch(_PLAIN)).all():
+        return text
+
+    def expand(value: str) -> str:
+        match = _ABBREVIATED.fullmatch(value)
+        if match is None:
+            return value
+        return format(Decimal(match[1]) * _MULTIPLIERS[match[2]], "f")
+
+    steps.append(("abbreviated_numbers", "K, M and B expanded"))
+    return text.map(expand, na_action="ignore")
+
+
+def _without_unit(text: pd.Series, steps: list[tuple[NoteRule, str]]) -> pd.Series:
+    """Remove a unit only when every value carries the same one."""
+    matches = text.dropna().str.extract(_WITH_UNIT.pattern + "$")
+    full = text.dropna().str.fullmatch(_WITH_UNIT)
+    units = set(matches[1].dropna())
+    if not full.all() or len(units) != 1:
+        return text
+    steps.append(("unit_suffix", f"{next(iter(units))} removed"))
+    return matches[0].reindex(text.index)
 
 
 def _clean_mixed(

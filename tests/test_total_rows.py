@@ -178,7 +178,7 @@ def test_total_rows_become_a_quality_warning() -> None:
 
 def test_whole_table_total_message_has_no_group(tmp_path: Path) -> None:
     path = tmp_path / "budget.csv"
-    path.write_text("item,cost\nRent,10\nFood,4\nTravel,3\nTotal,17\n", "utf-8")
+    path.write_text("item,cost\nTotal,17\nRent,10\nFood,4\nTravel,3\n", "utf-8")
 
     issues = VeriSight(settings=Settings()).analyze(path).analysis.issues
 

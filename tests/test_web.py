@@ -1,6 +1,7 @@
 """Website and REST API: uploads, profiles, verified answers, limits and safety."""
 
 import json
+import re
 import threading
 import time
 from collections.abc import Iterator
@@ -97,7 +98,7 @@ def _script(conclusion: str, expected: str, column: str = "total") -> list[str]:
 
 
 def _ask(client: TestClient, dataset_id: object, **body: object) -> tuple[int, Any]:
-    payload = {"question": "What is the total amount?", "consent": True, **body}
+    payload = {"question": "How much came in altogether?", "consent": True, **body}
     response = client.post(f"/api/datasets/{dataset_id}/ask", json=payload)
     return response.status_code, response.json()
 
@@ -107,12 +108,13 @@ def test_page_config_and_security_headers(client: TestClient) -> None:
     docs = client.get("/docs")
 
     assert page.status_code == 200
-    assert "See what your data says" in page.text
-    assert client.get("/static/charts.js").status_code == 200
+    assert '<div id="root">' in page.text
+    assets = re.findall(r'(?:src|href)="(/static/[^"]+)"', page.text)
+    assert len(assets) >= 3
+    assert all(client.get(asset).status_code == 200 for asset in assets)
     assert "script-src 'self'" in page.headers["content-security-policy"]
     assert page.headers["x-frame-options"] == "DENY"
     assert "content-security-policy" not in docs.headers
-    assert client.get("/static/app.js").status_code == 200
     assert client.get("/api/health").json() == {"status": "ok"}
     assert client.get("/api/config").json() == {
         "server_key": False,
@@ -120,7 +122,15 @@ def test_page_config_and_security_headers(client: TestClient) -> None:
         "max_upload_mb": 20,
         "max_files": 5,
         "dataset_ttl_minutes": 60,
-        "allowed_extensions": [".csv", ".json", ".xlsx", ".xls"],
+        "allowed_extensions": [
+            ".csv",
+            ".tsv",
+            ".json",
+            ".jsonl",
+            ".ndjson",
+            ".xlsx",
+            ".xls",
+        ],
     }
 
 
@@ -143,7 +153,7 @@ def test_uploads_are_validated_with_clear_messages() -> None:
     with _client(max_upload_mb=1, max_files=2) as client:
         assert _upload(client, ("a.parquet", b"x"), status=415) == {
             "code": "unsupported_file_type",
-            "message": "a.parquet: use a CSV, JSON, XLSX or XLS file.",
+            "message": "a.parquet: use a CSV, TSV, JSON, JSONL, XLSX or XLS file.",
         }
         assert _upload(client, ("a.csv", b""), status=400)["code"] == "empty_file"
         big = b"a\n" + b"1\n" * (1024 * 1024)
@@ -169,10 +179,22 @@ def _workbook(rows: list[list[object]]) -> bytes:
     return buffer.getvalue()
 
 
+def test_repairable_files_load_and_say_what_changed(client: TestClient) -> None:
+    uploads = [
+        ("lines.json", b'{"a": 1}\n{"a": 2}\n'),
+        ("latin.csv", "city,n\nMalmö,1\n".encode("latin-1")),
+        ("dupes.csv", b"amount,amount\n1,2\n"),
+        ("titled.xlsx", _workbook([["Report", None], ["amount", "region"], [10, "n"]])),
+        ("wide.xlsx", _workbook([["amount", None], [10, "stray"]])),
+    ]
+    for name, data in uploads:
+        body = _upload(client, (name, data))
+        assert body["profile"]["quality_findings"], name
+
+
 @pytest.mark.parametrize(
     ("name", "data", "message"),
     [
-        ("lines.json", b'{"a": 1}\n{"a": 2}\n', "looks like JSON Lines"),
         ("encoding.json", b"{broken", "is not valid JSON"),
         ("nan.json", b'[{"a": NaN}]', "NaN or Infinity"),
         ("dup.json", b'[{"a": 1, "a": 2}]', "repeats the same key"),
@@ -180,10 +202,8 @@ def _workbook(rows: list[list[object]]) -> bytes:
         ("scalar.json", b"42", "equal-length array per column"),
         ("ragged.json", b'{"a": [1, 2], "b": [3]}', "different lengths"),
         ("latin.json", '[{"city": "Malmö"}]'.encode("latin-1"), "UTF-8"),
-        ("latin.csv", "city,n\nMalmö,1\n".encode("latin-1"), "UTF-8"),
         ("nul.csv", b"a,b\n1,\x002\n", "binary data"),
-        ("dupes.csv", b"amount,amount\n1,2\n", "same header"),
-        ("case.csv", b"Amount,amount\n1,2\n", "differ only by letter case"),
+        ("case.json", b'[{"Amount": 1, "amount": 2}]', "differ only by letter case"),
         ("wide.csv", b"a,b\n1,2\n3,4,5\n", "same number of columns"),
         (
             "formula.xlsx",
@@ -195,12 +215,6 @@ def _workbook(rows: list[list[object]]) -> bytes:
             _workbook([["amount", "ratio"], [10, "#DIV/0!"]]),
             "error cells",
         ),
-        (
-            "titled.xlsx",
-            _workbook([["Report", None], ["amount", "region"], [10, "n"]]),
-            "no title rows",
-        ),
-        ("wide.xlsx", _workbook([["amount", None], [10, "stray"]]), "no title rows"),
     ],
 )
 def test_load_failures_explain_what_to_fix(
@@ -376,6 +390,69 @@ def test_dashboard_is_computed_without_a_key_and_filters(client: TestClient) -> 
     assert narrowed.json()["filters"] == [{"column": "state", "value": "active"}]
 
 
+def test_dashboard_accepts_a_date_range(client: TestClient) -> None:
+    data = b"day,amount\n2024-01-01,1\n2024-02-01,2\n2024-03-01,4\n"
+    dataset = _upload(client, ("data.csv", data))
+
+    response = client.post(
+        f"/api/datasets/{dataset['dataset_id']}/dashboard",
+        json={"start": "2024-02-01", "end": "2024-02-29"},
+    )
+
+    assert {k["label"]: k["value"] for k in response.json()["kpis"]} == {
+        "Rows": 1,
+        "Total amount": 2,
+    }
+    assert response.json()["time"]["column"] == "day"
+
+
+def test_rows_endpoint(client: TestClient) -> None:
+    dataset = _upload(client, ("data.csv", CSV))
+    url = f"/api/datasets/{dataset['dataset_id']}/rows"
+
+    page = client.post(
+        url,
+        json={"relation": "data", "sort": "amount", "descending": True, "limit": 1},
+    ).json()
+    refused = client.post(url, json={"relation": "data", "sort": "nope"})
+    missing = client.post("/api/datasets/nope/rows", json={"relation": "data"})
+
+    assert page["rows"] == [["other", 900]]
+    assert page["total"] == 3
+    assert (refused.status_code, refused.json()["code"]) == (400, "invalid_rows")
+    assert missing.status_code == 404
+
+
+def test_rows_endpoint_rate_limit() -> None:
+    with _client(dashboards_per_hour=1) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        url = f"/api/datasets/{dataset['dataset_id']}/rows"
+        assert client.post(url, json={"relation": "data"}).status_code == 200
+        limited = client.post(url, json={"relation": "data"})
+
+    assert (limited.status_code, limited.json()["code"]) == (429, "rate_limited")
+
+
+def test_rows_endpoint_reports_a_failed_load() -> None:
+    class _NoRows(VeriSight):
+        def dashboard_builder(self, paths: object) -> DashboardBuilder:
+            raise ConfigurationError("secret detail")
+
+    app = create_app(
+        settings=_settings(),
+        web=WebSettings(),
+        factory=lambda settings: _NoRows(settings=settings),
+    )
+    with TestClient(app) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        response = client.post(
+            f"/api/datasets/{dataset['dataset_id']}/rows", json={"relation": "data"}
+        )
+
+    assert response.status_code == 500
+    assert "secret" not in response.text
+
+
 def test_dashboard_loads_a_dataset_once() -> None:
     made: list[VeriSight] = []
 
@@ -488,6 +565,102 @@ def test_dataset_removed_while_preparing_keeps_nothing() -> None:
 
     assert store.prepared(item, removed_meanwhile) == "value"
     assert item.prepared is None
+
+
+def test_plain_questions_need_no_key_or_consent(client: TestClient) -> None:
+    dataset = _upload(client, ("data.csv", CSV))
+
+    with patch(GENERATE, side_effect=AssertionError("no model call")):
+        status, answer = _ask(
+            client,
+            dataset["dataset_id"],
+            question="What is the total amount?",
+            consent=False,
+        )
+
+    assert status == 200
+    assert answer["outcome"] == "verified"
+    assert answer["trust"]["level"] == "computed"
+    assert answer["model_calls"] == []
+    assert answer["steps"][0]["rows"] == [[930]]
+    assert answer["claims"][0]["verification"]["status"] == "supported"
+
+
+def test_unclear_values_get_a_question_back(client: TestClient) -> None:
+    data = b"origin,dest,fare\nParis,Rome,10\nRome,Oslo,20\n"
+    dataset = _upload(client, ("trips.csv", data))
+
+    status, answer = _ask(
+        client,
+        dataset["dataset_id"],
+        question="What is the total fare for Rome?",
+        consent=False,
+    )
+
+    assert status == 200
+    assert answer["outcome"] == "clarify"
+    assert len(answer["options"]) == 2
+
+
+def test_difference_questions_skip_the_direct_path(client: TestClient) -> None:
+    dataset = _upload(client, ("data.csv", CSV))
+
+    status, error = _ask(
+        client,
+        dataset["dataset_id"],
+        question="What is the total amount?",
+        consent=False,
+        answer_type="difference",
+    )
+
+    assert (status, error["code"]) == (400, "consent_required")
+
+
+def test_direct_answers_count_against_the_rate_limit() -> None:
+    with _client(questions_per_hour=1) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        question = "What is the total amount?"
+        assert _ask(client, dataset["dataset_id"], question=question)[0] == 200
+        status, error = _ask(client, dataset["dataset_id"], question=question)
+
+    assert (status, error["code"]) == (429, "rate_limited")
+
+
+def test_broken_direct_path_falls_back_to_the_model_workflow() -> None:
+    class _NoDirect(VeriSight):
+        def dashboard_builder(self, paths: object) -> DashboardBuilder:
+            raise ConfigurationError("secret detail")
+
+    app = create_app(
+        settings=_settings(),
+        web=WebSettings(),
+        factory=lambda settings: _NoDirect(settings=settings),
+    )
+    with TestClient(app) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        status, error = _ask(
+            client,
+            dataset["dataset_id"],
+            question="What is the total amount?",
+            consent=False,
+        )
+
+    assert (status, error["code"]) == (400, "consent_required")
+
+
+def test_audit_failure_withholds_verified() -> None:
+    app = create_app(settings=_settings("server-key"), web=WebSettings())
+    script = _script("The total is 930.", "930")
+    flawed = "SELECT SUM(amount) AS total FROM data WHERE state = 'nope' OR 1 = 1"
+    script[1] = flawed
+    with TestClient(app) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        with patch(GENERATE, side_effect=script):
+            status, answer = _ask(client, dataset["dataset_id"])
+
+    assert status == 200
+    assert answer["outcome"] == "unverified"
+    assert answer["trust"]["level"] == "needs_review"
 
 
 def test_unavailable_second_check_withholds_verified() -> None:

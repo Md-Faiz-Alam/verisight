@@ -1,131 +1,19 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VeriSight · Analytics you can check</title>
-  <meta name="description" content="Drop in a CSV, Excel or JSON file from any field. VeriSight builds a dashboard from SQL you can read, and answers plain-English questions with numbers it cross-checks.">
-  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css">
-  <script src="/static/charts.js" defer></script>
-  <script src="/static/app.js" defer></script>
-</head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="VeriSight home">
-      <img src="/static/favicon.svg" alt="" width="26" height="26">
-      <span>VeriSight</span>
-    </a>
-    <nav class="topnav" aria-label="Links">
-      <a href="https://github.com/Md-Faiz-Alam/verisight/blob/main/docs/results.md" target="_blank" rel="noopener">Live results</a>
-      <a href="/docs" target="_blank" rel="noopener">API</a>
-      <a href="https://github.com/Md-Faiz-Alam/verisight" target="_blank" rel="noopener">GitHub</a>
-      <button class="icon-button" id="theme-toggle" type="button" aria-label="Switch colour theme">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
-      </button>
-    </nav>
-  </header>
-
-  <main>
-    <section class="hero" id="hero">
-      <div class="hero-copy">
-        <h1>See what your data says. <em>Check how we know.</em></h1>
-        <p class="lede">Drop in a spreadsheet from any field. VeriSight recognises what it is, builds a dashboard without AI, and shows the SQL behind every figure.</p>
-        <label class="dropzone" id="dropzone" for="file-input">
-          <input type="file" id="file-input" multiple accept=".csv,.json,.xlsx,.xls">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-          <span class="drop-text"><strong>Drop files or browse</strong><span id="dropzone-hint">CSV, JSON, XLSX or XLS</span></span>
-        </label>
-        <div class="hero-actions">
-          <button class="button secondary" id="demo-button" type="button">Open the sample dashboard</button>
-          <span class="muted small">Messy orders and customers, no account needed</span>
-        </div>
-        <p class="error" id="upload-error" role="alert" hidden></p>
-      </div>
-
-      <ol class="trust" aria-label="How VeriSight works">
-        <li><b>Cleans in the open</b><span>N/A, $1,234.50, 10% and label variants are handled, and every change is listed.</span></li>
-        <li><b>Charts without AI</b><span>Dashboards are plain SQL over your file. Open any figure to read its query.</span></li>
-        <li><b>Answers cross-checked</b><span>A number earns ✓ only when a second, separately written query reaches it too.</span></li>
-        <li><b>Refuses to guess</b><span>If an answer cannot be checked, it says so.</span></li>
-      </ol>
-
-      <div class="domains" aria-label="Recognised fields">
-        <span>Recognises</span>
-        <ul>
-          <li>Retail</li><li>Finance</li><li>Healthcare</li><li>HR</li><li>Marketing</li><li>Logistics</li><li>Education</li><li>Energy</li><li>Manufacturing</li><li>Real estate</li><li>Environment</li><li>Economy</li><li>Sports</li><li>Anything else, as general data</li>
-        </ul>
-      </div>
-    </section>
-
-    <section class="workspace" id="workspace" hidden>
-      <div class="workbar">
-        <div class="identity">
-          <p class="domain-name" id="domain-name">Your data</p>
-          <p class="muted small" id="domain-detail"></p>
-        </div>
-        <div class="tabs" role="tablist" aria-label="Views">
-          <button role="tab" id="tab-overview" aria-controls="view-overview" aria-selected="true" type="button">Dashboard</button>
-          <button role="tab" id="tab-ask" aria-controls="view-ask" aria-selected="false" tabindex="-1" type="button">Ask</button>
-          <button role="tab" id="tab-data" aria-controls="view-data" aria-selected="false" tabindex="-1" type="button">Data and quality <span class="count" id="finding-count"></span></button>
-        </div>
-        <button class="link-button" id="remove-button" type="button">Remove data</button>
-      </div>
-
-      <div class="view" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
-        <div class="relations" id="relations" role="group" aria-label="Table" hidden></div>
-        <div class="filters" id="filters" hidden></div>
-        <p class="notice info" id="totals-note" hidden></p>
-        <p class="error" id="dashboard-error" role="alert" hidden></p>
-        <div class="dashboard" id="dashboard" aria-live="polite"></div>
-      </div>
-
-      <div class="view" id="view-ask" role="tabpanel" aria-labelledby="tab-ask" tabindex="0" hidden>
-        <form class="panel ask" id="ask-form">
-          <label class="ask-label" for="question">Ask a question about your data</label>
-          <textarea id="question" rows="2" maxlength="1000" placeholder="e.g. How many orders were shipped?" required></textarea>
-          <div class="chips" id="examples" aria-label="Example questions"></div>
-          <div class="ask-options">
-            <fieldset class="segmented">
-              <legend>Answer is</legend>
-              <label><input type="radio" name="answer-type" value="number" checked><span>One number</span></label>
-              <label><input type="radio" name="answer-type" value="difference"><span>A difference</span></label>
-              <label><input type="radio" name="answer-type" value="any"><span>Anything</span></label>
-            </fieldset>
-            <div class="key-field" id="key-field" hidden>
-              <label for="api-key">Gemini API key</label>
-              <input type="password" id="api-key" autocomplete="off" spellcheck="false" placeholder="Used for this question only, never stored">
-            </div>
-          </div>
-          <label class="consent">
-            <input type="checkbox" id="consent">
-            <span>Send the schema, profile, question and sample values to Google Gemini to answer this question.</span>
-          </label>
-          <div class="ask-footer">
-            <p class="error" id="ask-error" role="alert" hidden></p>
-            <button class="button primary" id="ask-button" type="submit">Ask</button>
-          </div>
-        </form>
-        <div class="answers" id="answers" aria-live="polite"></div>
-      </div>
-
-      <div class="view data-view" id="view-data" role="tabpanel" aria-labelledby="tab-data" tabindex="0" hidden>
-        <section class="panel">
-          <h2>Tables</h2>
-          <p class="muted small" id="dataset-expiry"></p>
-          <div id="tables"></div>
-        </section>
-        <section class="panel">
-          <h2>Data quality</h2>
-          <ul class="findings" id="findings"></ul>
-          <button class="button ghost more" id="more-findings" type="button" hidden>Show all findings</button>
-        </section>
-      </div>
-    </section>
-  </main>
-
-  <footer class="footer">
-    <p>Charts show what SQL returned from your file. An answer's ✓ means two separately written queries agreed, which is strong evidence but not proof, so review the SQL. <a href="https://github.com/Md-Faiz-Alam/verisight#scope-and-limits" target="_blank" rel="noopener">Scope and limits</a></p>
-  </footer>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VeriSight · Analytics you can check</title>
+    <meta
+      name="description"
+      content="Drop in a CSV, Excel or JSON file from any field. VeriSight builds a dashboard from SQL you can read and shows the evidence behind every answer."
+    />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <script type="module" crossorigin src="/static/assets/index-BH2yXkp2.js"></script>
+    <link rel="stylesheet" crossorigin href="/static/assets/index-GMSIqrus.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>VeriSight needs JavaScript to show your data.</noscript>
+  </body>
 </html>

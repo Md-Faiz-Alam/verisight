@@ -2,6 +2,7 @@
 
 import codecs
 import csv
+import string
 from dataclasses import replace
 from decimal import Decimal
 from io import StringIO
@@ -27,6 +28,10 @@ _NUMERIC_PATTERN = (
     r")(?:[eE][+-]?[0-9]+)?"
 )
 
+_ASCII_LOWERCASE = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
+_DELIMITED_EXTENSIONS = frozenset({".csv", ".tsv"})
+_FALLBACK_ENCODING = "cp1252"
+_PREAMBLE_SCAN = 22
 _CSV_DELIMITERS = ",;\t|"
 _CSV_SAMPLE_SIZE = 64 * 1024
 _DEFAULT_CSV_DELIMITER = ","
@@ -57,7 +62,7 @@ class CsvLoader(BaseTableLoader):
             max_size_mb=self._settings.max_upload_size_mb,
         )
 
-        if metadata.file_extension != ".csv":
+        if metadata.file_extension not in _DELIMITED_EXTENSIONS:
             raise DataLoadError(
                 f"CsvLoader cannot load file type '{metadata.file_extension}'."
             )
@@ -65,6 +70,8 @@ class CsvLoader(BaseTableLoader):
         if options is not None and not isinstance(options, CsvReadOptions):
             raise DataLoadError("CSV options must be a CsvReadOptions object.")
         choices = options if options is not None else CsvReadOptions()
+        if metadata.file_extension == ".tsv" and choices.delimiter is None:
+            choices = replace(choices, delimiter="\t")
 
         try:
             if choices.encoding is None:
@@ -73,11 +80,19 @@ class CsvLoader(BaseTableLoader):
                 encoding = codecs.lookup(choices.encoding).name
                 self._validate_decoded_content(metadata.path, encoding=encoding)
 
-            delimiter = (
-                choices.delimiter
-                if choices.delimiter is not None
-                else self._detect_delimiter(metadata.path, encoding=encoding)
-            )
+            skipped = 0
+            if choices.delimiter is not None:
+                delimiter = choices.delimiter
+            else:
+                try:
+                    delimiter = self._detect_delimiter(metadata.path, encoding=encoding)
+                except DataLoadError:
+                    skipped = self._preamble_lines(metadata.path, encoding=encoding)
+                    if not skipped:
+                        raise
+                    delimiter = self._detect_delimiter(
+                        metadata.path, encoding=encoding, skip=skipped
+                    )
 
             # Read the source header as values before pandas can rename it.
             header = pd.read_csv(
@@ -89,11 +104,28 @@ class CsvLoader(BaseTableLoader):
                 dtype=str,
                 keep_default_na=False,
                 na_filter=False,
+                skiprows=skipped,
             )
             source_columns = [str(column) for column in header.iloc[0].tolist()]
-            columns, notes = self._name_blank_headers(source_columns)
-            if not pd.Index(columns).is_unique:
-                raise DataLoadError("CSV contains duplicate source column headers.")
+            named, blank_notes = self._name_blank_headers(source_columns)
+            columns, renamed_notes = self._rename_duplicates(named)
+            notes = (*blank_notes, *renamed_notes)
+            if skipped:
+                notes = (
+                    *notes,
+                    self._title_note(metadata.path, encoding, skipped, columns[0]),
+                )
+            if encoding == _FALLBACK_ENCODING and choices.encoding is None:
+                notes = (
+                    *notes,
+                    ValueNote(
+                        column=columns[0],
+                        rule="guessed_encoding",
+                        affected_count=1,
+                        examples=(),
+                        detail="applies to the whole file",
+                    ),
+                )
 
             data = pd.read_csv(
                 metadata.path,
@@ -102,6 +134,7 @@ class CsvLoader(BaseTableLoader):
                 dtype=str,
                 keep_default_na=False,
                 na_values=[""],
+                skiprows=skipped,
             )
 
             if not isinstance(data.index, pd.RangeIndex):
@@ -164,6 +197,87 @@ class CsvLoader(BaseTableLoader):
         return columns, tuple(notes)
 
     @staticmethod
+    def _rename_duplicates(
+        columns: list[str],
+    ) -> tuple[list[str], tuple[ValueNote, ...]]:
+        """Keep the first use of a name and number later ones, reporting each.
+
+        Names are compared ASCII case-insensitively, as SQL identifiers are,
+        so distinct Unicode names such as ``Ä`` and ``ä`` stay as they are.
+        """
+
+        def key(name: str) -> str:
+            return name.translate(_ASCII_LOWERCASE)
+
+        taken = {key(column) for column in columns}
+        seen: set[str] = set()
+        renamed: list[str] = []
+        notes: list[ValueNote] = []
+        for column in columns:
+            if key(column) not in seen:
+                seen.add(key(column))
+                renamed.append(column)
+                continue
+            number = 2
+            while f"{key(column)}_{number}" in taken:
+                number += 1
+            name = f"{column}_{number}"
+            taken.add(key(name))
+            seen.add(key(name))
+            renamed.append(name)
+            notes.append(
+                ValueNote(
+                    column=name,
+                    rule="renamed_duplicate_column",
+                    affected_count=1,
+                    examples=(column,),
+                )
+            )
+        return renamed, tuple(notes)
+
+    @staticmethod
+    def _title_note(path: Path, encoding: str, skipped: int, column: str) -> ValueNote:
+        with path.open("r", encoding=encoding, newline=None) as file:
+            lines = [
+                line.strip() for _, line in zip(range(skipped), file, strict=False)
+            ]
+        return ValueNote(
+            column=column,
+            rule="skipped_title_rows",
+            affected_count=skipped,
+            examples=tuple(line[:80] for line in lines if line)[:3],
+        )
+
+    @staticmethod
+    def _preamble_lines(path: Path, *, encoding: str) -> int:
+        """Count lines above the real header, or return 0 if none is clear.
+
+        The header must be wider than every line above it, be followed by a
+        row of the same width, and hold only text, so a row of numbers can
+        never be promoted to column names.
+        """
+        with path.open("r", encoding=encoding, newline=None) as file:
+            lines = [line for _, line in zip(range(_PREAMBLE_SCAN), file, strict=False)]
+
+        def cells(line: str, delimiter: str) -> list[str]:
+            return next(csv.reader([line], delimiter=delimiter), [])
+
+        for index in range(1, len(lines) - 1):
+            for delimiter in _CSV_DELIMITERS:
+                header = cells(lines[index], delimiter)
+                if (
+                    len(header) >= 2
+                    and len(cells(lines[index + 1], delimiter)) == len(header)
+                    and all(c.strip() and not c.strip()[0].isdigit() for c in header)
+                    and all(
+                        len(cells(line, delimiter)) < len(header)
+                        for line in lines[:index]
+                    )
+                ):
+                    return index
+        return 0
+
+    @staticmethod
     def _detect_encoding(path: Path) -> str:
         """Detect Unicode BOMs and validate encoding in bounded chunks."""
 
@@ -210,11 +324,15 @@ class CsvLoader(BaseTableLoader):
             if utf8_valid:
                 return "utf-8"
 
+        # Excel on Windows saves this by default. The result is always reported.
+        try:
+            path.read_bytes().decode(_FALLBACK_ENCODING)
+        except UnicodeDecodeError as exc:
             raise DataLoadError(
-                "CSV encoding could not be established as UTF-8 or BOM-marked UTF-16. "
-                "Supply an explicit CsvReadOptions encoding; "
-                "no legacy fallback was used."
-            )
+                "CSV encoding could not be established as UTF-8, BOM-marked "
+                "UTF-16 or Windows-1252. Supply an explicit CsvReadOptions encoding."
+            ) from exc
+        return _FALLBACK_ENCODING
 
     @staticmethod
     def _validate_decoded_content(path: Path, *, encoding: str) -> None:
@@ -229,6 +347,7 @@ class CsvLoader(BaseTableLoader):
         path: Path,
         *,
         encoding: str,
+        skip: int = 0,
     ) -> str:
         """Infer a unique delimiter from bounded complete records.
 
@@ -246,6 +365,7 @@ class CsvLoader(BaseTableLoader):
         if truncated:
             sample = sample[:_CSV_SAMPLE_SIZE]
             sample = sample[: sample.rfind("\n") + 1]
+        sample = "".join(sample.splitlines(keepends=True)[skip:])
 
         candidates: list[str] = []
         single_column = False

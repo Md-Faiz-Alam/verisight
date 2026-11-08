@@ -30,11 +30,12 @@ from verisight.analytics.dashboard import (
     DashboardBuilder,
     DashboardFilter,
     DashboardRequestError,
+    DateRange,
 )
 from verisight.config import Settings
 from verisight.error_reporting import ErrorCode
 from verisight.execution.claim_verification import ClaimOperation, VerificationStatus
-from verisight.execution.cross_check import CrossCheckStatus
+from verisight.execution.direct import Clarification, DirectAnswer
 from verisight.execution.generation_telemetry import (
     GenerationCallReport,
     capture_generation_calls,
@@ -45,6 +46,7 @@ from verisight.execution.investigation_result import (
     InvestigationStatus,
 )
 from verisight.execution.metric_display import summarize_advisory_reviews
+from verisight.execution.trust import TrustLevel
 from verisight.public_api import run_public_operation
 from verisight.serialization import to_jsonable
 from verisight.service import VeriSight
@@ -88,7 +90,7 @@ _ENGINE_HINTS = {
     ErrorCode.PROVIDER_UNAVAILABLE: (
         "Gemini is busy or unavailable right now. Wait a minute and ask again."
     ),
-    ErrorCode.UNSUPPORTED_FILE_TYPE: "Use a CSV, JSON, XLSX or XLS file.",
+    ErrorCode.UNSUPPORTED_FILE_TYPE: "Use a CSV, TSV, JSON, JSONL, XLSX or XLS file.",
     ErrorCode.DATA_LOAD_ERROR: (
         "The file could not be read as a table. Check that it is a valid, "
         "non-empty CSV, JSON array of objects, or Excel workbook."
@@ -105,21 +107,9 @@ _LOAD_HINTS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
     (re.compile(pattern, re.DOTALL), hint)
     for pattern, hint in (
         (
-            r"(CSV|Excel) column headers must not be blank",
-            "Some columns have no header. Make sure the first row holds the "
-            "headers, with no title rows above it, and every used column has "
-            "a name.",
-        ),
-        (
             r"Excel data contains fields without source headers",
             "Some cells sit in columns without a header. Make sure the first "
             "row holds the headers, with no title rows above it.",
-        ),
-        (
-            r"(CSV|Excel) contains duplicate source column headers"
-            r"|Table '.*' contains duplicate column names",
-            "Two or more columns have the same header. Rename them so every "
-            "header is different and upload again.",
         ),
         (
             r"Table '.*' contains ambiguous SQL column names",
@@ -185,10 +175,6 @@ _LOAD_HINTS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
             "equal-length array per column.",
         ),
     )
-)
-_JSON_LINES_HINT = (
-    "This looks like JSON Lines (one object per line). Put the objects in a "
-    "JSON array, like [{...}, {...}], and upload again."
 )
 _INVALID_JSON_HINT = (
     "The file is not valid JSON. Check it with a JSON validator and upload again."
@@ -278,8 +264,6 @@ def _load_hint(error: BaseException) -> str | None:
     while current is not None and id(current) not in seen:
         seen.add(id(current))
         if isinstance(current, json.JSONDecodeError):
-            if current.msg.startswith("Extra data"):
-                return _JSON_LINES_HINT
             return _INVALID_JSON_HINT
         if isinstance(current, UnicodeError):
             return _ENCODING_HINT
@@ -310,6 +294,19 @@ class DashboardRequest(BaseModel):
 
     relation: str | None = Field(default=None, max_length=256)
     filters: list[DashboardFilterRequest] = Field(default=[], max_length=8)
+    start: str | None = Field(default=None, max_length=10)
+    end: str | None = Field(default=None, max_length=10)
+
+
+class RowsRequest(BaseModel):
+    """One page of a table in the data explorer."""
+
+    relation: str = Field(max_length=256)
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=50, gt=0, le=200)
+    sort: str | None = Field(default=None, max_length=256)
+    descending: bool = False
+    search: str = Field(default="", max_length=200)
 
 
 class AskRequest(BaseModel):
@@ -379,8 +376,8 @@ def _answer_view(
         accepted
         and bool(claims)
         and all(claim.verification.status in _VERIFIED for claim in claims)
-        and result.cross_check is not None
-        and result.cross_check.status is CrossCheckStatus.AGREED
+        and result.trust is not None
+        and result.trust.level is TrustLevel.VERIFIED
     )
     view: dict[str, object] = {
         "outcome": "verified" if verified else "unverified",
@@ -400,6 +397,7 @@ def _answer_view(
         "assessment": to_jsonable(assessment),
         "review_required": summarize_advisory_reviews(result).review_required,
         "cross_check": to_jsonable(result.cross_check),
+        "trust": to_jsonable(result.trust),
         "failure": to_jsonable(
             result.synthesis_failure or result.investigation_failure
         ),
@@ -408,6 +406,43 @@ def _answer_view(
         "elapsed_seconds": round(elapsed, 2),
     }
     return cast(dict[str, object], _browser_safe(view))
+
+
+def _direct_view(answer: DirectAnswer, elapsed: float) -> dict[str, object]:
+    """Present an answer computed without a model in the usual answer shape."""
+    view: dict[str, object] = {
+        "outcome": "verified",
+        "status": "complete",
+        "answer": answer.conclusion,
+        "claims": to_jsonable((answer.claim,)),
+        "statements": [],
+        "steps": [
+            {
+                "question": answer.question,
+                "sql": answer.sql,
+                "columns": to_jsonable(answer.observation.result.columns),
+                "rows": to_jsonable(answer.observation.result.rows),
+            }
+        ],
+        "assessment": None,
+        "review_required": False,
+        "cross_check": None,
+        "trust": to_jsonable(answer.trust),
+        "failure": None,
+        "recovery": None,
+        "model_calls": [],
+        "elapsed_seconds": round(elapsed, 2),
+    }
+    return cast(dict[str, object], _browser_safe(view))
+
+
+def _clarification_view(ask: Clarification) -> dict[str, object]:
+    return {
+        "outcome": "clarify",
+        "status": "needs_clarification",
+        "answer": ask.prompt,
+        "options": list(ask.options),
+    }
 
 
 def create_app(
@@ -596,7 +631,7 @@ def create_app(
                     raise WebError(
                         415,
                         "unsupported_file_type",
-                        f"{original}: use a CSV, JSON, XLSX or XLS file.",
+                        f"{original}: use a CSV, TSV, JSON, JSONL, XLSX or XLS file.",
                     )
                 target = directory / safe_file_name(original, taken)
                 size = 0
@@ -637,9 +672,7 @@ def create_app(
             raise WebError(404, "dataset_not_found", "This dataset no longer exists.")
         return Response(status_code=204)
 
-    def build_dashboard(
-        stored: StoredDataset, body: DashboardRequest
-    ) -> dict[str, object]:
+    def prepared_builder(stored: StoredDataset) -> DashboardBuilder:
         def prepare() -> DashboardBuilder:
             engine = factory(
                 core.model_copy(
@@ -648,7 +681,21 @@ def create_app(
             )
             return engine.dashboard_builder(stored.paths)
 
-        operation = run_public_operation(lambda: datasets.prepared(stored, prepare))
+        return datasets.prepared(stored, prepare)
+
+    def answer_directly(
+        stored: StoredDataset, question: str
+    ) -> DirectAnswer | Clarification | None:
+        """A failure here only means the model-backed workflow takes over."""
+        operation = run_public_operation(
+            lambda: prepared_builder(stored).answerer.answer(question)
+        )
+        return operation.value
+
+    def build_dashboard(
+        stored: StoredDataset, body: DashboardRequest
+    ) -> dict[str, object]:
+        operation = run_public_operation(lambda: prepared_builder(stored))
         if operation.error is not None:
             report = operation.error
             raise WebError(
@@ -657,7 +704,9 @@ def create_app(
         assert operation.value is not None
         filters = tuple(DashboardFilter(f.column, f.value) for f in body.filters)
         try:
-            built = operation.value.build(body.relation, filters)
+            built = operation.value.build(
+                body.relation, filters, DateRange(body.start, body.end)
+            )
         except DashboardRequestError as error:
             raise WebError(400, "invalid_dashboard", str(error)) from None
         return cast(dict[str, object], _browser_safe(to_jsonable(built)))
@@ -679,6 +728,44 @@ def create_app(
             )
         return await run_in_threadpool(build_dashboard, stored, body)
 
+    def page_of_rows(stored: StoredDataset, body: RowsRequest) -> dict[str, object]:
+        operation = run_public_operation(lambda: prepared_builder(stored))
+        if operation.error is not None:
+            report = operation.error
+            raise WebError(
+                _ENGINE_STATUS.get(report.code, 422), report.code.value, report.message
+            )
+        assert operation.value is not None
+        try:
+            page = operation.value.rows(
+                body.relation,
+                offset=body.offset,
+                limit=body.limit,
+                sort=body.sort,
+                descending=body.descending,
+                search=body.search,
+            )
+        except DashboardRequestError as error:
+            raise WebError(400, "invalid_rows", str(error)) from None
+        return cast(dict[str, object], _browser_safe(to_jsonable(page)))
+
+    @app.post("/api/datasets/{dataset_id}/rows")
+    async def rows(
+        dataset_id: str, body: RowsRequest, request: Request
+    ) -> dict[str, object]:
+        stored = datasets.get(dataset_id)
+        if stored is None:
+            raise WebError(
+                404,
+                "dataset_not_found",
+                "This dataset has expired or was removed. Upload it again.",
+            )
+        if not dashboard_limiter.allow(client_of(request)):
+            raise WebError(
+                429, "rate_limited", "Too many chart updates. Try again in an hour."
+            )
+        return await run_in_threadpool(page_of_rows, stored, body)
+
     @app.post("/api/datasets/{dataset_id}/ask")
     async def ask(
         dataset_id: str, body: AskRequest, request: Request
@@ -697,6 +784,17 @@ def create_app(
                 "invalid_question",
                 f"Ask a question of 1 to {limits.max_question_chars} characters.",
             )
+        if body.answer_type != "difference":
+            started = time.perf_counter()
+            direct = await run_in_threadpool(answer_directly, stored, question)
+            if direct is not None:
+                if not question_limiter.allow(client_of(request)):
+                    raise WebError(
+                        429, "rate_limited", "Too many questions. Try again in an hour."
+                    )
+                if isinstance(direct, Clarification):
+                    return _clarification_view(direct)
+                return _direct_view(direct, time.perf_counter() - started)
         if not body.consent:
             raise WebError(
                 400,

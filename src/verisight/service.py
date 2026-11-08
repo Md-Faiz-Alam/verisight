@@ -1,6 +1,7 @@
 """Public analysis and analytical execution facade for VeriSight."""
 
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from pathlib import Path
 
 from verisight.analysis.result import (
@@ -40,6 +41,7 @@ from verisight.execution.structured_synthesis import (
     StructuredInvestigationSynthesizer,
 )
 from verisight.execution.synthesis import InvestigationSynthesizer
+from verisight.execution.trust_assessment import assess_trust
 from verisight.ingestion.exceptions import FileValidationError
 from verisight.ingestion.models import CsvReadOptions, LoadedDataset
 from verisight.ingestion.service import DatasetLoader
@@ -394,7 +396,22 @@ class VeriSight:
             ),
         )
 
-        return orchestrator.investigate(
+        result = orchestrator.investigate(
             question=question,
             analysis=analysis_result,
+        )
+        if not cross_check:
+            return result
+        accepted = (
+            claim_output_contract is None
+            or result.assess_output(claim_output_contract).accepted
+        )
+        return replace(
+            result,
+            trust=assess_trust(
+                result,
+                dataset=dataset,
+                context=execution_service.context,
+                accepted=accepted,
+            ),
         )

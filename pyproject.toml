@@ -57,7 +57,7 @@ where = ["src"]
 
 
 [tool.setuptools.package-data]
-verisight = ["py.typed", "web/static/*", "web/demo/*"]
+verisight = ["py.typed", "web/static/*", "web/static/assets/*", "web/demo/*"]
 
 
 [tool.pytest.ini_options]

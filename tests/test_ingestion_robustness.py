@@ -253,12 +253,12 @@ def test_json_preserves_nested_values(tmp_path: Path) -> None:
     schema = SchemaInferer().infer_table(table)
 
     profile_column = next(
-        column for column in schema.columns if column.name == "profile"
+        column for column in schema.columns if column.name == "profile.city"
     )
 
-    assert table.data.loc[0, "profile"] == {"city": "Patna"}
-    assert table.data.loc[1, "profile"] == {"city": "Delhi"}
-    assert profile_column.logical_type is LogicalType.UNKNOWN
+    assert table.data.loc[0, "profile.city"] == "Patna"
+    assert table.data.loc[1, "profile.city"] == "Delhi"
+    assert profile_column.logical_type is LogicalType.STRING
 
 
 def test_json_preserves_heterogeneous_object_keys(tmp_path: Path) -> None:
@@ -376,7 +376,7 @@ def test_messy_multi_file_dataset_preserves_data_and_schema(
     event_columns = {column.name: column for column in events_schema.columns}
 
     assert events_schema.row_count == 2
-    assert event_columns["metadata"].logical_type is LogicalType.UNKNOWN
+    assert event_columns["metadata.source"].logical_type is LogicalType.STRING
 
     orders_schema = schemas["Orders"]
     order_columns = {column.name: column for column in orders_schema.columns}

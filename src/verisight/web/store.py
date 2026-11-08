@@ -13,7 +13,7 @@ from pathlib import Path, PurePath
 from typing import TypeVar, cast
 
 T = TypeVar("T")
-ALLOWED_SUFFIXES = (".csv", ".json", ".xlsx", ".xls")
+ALLOWED_SUFFIXES = (".csv", ".tsv", ".json", ".jsonl", ".ndjson", ".xlsx", ".xls")
 _UNSAFE = re.compile(r"[^\w.-]+")
 
 

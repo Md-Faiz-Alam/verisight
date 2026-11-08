@@ -389,11 +389,13 @@ def test_csv_loader_supports_cp1252_encoding(
         "customer_id,name,city\n1,André,Montréal\n2,José,São Paulo\n".encode("cp1252")
     )
 
-    with pytest.raises(DataLoadError, match="no legacy fallback"):
-        CsvLoader(Settings()).load(file_path)
+    guessed = CsvLoader(Settings()).load(file_path)
+    assert guessed.source.csv_encoding == "cp1252"
+    assert [note.rule for note in guessed.value_notes] == ["guessed_encoding"]
     table = CsvLoader(Settings()).load(
         file_path, options=CsvReadOptions(encoding="cp1252")
     )
+    assert table.value_notes == ()
 
     assert table.column_count == 3
     assert table.row_count == 2
@@ -515,7 +517,7 @@ def test_csv_loader_supports_explicit_latin1(
 
     file_path.write_bytes(b"customer_id,name\n1,Alice\x81\n2,Bob\n")
 
-    with pytest.raises(DataLoadError, match="no legacy fallback"):
+    with pytest.raises(DataLoadError, match="Windows-1252"):
         CsvLoader(Settings()).load(file_path)
     table = CsvLoader(Settings()).load(
         file_path, options=CsvReadOptions(encoding="latin-1")
@@ -573,17 +575,16 @@ def test_csv_encoding_detection_checks_invalid_utf8_after_first_chunk(
     file_path = tmp_path / "late_invalid.csv"
     file_path.write_bytes(b"name\n" + b"a" * 65536 + b"\xe9\n")
 
-    with pytest.raises(DataLoadError, match="no legacy fallback"):
-        CsvLoader._detect_encoding(file_path)
+    assert CsvLoader._detect_encoding(file_path) == "cp1252"
 
 
-def test_csv_encoding_detection_rejects_legacy_bytes_after_first_chunk(
+def test_csv_encoding_detection_rejects_undefined_bytes_after_first_chunk(
     tmp_path: Path,
 ) -> None:
     file_path = tmp_path / "late_latin1.csv"
     file_path.write_bytes(b"name\n" + b"a" * 65536 + b"\x81\n")
 
-    with pytest.raises(DataLoadError, match="no legacy fallback"):
+    with pytest.raises(DataLoadError, match="Windows-1252"):
         CsvLoader._detect_encoding(file_path)
 
 
@@ -593,8 +594,7 @@ def test_csv_encoding_detection_handles_incomplete_utf8_at_eof(
     file_path = tmp_path / "incomplete.csv"
     file_path.write_bytes(b"name\nAlice\xe2\x82")
 
-    with pytest.raises(DataLoadError, match="no legacy fallback"):
-        CsvLoader._detect_encoding(file_path)
+    assert CsvLoader._detect_encoding(file_path) == "cp1252"
 
 
 def test_csv_encoding_detection_continues_after_invalid_utf8(
@@ -608,7 +608,7 @@ def test_csv_encoding_detection_continues_after_invalid_utf8(
 
     file_path.write_bytes(b"a" * chunk_size + b"\x81" + b"b" * (chunk_size - 1) + b"c")
 
-    with pytest.raises(DataLoadError, match="no legacy fallback"):
+    with pytest.raises(DataLoadError, match="Windows-1252"):
         CsvLoader._detect_encoding(file_path)
 
 
@@ -732,8 +732,8 @@ def test_inconclusive_delimiter_requires_explicit_selection(
 def test_explicit_encoding_preserves_shift_jis_text(tmp_path: Path) -> None:
     path = tmp_path / "names.csv"
     path.write_bytes("name,value\n東京,1\n".encode("shift_jis"))
-    with pytest.raises(DataLoadError, match="no legacy fallback"):
-        CsvLoader(Settings()).load(path)
+    guessed = CsvLoader(Settings()).load(path)
+    assert [note.rule for note in guessed.value_notes] == ["guessed_encoding"]
     table = CsvLoader(Settings()).load(
         path, options=CsvReadOptions(encoding="shift_jis")
     )
@@ -743,13 +743,15 @@ def test_explicit_encoding_preserves_shift_jis_text(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("payload", [b"name\nJos\xc3\n", b"name\nAlice\xe2\x82"])
-def test_truncated_utf8_is_not_reinterpreted_as_legacy_text(
+def test_damaged_utf8_is_read_as_legacy_text_and_reported(
     tmp_path: Path, payload: bytes
 ) -> None:
     path = tmp_path / "truncated.csv"
     path.write_bytes(payload)
-    with pytest.raises(DataLoadError, match="no legacy fallback"):
-        CsvLoader(Settings()).load(path)
+
+    table = CsvLoader(Settings()).load(path)
+
+    assert [note.rule for note in table.value_notes] == ["guessed_encoding"]
 
 
 @pytest.mark.parametrize(

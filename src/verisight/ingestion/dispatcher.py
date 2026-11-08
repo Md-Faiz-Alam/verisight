@@ -65,7 +65,10 @@ class FileLoader:
                 self._csv_options[resolved] = options
         self._loaders: dict[str, IngestionLoader] = {
             ".csv": CsvLoader(settings),
+            ".tsv": CsvLoader(settings),
             ".json": JsonLoader(settings),
+            ".jsonl": JsonLoader(settings),
+            ".ndjson": JsonLoader(settings),
             ".xls": ExcelLoader(settings),
             ".xlsx": ExcelLoader(settings),
         }

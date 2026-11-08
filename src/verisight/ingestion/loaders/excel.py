@@ -11,14 +11,17 @@ import pandas as pd
 
 from verisight.config import Settings
 from verisight.ingestion.exceptions import DataLoadError
+from verisight.ingestion.loaders.csv import CsvLoader
 from verisight.ingestion.models import (
     LoadedTable,
     LoadedWorkbook,
     SourceMetadata,
+    ValueNote,
 )
 from verisight.ingestion.validation import validate_file
 
 EXCEL_EXTENSIONS = frozenset({".xls", ".xlsx"})
+_TOP_ROWS = 20
 # xlrd's public XL_CELL_ERROR cell type, before pandas converts it to NaN.
 _XLS_ERROR_CELL_TYPE = 5
 
@@ -91,23 +94,23 @@ class ExcelLoader:
                                 )
 
                     # header=None exposes source cells before pandas renames them.
-                    headers = workbook.parse(
+                    top = workbook.parse(
                         sheet_name=sheet_name,
                         header=None,
-                        nrows=1,
+                        nrows=_TOP_ROWS,
                         dtype=object,
                         keep_default_na=False,
                         na_filter=False,
                     )
-                    source_columns = [] if headers.empty else headers.iloc[0].tolist()
-                    if any(not str(column).strip() for column in source_columns):
-                        raise DataLoadError("Excel column headers must not be blank.")
-                    if not pd.Index(source_columns).is_unique:
-                        raise DataLoadError(
-                            "Excel contains duplicate source column headers."
-                        )
+                    skipped = _header_row(top)
+                    source_columns = [] if top.empty else top.iloc[skipped].tolist()
+                    named, blank_notes = CsvLoader._name_blank_headers(
+                        [str(column) for column in source_columns]
+                    )
+                    columns, renamed_notes = CsvLoader._rename_duplicates(named)
                     data = workbook.parse(
                         sheet_name=sheet_name,
+                        skiprows=skipped,
                         converters={
                             index: _ExcelCell for index in range(len(source_columns))
                         },
@@ -118,22 +121,26 @@ class ExcelLoader:
                         raise DataLoadError(
                             "Excel data contains fields without source headers."
                         )
+                    data.columns = pd.Index(columns, dtype=object)
                     for column in data.columns:
                         data[column] = _infer_column(_restore_cells(data[column]))
 
-                    tables.append(
-                        LoadedTable(
-                            name=sheet_name,
-                            data=data,
-                            source=SourceMetadata(
-                                path=metadata.path,
-                                file_name=metadata.file_name,
-                                file_extension=metadata.file_extension,
-                                file_size_bytes=metadata.file_size_bytes,
-                                sheet_name=sheet_name,
-                            ),
-                        )
+                    table = LoadedTable(
+                        name=sheet_name,
+                        data=data,
+                        source=SourceMetadata(
+                            path=metadata.path,
+                            file_name=metadata.file_name,
+                            file_extension=metadata.file_extension,
+                            file_size_bytes=metadata.file_size_bytes,
+                            sheet_name=sheet_name,
+                        ),
                     )
+                    title_notes: tuple[ValueNote, ...] = ()
+                    if skipped:
+                        title_notes = (_title_note(top, skipped, columns[0]),)
+                    table.value_notes = (*blank_notes, *renamed_notes, *title_notes)
+                    tables.append(table)
 
         except DataLoadError:
             raise
@@ -144,6 +151,32 @@ class ExcelLoader:
             source=metadata,
             tables=tables,
         )
+
+
+def _header_row(top: pd.DataFrame) -> int:
+    """Find the header below any title rows; 0 unless one is clearly lower.
+
+    The first row counts as a title only if a later row fills more cells, and
+    that row must hold only text, so data is never promoted to column names.
+    """
+    filled = [sum(cell != "" for cell in row) for row in top.itertuples(index=False)]
+    if not filled or filled[0] >= max(filled):
+        return 0
+    for index in range(1, len(filled)):
+        cells = [cell for cell in top.iloc[index].tolist() if cell != ""]
+        if filled[index] == max(filled) and all(type(c) is str for c in cells):
+            return index
+    return 0
+
+
+def _title_note(top: pd.DataFrame, skipped: int, column: str) -> ValueNote:
+    titles = [str(c) for c in top.iloc[:skipped].to_numpy().ravel() if c != ""]
+    return ValueNote(
+        column=column,
+        rule="skipped_title_rows",
+        affected_count=skipped,
+        examples=tuple(title[:80] for title in titles)[:3],
+    )
 
 
 def _validate_xlsx_cells(path: Path, *, max_unpacked_bytes: int) -> None:

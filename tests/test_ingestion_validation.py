@@ -99,7 +99,10 @@ def test_supported_file_extensions_are_expected() -> None:
         frozenset(
             {
                 ".csv",
+                ".tsv",
                 ".json",
+                ".jsonl",
+                ".ndjson",
                 ".xls",
                 ".xlsx",
             }

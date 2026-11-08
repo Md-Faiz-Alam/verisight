@@ -11,7 +11,10 @@ from verisight.ingestion.models import SourceMetadata
 SUPPORTED_FILE_EXTENSIONS = frozenset(
     {
         ".csv",
+        ".tsv",
         ".json",
+        ".jsonl",
+        ".ndjson",
         ".xls",
         ".xlsx",
     }

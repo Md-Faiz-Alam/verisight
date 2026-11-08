@@ -7,8 +7,9 @@ its name says it can be, and labels differing only by case or outer spaces are
 grouped together. Everything else is reported as found.
 """
 
-from collections.abc import Sequence
-from dataclasses import dataclass, field
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass, field, replace
+from datetime import date
 from decimal import Decimal
 from itertools import combinations
 
@@ -20,6 +21,7 @@ from verisight.analytics.domains import (
     detect_domain,
     name_tokens,
 )
+from verisight.execution.direct import DirectAnswerer
 from verisight.execution.engine import DuckDBExecutor
 from verisight.execution.exceptions import QueryExecutionError
 from verisight.execution.models import QueryResult, QueryScalar
@@ -123,6 +125,7 @@ _MONTHLY_SPAN_DAYS = 5 * 366
 _MIN_CORRELATION_ROWS = 30
 _MIN_CORRELATION = 0.5
 _MIN_TREND_POINTS_FOR_PEAK = 3
+_MIN_LINK_OVERLAP = 0.5
 
 
 class DashboardRequestError(ValueError):
@@ -135,6 +138,56 @@ class DashboardFilter:
 
     column: str
     value: str
+
+
+@dataclass(frozen=True, slots=True)
+class DateRange:
+    """Keep rows from ``start`` to ``end``, both inclusive ISO dates."""
+
+    start: str | None = None
+    end: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TimeSpan:
+    """The column a date range applies to, and the dates it covers."""
+
+    column: str
+    earliest: str
+    latest: str
+
+
+@dataclass(frozen=True, slots=True)
+class TableLink:
+    """Two tables that share a key, and how their rows correspond."""
+
+    left: str
+    left_column: str
+    right: str
+    right_column: str
+    kind: str
+    overlap: float
+
+
+@dataclass(frozen=True, slots=True)
+class PageColumn:
+    """One column shown in the data explorer."""
+
+    name: str
+    logical_type: str
+
+
+@dataclass(frozen=True, slots=True)
+class RowsPage:
+    """One page of a table, after searching and sorting."""
+
+    relation: str
+    columns: tuple[PageColumn, ...]
+    rows: tuple[tuple[QueryScalar, ...], ...]
+    total: int
+    offset: int
+    limit: int
+    sql: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +288,9 @@ class Dashboard:
     histograms: tuple[Histogram, ...]
     insights: tuple[Insight, ...]
     suggestions: tuple[str, ...]
+    time: TimeSpan | None = None
+    date_range: DateRange = DateRange()
+    links: tuple[TableLink, ...] = ()
     computed_by: str = field(default="sql_without_model", init=False)
 
 
@@ -265,6 +321,8 @@ class _Time:
     name: str
     is_year: bool
     grain: str
+    earliest: str
+    latest: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,7 +404,7 @@ def _date_time(name: str, series: pd.Series) -> _Time | None:
         grain = "month"
     else:
         grain = "year"
-    return _Time(name, False, grain)
+    return _Time(name, False, grain, str(present.min())[:10], str(present.max())[:10])
 
 
 def _additive(words: set[str], percent_column: bool) -> bool:
@@ -384,7 +442,16 @@ def _plan(table: LoadedTable, schema: Sequence[ColumnSchema]) -> _Plan:
             found = _date_time(column.name, series)
             dates.extend([found] if found is not None else [])
         elif _is_year(column, words, series):
-            years.append(_Time(column.name, True, "year"))
+            present = series.dropna()
+            years.append(
+                _Time(
+                    column.name,
+                    True,
+                    "year",
+                    f"{int(present.min()):04d}-01-01",
+                    f"{int(present.max()):04d}-12-31",
+                )
+            )
         elif _is_identifier(column, words, series):
             present = series.dropna()
             if repeated is None and present.nunique() < 0.9 * len(present):
@@ -411,14 +478,66 @@ def _plan(table: LoadedTable, schema: Sequence[ColumnSchema]) -> _Plan:
     )
 
 
+def _check_dates(dates: DateRange, plan: _Plan) -> None:
+    for value in (dates.start, dates.end):
+        if value is None:
+            continue
+        if plan.time is None:
+            raise DashboardRequestError("This table has no dates to filter.")
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            raise DashboardRequestError("That is not a valid date.") from None
+
+
+def _key_values(series: pd.Series) -> pd.Series:
+    return series.dropna().astype(str).str.strip().str.casefold()
+
+
+def _shared_keys(left: LoadedTable, right: LoadedTable) -> Iterator[TableLink]:
+    """Yield columns named alike whose values mostly overlap."""
+    others = {str(column).casefold(): column for column in right.data.columns}
+    for column in left.data.columns:
+        match = others.get(str(column).casefold())
+        if match is None:
+            continue
+        ours = _key_values(left.data[column])
+        theirs = _key_values(right.data[match])
+        common = set(ours) & set(theirs)
+        smaller = min(ours.nunique(), theirs.nunique())
+        if smaller < 2 or len(common) / smaller < _MIN_LINK_OVERLAP:
+            continue
+        one_left = ours.is_unique
+        one_right = theirs.is_unique
+        kind = {
+            (True, True): "one_to_one",
+            (True, False): "one_to_many",
+            (False, True): "many_to_one",
+            (False, False): "many_to_many",
+        }[(one_left, one_right)]
+        yield TableLink(
+            left=left.relation_name,
+            left_column=str(column),
+            right=right.relation_name,
+            right_column=str(match),
+            kind=kind,
+            overlap=len(common) / smaller,
+        )
+
+
+_NO_DATES = DateRange()
+
+
 class DashboardBuilder:
     """Build dashboards for one loaded dataset; column roles are worked out once."""
 
     def __init__(self, dataset: LoadedDataset, executor: DuckDBExecutor) -> None:
         self._dataset = dataset
         self._executor = executor
+        self.answerer = DirectAnswerer(dataset, executor)
         self._schema = SchemaInferer().infer_dataset(dataset)
         self._plans: dict[str, _Plan] = {}
+        self._links: tuple[TableLink, ...] | None = None
         self._usable = sorted(
             (
                 (table, columns)
@@ -435,6 +554,7 @@ class DashboardBuilder:
         self,
         relation: str | None = None,
         filters: Sequence[DashboardFilter] = (),
+        dates: DateRange = _NO_DATES,
     ) -> Dashboard:
         """Compute one table's dashboard; the largest table is the default."""
         if not self._usable:
@@ -444,11 +564,84 @@ class DashboardBuilder:
         for item in filters:
             if item.column not in plan.dimensions:
                 raise DashboardRequestError("That column cannot be filtered.")
-        return _Build(self._executor, self._dataset, plan, tuple(filters)).dashboard(
+        _check_dates(dates, plan)
+        built = _Build(
+            self._executor, self._dataset, plan, tuple(filters), dates
+        ).dashboard(
             tuple(
                 RelationSummary(table.relation_name, table.row_count)
                 for table, _ in self._usable
             )
+        )
+        return replace(built, links=self.links())
+
+    def links(self) -> tuple[TableLink, ...]:
+        """Find tables joined by a shared column name and overlapping values."""
+        if self._links is None:
+            self._links = tuple(
+                link
+                for (left, _), (right, _) in combinations(self._usable, 2)
+                for link in _shared_keys(left, right)
+            )
+        return self._links
+
+    def rows(
+        self,
+        relation: str,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+        sort: str | None = None,
+        descending: bool = False,
+        search: str = "",
+    ) -> RowsPage:
+        """Return one page of a table for the data explorer."""
+        table, columns = self._page_columns(relation)
+        names = [column.name for column in columns]
+        if sort is not None and sort not in names:
+            raise DashboardRequestError("That column cannot be sorted.")
+        source = _quote(table.relation_name)
+        where = ""
+        if search.strip():
+            wanted = _literal(search.strip().casefold())
+            tests = " OR ".join(
+                f"contains(LOWER(CAST({_quote(name)} AS VARCHAR)), {wanted})"
+                for name in names
+            )
+            where = f" WHERE {tests}"
+        projection = ", ".join(_quote(name) for name in names)
+        order = ""
+        if sort is not None:
+            direction = "DESC" if descending else "ASC"
+            order = f" ORDER BY {_quote(sort)} {direction} NULLS LAST"
+        sql = (
+            f"SELECT {projection} FROM {source}{where}{order} "
+            f"LIMIT {limit} OFFSET {offset}"
+        )
+        count = self._executor.execute(
+            self._dataset, f"SELECT COUNT(*) AS n FROM {source}{where}"
+        )
+        page = self._executor.execute(self._dataset, sql)
+        return RowsPage(
+            relation=table.relation_name,
+            columns=columns,
+            rows=page.rows,
+            total=int(str(count.rows[0][0])),
+            offset=offset,
+            limit=limit,
+            sql=sql,
+        )
+
+    def _page_columns(
+        self, relation: str
+    ) -> tuple[LoadedTable, tuple[PageColumn, ...]]:
+        match = next((p for p in self._usable if p[0].relation_name == relation), None)
+        if match is None:
+            raise DashboardRequestError("That table is not in this dataset.")
+        return match[0], tuple(
+            PageColumn(column.name, column.logical_type.value)
+            for column in match[1].columns
+            if column.logical_type is not LogicalType.UNKNOWN
         )
 
     def _plan_for(self, relation: str) -> _Plan:
@@ -471,7 +664,9 @@ class _Build:
         dataset: LoadedDataset,
         plan: _Plan,
         filters: tuple[DashboardFilter, ...],
+        dates: DateRange,
     ) -> None:
+        self._dates = dates
         self._executor = executor
         self._dataset = dataset
         self._plan = plan
@@ -488,7 +683,29 @@ class _Build:
             for item in self._filters
             if item.column != ignoring
         ]
-        return excluded + chosen
+        return excluded + chosen + self._date_conditions()
+
+    def _date_conditions(self) -> list[str]:
+        time = self._plan.time
+        if time is None:
+            return []
+        column = _quote(time.name)
+        found = []
+        if self._dates.start is not None:
+            start = self._dates.start
+            found.append(
+                f"{column} >= {int(start[:4])}"
+                if time.is_year
+                else f"{column} >= DATE '{start}'"
+            )
+        if self._dates.end is not None:
+            end = self._dates.end
+            found.append(
+                f"{column} <= {int(end[:4])}"
+                if time.is_year
+                else f"{column} < DATE '{end}' + INTERVAL 1 DAY"
+            )
+        return found
 
     def _run(self, sql: str) -> QueryResult | None:
         """One figure that cannot be computed must not cost the whole page."""
@@ -739,4 +956,10 @@ class _Build:
             histograms=tuple(item for item in spreads if item is not None),
             insights=self._insights(kpis, trend, breakdowns),
             suggestions=self._suggestions(trend, breakdowns),
+            time=(
+                None
+                if plan.time is None
+                else TimeSpan(plan.time.name, plan.time.earliest, plan.time.latest)
+            ),
+            date_range=self._dates,
         )
