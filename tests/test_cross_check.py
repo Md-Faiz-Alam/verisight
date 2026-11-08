@@ -86,6 +86,16 @@ def test_matching_numbers_agree_and_keep_both_values() -> None:
     assert PRIMARY not in question
 
 
+def test_second_query_is_asked_for_another_route() -> None:
+    runner = _Runner()
+
+    _check(runner)
+
+    question = runner.calls[0][0]
+    assert "less direct route" in question
+    assert "exactly the same rows and meaning" in question
+
+
 def test_different_numbers_disagree() -> None:
     check = _check(_Runner(rows=((99.5,),)))
 
