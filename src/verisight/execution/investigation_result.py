@@ -31,6 +31,7 @@ from verisight.execution.narrative_audit import (
     NarrativeDigitCoverage,
     NarrativeNumberToken,
     contains_english_cardinal_words,
+    find_narrative_numbers,
 )
 from verisight.execution.narrative_context import audit_conclusion
 from verisight.execution.observations import QueryObservation
@@ -289,7 +290,12 @@ class InvestigationResult:
             for item in self.verified_claims
         ):
             violations.append("claims_not_supported")
-        if self.unlinked_numbers:
+        asked = {t.value for t in find_narrative_numbers(self.question, ())}
+        if any(
+            not token.claim_indexes
+            and (token.value is None or token.value not in asked)
+            for token in self.narrative_numbers
+        ):
             violations.append("unlinked_numeric_tokens")
         if self.narrative_digit_coverage.unparsed_digit_count:
             violations.append("unparsed_digits")

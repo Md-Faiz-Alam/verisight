@@ -7,8 +7,18 @@ import pytest
 
 from verisight import VeriSight
 from verisight.config import Settings
-from verisight.execution.claim_verification import ClaimOperation
-from verisight.execution.context import QueryContextBuilder
+from verisight.execution.claim_verification import (
+    ClaimOperation,
+    EvidenceReference,
+    NumericalClaim,
+)
+from verisight.execution.context import (
+    PopulationReview,
+    PopulationWarning,
+    QueryContext,
+    QueryContextBuilder,
+)
+from verisight.execution.cross_check import CrossCheck, CrossCheckStatus
 from verisight.execution.direct import Clarification, DirectAnswer, DirectAnswerer
 from verisight.execution.engine import DuckDBExecutor
 from verisight.execution.exceptions import QueryRuntimeError
@@ -20,9 +30,11 @@ from verisight.execution.investigation_result import (
     InvestigationResult,
 )
 from verisight.execution.models import QueryResult
+from verisight.execution.observations import QueryObservation
 from verisight.execution.sql_audit import SqlAudit, audit_sql
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
-from verisight.execution.trust import CheckStatus, TrustLevel
+from verisight.execution.trust import CheckStatus, TrustLevel, TrustReport
+from verisight.execution.trust_assessment import assess_trust
 from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.service import DatasetLoader
 
@@ -830,3 +842,79 @@ def test_trust_is_only_reported_with_the_second_query(tmp_path: Path) -> None:
     ).investigate(path, "Total?", max_steps=2)
 
     assert result.trust is None
+
+
+def _assessed(
+    tmp_path: Path,
+    observations: tuple[QueryObservation, ...],
+    claim: NumericalClaim,
+) -> TrustReport:
+    path = tmp_path / "orders.csv"
+    path.write_text(ORDERS, encoding="utf-8")
+    result = InvestigationResult(
+        question="What is the total amount?",
+        conclusion="The total is checked.",
+        analysis=VeriSight(settings=SETTINGS).analyze(path),
+        observations=observations,
+        generated_claims=(claim,),
+        cross_check=CrossCheck(
+            CrossCheckStatus.AGREED, "values_match", sql=SECOND, identical_sql=False
+        ),
+    )
+    return assess_trust(
+        result,
+        dataset=DatasetLoader(SETTINGS).load([path]),
+        context=QueryContext(relations=()),
+        accepted=True,
+    )
+
+
+def _observation(sql: str, column: str, value: int) -> QueryObservation:
+    return QueryObservation("q", sql, QueryResult((column,), ((value,),)))
+
+
+def test_a_warning_on_earlier_exploration_does_not_mark_the_answer(
+    tmp_path: Path,
+) -> None:
+    review = PopulationReview(
+        "review_required", (PopulationWarning("orders", "status", "Shipped"),)
+    )
+    explored = QueryObservation(
+        "q", GOOD, QueryResult(("total",), ((600,),)), population_review=review
+    )
+    claim = NumericalClaim(ClaimOperation.VALUE, 600, EvidenceReference(1, 0, "total"))
+
+    report = _assessed(tmp_path, (explored, _observation(GOOD, "total", 600)), claim)
+
+    assert report.level is TrustLevel.VERIFIED
+
+
+def test_a_warning_on_the_query_behind_the_answer_still_counts(tmp_path: Path) -> None:
+    review = PopulationReview(
+        "review_required", (PopulationWarning("orders", "status", "Shipped"),)
+    )
+    cited = QueryObservation(
+        "q", GOOD, QueryResult(("total",), ((600,),)), population_review=review
+    )
+    claim = NumericalClaim(ClaimOperation.VALUE, 600, EvidenceReference(0, 0, "total"))
+
+    assert _assessed(tmp_path, (cited,), claim).level is TrustLevel.NEEDS_REVIEW
+
+
+def test_both_queries_behind_a_difference_are_audited(tmp_path: Path) -> None:
+    flawed = "SELECT SUM(amount) AS other FROM orders WHERE region = 'Nowhere' OR 1 = 1"
+    claim = NumericalClaim(
+        ClaimOperation.DIFFERENCE,
+        500,
+        EvidenceReference(0, 0, "total"),
+        EvidenceReference(1, 0, "other"),
+    )
+
+    report = _assessed(
+        tmp_path,
+        (_observation(GOOD, "total", 600), _observation(flawed, "other", 100)),
+        claim,
+    )
+
+    assert report.level is TrustLevel.NEEDS_REVIEW
+    assert "never contains" in report.checks[1].detail

@@ -73,8 +73,14 @@ def _second_query_check(result: InvestigationResult) -> TrustCheck:
     )
 
 
-def _review_check(result: InvestigationResult) -> TrustCheck:
-    if summarize_advisory_reviews(result).review_required:
+def _review_check(result: InvestigationResult, cited: list[int]) -> TrustCheck:
+    """Only the queries behind the answer count, not earlier exploration."""
+    reviews = summarize_advisory_reviews(result)
+    flagged = {
+        *reviews.population_review_required_observations,
+        *reviews.grain_review_required_observations,
+    }
+    if flagged.intersection(cited):
         return TrustCheck(
             "population_review",
             CheckStatus.FAILED,
@@ -96,7 +102,14 @@ def assess_trust(
     number = _number_check(result, accepted)
     if number.status is CheckStatus.FAILED:
         return TrustReport(TrustLevel.NOT_VERIFIED, (number,))
-    cited = sorted({c.claim.left.observation_index for c in result.verified_claims})
+    cited = sorted(
+        {
+            reference.observation_index
+            for item in result.verified_claims
+            for reference in (item.claim.left, item.claim.right)
+            if reference is not None
+        }
+    )
     audits = [
         audit_sql(
             question=result.question,
@@ -126,7 +139,7 @@ def assess_trust(
     checks = (
         number,
         _audit_check("sql_audit", audits),
-        _review_check(result),
+        _review_check(result, cited),
         _second_query_check(result),
         *([_audit_check("second_query_audit", second_audits)] if second_audits else ()),
     )

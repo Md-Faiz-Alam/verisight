@@ -1071,14 +1071,14 @@ def test_synthesis_enforces_the_exact_selected_operation_multiset(
 @pytest.mark.parametrize(
     "context",
     [
-        "For cohort 2026",
+        "For cohort 2027",
         "For period 2026-01",
         "For label 1,00",
         "For scale 0.05k",
         "For cohort ２０２６",
     ],
     ids=[
-        "question-number",
+        "number-not-in-question",
         "date",
         "invalid-grouping",
         "scaled-suffix",
@@ -1131,7 +1131,7 @@ def test_contract_narrative_failures_use_the_single_repair(
         "If you remove a claim, remove its numbers from the conclusion"
         in client.prompts[1]
     )
-    assert "only when no output contract is selected" in client.prompts[1]
+    assert "or a number in the original question" in client.prompts[1]
     assert (
         "through claim references only, never as numbers in the conclusion"
         in client.prompts[0]
@@ -1155,7 +1155,7 @@ def test_targeted_numeric_feedback_keeps_validation_and_evidence_checks(
     )
     rejected = json.dumps(
         {
-            "conclusion": "synthetic-private-context For cohort 2026 the total is 30.",
+            "conclusion": "synthetic-private-context For cohort 2027 the total is 30.",
             "claims": [_claim()],
         }
     )
@@ -1193,7 +1193,7 @@ def test_targeted_numeric_feedback_keeps_validation_and_evidence_checks(
     )
     assert feedback == {
         "validation_error": "unlinked_narrative_number",
-        "unlinked_numeric_values": ["2026"],
+        "unlinked_numeric_values": ["2027"],
     }
     assert "synthetic-private-context" not in client.prompts[1]
     assert "Do not add dummy claims" in client.prompts[1]
@@ -1426,3 +1426,33 @@ def test_contract_repair_identifies_cardinal_words_without_relaxing_validation(
     }
     assert "synthetic-private-context" not in client.prompts[1]
     assert "Preserve the eligibility meaning" in client.prompts[1]
+
+
+def test_contract_allows_numbers_repeated_from_the_question() -> None:
+    state = replace(
+        _build_state(),
+        question="Compare 2010 with 2000 and give the total.",
+        claim_output_contract=ClaimOutputContract((ClaimOperation.VALUE,)),
+    ).add_observation(
+        QueryObservation(
+            question="Measure the total.",
+            sql="SELECT 30 AS total",
+            result=QueryResult(columns=("total",), rows=((30,),)),
+        )
+    )
+    conclusion = "Between 2010 and 2000 the total is 30."
+    client = _SequenceClient(
+        [json.dumps({"conclusion": conclusion, "claims": [_claim()]})]
+    )
+
+    synthesis = StructuredInvestigationSynthesizer(client).synthesize(state)
+    result = InvestigationResult(
+        question=state.question,
+        conclusion=synthesis.conclusion,
+        analysis=state.analysis,
+        observations=state.observations,
+        generated_claims=synthesis.claims,
+    )
+
+    assert len(client.prompts) == 1
+    assert result.assess_output(ClaimOutputContract((ClaimOperation.VALUE,))).accepted

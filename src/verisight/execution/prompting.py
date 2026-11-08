@@ -28,7 +28,7 @@ METRIC_SCALE_RULES = (
 LABEL_VARIANT_RULES = (
     "Label variants:\n"
     "- Labels that differ only by letter case or surrounding spaces, such as "
-    "'Shipped' and 'shipped ', are reported as label variants. Unless the "
+    "'Open' and 'open ', are reported as label variants. Unless the "
     "question distinguishes them, compare such labels with LOWER(TRIM(column)).\n"
 )
 

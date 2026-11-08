@@ -14,7 +14,8 @@ Acceptance requires all of the following:
 - A complete investigation workflow.
 - Exactly the specified claim operations, including their multiplicities.
 - Every returned claim has a supported numerical verification result.
-- Every parsed narrative numeric token links to a returned claim.
+- Every parsed narrative numeric token links to a returned claim or repeats a
+  number from the question, such as a year.
 - No digit characters remain unparsed by the existing narrative audit.
 - No whole-word English cardinals from the bounded contract vocabulary appear
   in the conclusion, even if they express a supported claim value.
@@ -70,7 +71,7 @@ In contract mode, structured synthesis also checks the same narrative predicates
 as final assessment: every detected numeric token must link to a returned claim
 expected value, all digit characters must be covered by parsed tokens, and
 conclusions must not contain the bounded English cardinal words listed below.
-Question-context numbers are not exempt. These failures use the existing
+Numbers repeated from the question are allowed. These failures use the existing
 `unlinked_narrative_number` category and share the single repair attempt with
 schema and shape failures; they do not receive an additional attempt.
 Repair instructions require removing prose numbers when their claims are removed,
@@ -210,8 +211,8 @@ absence of numerical assertions or narrative truth. Calls without a contract
 retain their existing narrative behavior; explicitly assessing any result with a
 contract applies this restriction.
 
-Contextual numbers such as years are rejected when detected and not linked to
-claims. The built-in contract-mode synthesizer offers its bounded repair before
+Contextual numbers such as years are rejected unless the question contains them
+or a claim links them. The built-in contract-mode synthesizer offers its bounded repair before
 returning such a response. Do not add irrelevant claims merely to pass; keep
 final-only conclusions within the requested output scope. Offline tests establish
 the deterministic checks and scripted repair behavior, not live model compliance.

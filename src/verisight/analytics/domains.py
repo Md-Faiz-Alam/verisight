@@ -83,8 +83,7 @@ DOMAINS = (
         "Healthcare",
         "Patients, treatments and outcomes",
         "patient diagnosis hospital doctor physician treatment medication drug dose "
-        "admission discharge blood bmi disease clinical symptom mortality bacteria "
-        "antibiotic nurse ward",
+        "admission discharge blood bmi disease clinical symptom mortality nurse ward",
         "cost charge stay dose bmi age",
     ),
     _domain(
@@ -100,7 +99,7 @@ DOMAINS = (
         "Marketing",
         "Campaign reach, spend and conversion",
         "campaign click impression ctr conversion lead channel spend audience "
-        "subscriber bounce poutcome contact",
+        "subscriber bounce contact",
         "spend conversion click impression revenue",
     ),
     _domain(
@@ -124,7 +123,7 @@ DOMAINS = (
         "Energy and utilities",
         "Generation, consumption and meter readings",
         "kwh mwh energy meter voltage generation consumption solar turbine grid "
-        "reservoir utility sensor reading",
+        "utility sensor reading",
         "kwh mwh generation consumption voltage",
     ),
     _domain(
@@ -146,9 +145,9 @@ DOMAINS = (
         "environment",
         "Weather and environment",
         "Conditions, emissions and change over time",
-        "temperature temp precipitation rainfall humidity co2 emission climate "
-        "weather pollution aqi disaster",
-        "precipitation temp temperature co2 emission humidity",
+        "temperature temp precipitation rainfall humidity emission climate "
+        "weather pollution aqi",
+        "precipitation temp temperature emission humidity",
     ),
     _domain(
         "public",

@@ -320,8 +320,8 @@ mode, and unsupported token syntax retains the existing audit limitations.
 
 With a caller-selected output contract, synthesis uses the same narrative
 predicates as final assessment: every detected token must link to a returned
-claim expected value, and no digit characters may remain unparsed. Question
-numbers have no exemption. Invalid token syntax and uncovered digits use the
+claim expected value or repeat a number from the question, and no digit
+characters may remain unparsed. Invalid token syntax and uncovered digits use the
 existing `unlinked_narrative_number` category and the single bounded repair.
 A second failure leaves the investigation incomplete with observations retained.
 These checks do not establish numerical support, semantic roles, or number-word

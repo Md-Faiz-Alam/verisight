@@ -841,7 +841,7 @@ def test_cli_contract_repairs_question_context_numbers(
 ) -> None:
     scripted = responses()
     rejected = json.loads(str(scripted[-1]))
-    rejected["conclusion"] = "For cohort 2026, the total is 930."
+    rejected["conclusion"] = "For cohort 2027, the total is 930."
     rejected["claims"][0]["expected"] = "930"
     corrected = {**rejected, "conclusion": "The total is 930."}
     scripted[-1] = json.dumps(rejected)

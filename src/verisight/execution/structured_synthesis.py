@@ -255,14 +255,14 @@ class StructuredInvestigationSynthesizer:
                 "If evidence is insufficient, explain the limitation and return "
                 "empty claims; never invent claims to fill this contract. Empty "
                 "claims will not pass the final output assessment. Every conclusion "
-                "number must match a returned claim expected value; question numbers "
-                "are not exempt. Do not use dates, numeric observation or row labels, "
-                "Unicode digits, or scaled suffixes that leave digits unparsed. "
-                "Use numeric literals for quantities, never number words. "
+                "number must match a returned claim expected value or a number in the "
+                "original question. Do not use dates, numeric observation or row "
+                "labels, Unicode digits, or scaled suffixes that leave digits "
+                "unparsed. Use numeric literals for quantities, never number words. "
                 "Contract mode also rejects common English cardinal words "
                 "even in context labels; use nonquantitative descriptions. "
-                "For example, write 'with an approved review' instead of "
-                "'with at least one approved review'. "
+                "For example, write 'with a matching entry' instead of "
+                "'with at least one matching entry'. "
                 "Use nonquantitative context descriptions. Omit out-of-scope "
                 "quantities entirely, including number-word forms. This policy "
                 "does not establish task semantics or numerical support.\n"
@@ -309,8 +309,8 @@ class StructuredInvestigationSynthesizer:
             "operations, and no more than 50 claims. "
             "Do not change the evidence or invent missing values. "
             "Every parsed conclusion number must equal the expected value of a claim "
-            "in this new response, or, only when no output contract is selected, "
-            "a number in the original question. If you remove a claim, remove its "
+            "in this new response, or a number in the original question. "
+            "If you remove a claim, remove its "
             "numbers from the conclusion unless another retained claim links them. "
             "Cite component cells through claim references without repeating their "
             "values in final-only prose. Use nonquantitative descriptions for "
@@ -318,15 +318,15 @@ class StructuredInvestigationSynthesizer:
             "Do not write quantities as number words. "
             "If forbidden_english_cardinal_words are listed, remove those words "
             "from the new conclusion, including eligibility descriptions and "
-            "context labels. Write 'with an approved review' instead of "
-            "'with at least one approved review'. Preserve the eligibility "
+            "context labels. Write 'with a matching entry' instead of "
+            "'with at least one matching entry'. Preserve the eligibility "
             "meaning and valid claim references. Do not change a forbidden "
             "context word into an out-of-scope digit. A positive "
             "unparsed_digit_count means digit characters were not covered by "
             "parsed numeric tokens; omit out-of-scope quantities or use supported "
             "numeric syntax for the requested metric. "
             "With a contract, all digit characters must be "
-            "covered by successfully parsed, claim-linked tokens. Unlinked "
+            "covered by successfully parsed tokens. Unlinked "
             "numbers do not by themselves mean evidence is missing. Omit numbers "
             "outside the permitted output scope; explain missing evidence only "
             "when the evidence is actually insufficient. "
@@ -377,17 +377,12 @@ class StructuredInvestigationSynthesizer:
     def _audit(
         synthesis: StructuredSynthesis, state: InvestigationState
     ) -> NarrativeAudit:
-        """Audit conclusion numbers exactly as the final report will.
-
-        Outside contract mode, numbers from the question may be repeated.
-        """
-        extra: tuple[Decimal, ...] = ()
-        if state.claim_output_contract is None:
-            extra = tuple(
-                token.value
-                for token in find_narrative_numbers(state.question, ())
-                if token.value is not None
-            )
+        """Audit conclusion numbers; ones from the question may be repeated."""
+        extra = tuple(
+            token.value
+            for token in find_narrative_numbers(state.question, ())
+            if token.value is not None
+        )
         return audit_conclusion(
             synthesis.conclusion,
             synthesis.claims,
