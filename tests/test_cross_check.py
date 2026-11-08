@@ -94,6 +94,8 @@ def test_second_query_is_asked_for_another_route() -> None:
     question = runner.calls[0][0]
     assert "less direct route" in question
     assert "exactly the same rows and meaning" in question
+    assert "Do not answer with a plain WHERE column = value filter" in question
+    assert "SUM(CASE WHEN condition THEN 1 ELSE 0 END)" in " ".join(question.split())
 
 
 def test_different_numbers_disagree() -> None:
