@@ -220,6 +220,71 @@ def test_other_outcomes_do_not_trigger_recovery(
     assert len(planner.prompts) == 1
 
 
+BY_TEAM_SQL = "SELECT team, COUNT(*) AS n FROM outcomes GROUP BY team ORDER BY team"
+TOTAL_SQL = "SELECT COUNT(*) AS total FROM outcomes WHERE team = 'a'"
+
+
+def _claim(
+    expected: str, row: int, column: str, observation: int = 0
+) -> dict[str, object]:
+    return {
+        "operation": "value",
+        "expected": expected,
+        "left": {"observation_index": observation, "row_index": row, "column": column},
+        "right": None,
+    }
+
+
+TWO_CLAIMS = json.dumps(
+    {
+        "conclusion": "Team a has 4 and team b has 1.",
+        "claims": [_claim("4", 0, "n"), _claim("1", 1, "n")],
+    }
+)
+
+
+def test_a_total_split_over_rows_uses_the_recovery_query(tmp_path: Path) -> None:
+    single = json.dumps(
+        {"conclusion": "Team a has 4.", "claims": [_claim("4", 0, "total", 1)]}
+    )
+
+    result, _, planner, _ = _run(
+        tmp_path,
+        decide=[_decision("Count results for each team"), _decision(None)],
+        plan=[BY_TEAM_SQL, TOTAL_SQL],
+        synth=[TWO_CLAIMS, TWO_CLAIMS, single],
+    )
+
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.synthesis_recovery == SynthesisRecovery(
+        "claim_output_contract_mismatch", True, True
+    )
+    assert "return one row with that number" in planner.prompts[1]
+
+
+def test_a_wrong_claim_shape_with_a_single_row_does_not_recover(tmp_path: Path) -> None:
+    two = json.dumps(
+        {
+            "conclusion": "There are 2 yes results of 4.",
+            "claims": [_claim("2", 0, "yes_count"), _claim("4", 0, "total_count")],
+        }
+    )
+
+    result, _, planner, _ = _run(
+        tmp_path,
+        decide=[_decision("Count yes results and all results"), _decision(None)],
+        plan=[COUNT_SQL],
+        synth=[two, two],
+    )
+
+    assert result.synthesis_failure is not None
+    assert (
+        result.synthesis_failure.validation_reason == "claim_output_contract_mismatch"
+    )
+    assert result.synthesis_recovery is None
+    assert len(planner.prompts) == 1
+
+
 def test_failed_recovery_query_returns_the_first_outcome(tmp_path: Path) -> None:
     bad = "SELECT missing_column FROM outcomes"
     result, _, planner, synthesizer = _run(

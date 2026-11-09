@@ -142,7 +142,12 @@ class SynthesisRecovery:
     Its outcome is kept here as a safe category; rejected content is not kept.
     """
 
-    trigger: Literal["invalid_claim_reference", "claim_value_mismatch", "empty_claims"]
+    trigger: Literal[
+        "invalid_claim_reference",
+        "claim_value_mismatch",
+        "empty_claims",
+        "claim_output_contract_mismatch",
+    ]
     repair_attempted: bool | None
     query_succeeded: bool
 

@@ -44,7 +44,10 @@ from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.synthesis import InvestigationSynthesizer, StructuredSynthesis
 
 RecoveryTrigger = Literal[
-    "invalid_claim_reference", "claim_value_mismatch", "empty_claims"
+    "invalid_claim_reference",
+    "claim_value_mismatch",
+    "empty_claims",
+    "claim_output_contract_mismatch",
 ]
 
 _RECOVERY_INSTRUCTION = (
@@ -52,7 +55,9 @@ _RECOVERY_INSTRUCTION = (
     "as a numeric SQL result cell. Compute each value the requested claim needs "
     "directly in SQL, each as its own numeric result column, instead of only "
     "counts or other components. For a difference, return the two numbers it "
-    "subtracts as separate numeric columns in the same row as the difference."
+    "subtracts as separate numeric columns in the same row as the difference. "
+    "If the question asks for one overall number, return one row with that "
+    "number; do not split it into a row for each item in the group."
 )
 
 
@@ -78,7 +83,8 @@ class InvestigationOrchestrator:
     result records this as ``initial_query_required``.
 
     With a claim output contract, a finished synthesis that cites a missing
-    or inconsistent cell, or returns no claims, may use one remaining step
+    or inconsistent cell, returns no claims, or cannot match the contract
+    because every result is split over several rows, may use one remaining step
     for a recovery query that asks for the final value as its own result
     cell. Synthesis then runs once more on all evidence; this happens at
     most once per investigation and is recorded as ``synthesis_recovery``.
@@ -416,6 +422,11 @@ class InvestigationOrchestrator:
                 return "invalid_claim_reference"
             if failure.validation_reason == "claim_value_mismatch":
                 return "claim_value_mismatch"
+            if failure.validation_reason == "claim_output_contract_mismatch" and all(
+                len(item.result.rows) != 1 for item in result.observations
+            ):
+                # Only rows per group exist, so no single cell holds the answer.
+                return "claim_output_contract_mismatch"
             return None
         if result.status is InvestigationStatus.COMPLETE and not (
             result.generated_claims
