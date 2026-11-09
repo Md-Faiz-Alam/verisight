@@ -1,22 +1,34 @@
 # VeriSight system specification
 
-This page defines what VeriSight is built to do and how each claim is checked.
-A capability not listed here is not promised.
+Specification version 2, written against the code at commit `4690564`. It defines
+what VeriSight is built to do and how each claim is checked. A capability not
+listed here is not promised.
 
 ## Scope
 
-VeriSight runs on one computer for one person at a time. There is no public
-deployment and no user accounts. Files stay on that computer, apart from what is
-sent to Gemini to answer an AI question.
+VeriSight is a local analytical application for one person on one computer. There
+is no deployment and there are no user accounts. Your original files stay yours
+and are never changed.
 
 ## Supported input
 
 | Limit | Value |
 | --- | --- |
 | Formats | CSV, TSV, JSON, JSONL, XLS, XLSX |
-| Website upload | 20 MB, up to 5 files |
-| Upload retention | Deleted when removed, or after 60 minutes |
-| Datasets held at once | 100 |
+| Website upload | 20 MB per file, up to 5 files per upload |
+| Temporary copies held at once | 100 uploads; beyond that the oldest is removed |
+| Copies kept loaded for fast charts | 4 uploads |
+
+File size alone does not bound memory, because rows and columns vary. The largest
+files tested live are 42,049 rows by 6 columns and 10,000 rows by 14 columns. A file
+near the 20 MB limit has not been tested end to end yet (see target M1).
+
+### Temporary uploaded copies
+
+The website works on a temporary copy of each upload. A copy is deleted when you
+remove it or 60 minutes after upload. Expired copies are removed on a check that
+runs every 60 seconds. A normal shutdown removes all copies. What happens after a
+crash has not been tested yet (see target R1).
 
 ## Supported questions
 
@@ -25,7 +37,7 @@ sent to Gemini to answer an AI question.
 | Counts and counts of different values | Forecasts and predictions |
 | Totals, averages, medians, highest and lowest | Opinions and recommendations |
 | Filters on values, dates and ranges | Answers from outside the uploaded data |
-| Joins between uploaded files | Questions that need more than one number in one claim |
+| Joins between uploaded files | Several separate answers in one question |
 | Differences and percentages | |
 
 A question VeriSight cannot support with evidence gets no number. It says so
@@ -37,46 +49,87 @@ instead of guessing.
 | --- | --- |
 | Questions running at once | 2 |
 | Questions per hour | 30 |
-| Time limit per question | 180 seconds |
-| Result rows shown to the model per query | 20 |
-| Main model | `gemini-3.1-flash-lite` |
-| Second-query model | `gemini-3.5-flash-lite` |
-| Free daily limit | 500 calls per model, about 125 questions |
+| Investigation budget | 180 seconds on the website |
 
-## Data rule
+The investigation budget covers the analysis steps. Loading and profiling happen
+before it starts, so it is not a guarantee of total response time.
 
-Use non-sensitive data only. On the Gemini free tier, Google can use prompts and
-responses to improve its products, and reviewers may read them. VeriSight sends
-column names and types, row counts, quality findings, summary figures, some column
-values and up to 20 result rows per query. It never sends the whole file.
+### Tested model configuration
+
+| Role | Model |
+| --- | --- |
+| Main work | `gemini-3.1-flash-lite` |
+| Second query | `gemini-3.5-flash-lite` |
+
+These are settings, not fixed parts of the system. If no second-query model is
+set, the main model writes the second query. Quotas depend on the project, model
+and usage tier, and capacity can vary. Retries, repairs and second queries make the
+number of calls per question variable, so no number of questions per day is
+promised.
+
+## Data disclosure
+
+VeriSight does not upload the source file as an attachment. AI-assisted analysis
+sends dataset-derived context and query results to Gemini. These may include raw
+values. Up to 20 result rows may be disclosed per query, and multiple queries may
+disclose more. For small datasets, this can include all records. Use non-sensitive
+data only.
+
+How Google may use submitted data depends on the service and account conditions.
+See the [Gemini API terms](https://ai.google.dev/gemini-api/terms).
 
 ## Trust checks
 
 | Entry point | Number matched to SQL | SQL audit and second query |
 | --- | --- | --- |
-| Website and its API | Always | Always |
-| Command line | Always | With `--cross-check` |
-| Python API | Always | With `cross_check=True` |
+| Website and its API | Attempted on every model answer | Attempted on every model answer |
+| Command line | Attempted on every model answer | Attempted with `--cross-check` |
+| Python API | Attempted on every model answer | Attempted with `cross_check=True` |
 
-When the audit and second query do not run, the command line reports the trust
-level as `not_run` and gives the reason.
+A check attempted is not always a check completed:
 
-## Pass marks
+| State | Meaning | Effect on the answer |
+| --- | --- | --- |
+| Completed | The check ran and passed | Counts toward "Verified" |
+| Failed | The check ran and found a problem | "Needs review" at best |
+| Skipped | The check could not run, for example after a provider failure or deadline, or it only repeated the first query | "Number matches SQL only" at best |
+| Not requested | The command line ran without `--cross-check` | Trust level is `not_run`, with the reason |
 
-Each target was set before its result was known.
+An exact question answered by fixed rules uses no model, so it has no second query
+and is labelled "Computed without AI".
 
-| Area | Target |
-| --- | --- |
-| Damaged files | At least 42 of the 43 damage types repaired, and no value read wrongly |
-| SQL audit | No warning on correct SQL, and at least 75% of deliberately wrong SQL caught |
-| Comparison with plain Gemini | Fewer wrong answers shown than plain Gemini, at most 10 percentage points fewer correct answers delivered, and false warnings on at most 10% of correct answers |
-| Reliability | Every concurrency, expiry, restart and provider-failure test passes, and a provider failure never produces a number |
-| Memory | Under 1 GB when handling a 20 MB upload, measured on the local computer |
-| Website | Browser tests pass for upload, asking, results, errors, keyboard use and mobile layout, with exact numbers and trust labels |
+## Targets
+
+**Kind:** a *predeclared* target was first stated at commit `4690564`, before its
+result existed. A *regression* target protects a result that was already known.
+
+**Status:** `planned`, `passed` or `failed`, with its evidence.
+
+| ID | Kind | Target | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| D1 | Regression | Supported damage types are repaired to the intended values: at least 42 of the 43 in the frozen list, with no value read wrongly | passed | [`test_damaged_files.py`](../tests/test_damaged_files.py) |
+| D2 | Regression | Ambiguous damage is rejected or flagged, never guessed | passed | [`test_damaged_files.py`](../tests/test_damaged_files.py) |
+| A1 | Regression | Missed mistakes: of the 31 frozen wrong queries, at least 75% are caught | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
+| A2 | Regression | False warnings: none on the 31 frozen correct queries | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
+| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | planned | |
+| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | planned | |
+| C3 | Predeclared | False warnings on at most 10% of correct answers | planned | |
+| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | planned | |
+| R1 | Predeclared | Concurrency, expiry, eviction, restart and crash-recovery tests pass | planned | |
+| R2 | Predeclared | A failed mandatory check can never produce "Verified"; evidence already computed stays visible with its incomplete status | planned | |
+| R3 | Predeclared | A provider failure never produces a number that was not computed | planned | |
+| M1 | Predeclared | Peak process memory under 1 GB across a full local workload: loaded datasets, profiling, two questions at once and second queries | planned | |
+| W1 | Predeclared | Browser tests pass in Chromium at 1280×800 and 375×812 for upload, asking, reading results, errors and keyboard use, with exact numbers and trust labels | planned | |
+
+**Definitions.** *Caught* means the audit or the population review reports at least
+one problem for that query. *Shown prominently* means the large answer on the
+website, which appears only for "Verified" and "Computed without AI". *Review-only*
+means the answer appears as text beside a warning.
 
 ## What these checks do not prove
 
 A matched number shows that the number came from an executed query, not that the
 query means what the question asked. A second query can share a mistake with the
-first. All testing so far was done by the project's own side, and no outside user
-has tried the system.
+first. No warnings on a finite test set does not mean there are no false warnings
+in general. The audit test set was written with the audit in view. All testing so
+far was done by the project's own side, and no outside user has tried the system.

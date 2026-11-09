@@ -138,7 +138,8 @@ def test_uncertain_columns_stay_text(tmp_path: Path, values: list[str]) -> None:
     table = _table(_csv(tmp_path, f"id,value\n{rows}\n"))
 
     assert table.data["value"].tolist() == values
-    assert all(note.rule == "label_variants" for note in table.value_notes)
+    allowed = {"label_variants", "mixed_currencies"}
+    assert all(note.rule in allowed for note in table.value_notes)
 
 
 def test_dates_with_markers_become_dates(tmp_path: Path) -> None:

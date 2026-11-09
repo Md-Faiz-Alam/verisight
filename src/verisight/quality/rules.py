@@ -360,6 +360,19 @@ _NOTE_ISSUES: dict[str, tuple[QualityIssueType, QualitySeverity, str]] = {
         "That could be an amount or a code, so the column stayed as text instead "
         "of guessing.",
     ),
+    "possible_dates": (
+        QualityIssueType.AMBIGUOUS_DATES,
+        QualitySeverity.WARNING,
+        "Every value looks like a date written as eight digits, such as 20120101. "
+        "That could also be a code, so the column stayed as numbers instead of "
+        "guessing.",
+    ),
+    "mixed_currencies": (
+        QualityIssueType.AMBIGUOUS_NUMBERS,
+        QualitySeverity.WARNING,
+        "These amounts use more than one currency, so the column stayed as text "
+        "instead of adding different currencies together.",
+    ),
     "non_numeric_values": (
         QualityIssueType.STRAY_VALUES,
         QualitySeverity.WARNING,

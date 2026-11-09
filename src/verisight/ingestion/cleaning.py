@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Any
 
 import pandas as pd
+from pandas.api.types import is_integer_dtype
 
 from verisight.ingestion.footers import remove_footer_rows, remove_non_data_rows
 from verisight.ingestion.loaders.csv import CsvLoader
@@ -251,13 +252,24 @@ def _trim_headers(table: LoadedTable) -> list[ValueNote]:
 def _clean_column(data: pd.DataFrame, column: str, semicolons: bool) -> list[ValueNote]:
     series = data[column]
     if series.dtype != object:
-        return []
+        return _eight_digit_dates(column, series)
     present = series.dropna()
     if present.empty:
         return []
     if all(type(value) is str for value in present):
         return _clean_text(data, column, series, semicolons)
     return _clean_mixed(data, column, series, present)
+
+
+def _eight_digit_dates(column: str, series: pd.Series) -> list[ValueNote]:
+    """Report whole numbers that all read as YYYYMMDD; they are left unchanged."""
+    if _name_words(column) & _IDENTIFIER_WORDS or not is_integer_dtype(series):
+        return []
+    present = series.dropna()
+    if present.empty or not present.between(19000101, 21001231).all():
+        return []
+    parsed = pd.to_datetime(present.astype(str), format="%Y%m%d", errors="coerce")
+    return [] if parsed.isna().any() else [_note(column, "possible_dates", present)]
 
 
 def _clean_text(
@@ -343,7 +355,20 @@ def _text_column(
         notes.append(_note(column, "ambiguous_dates", cleared.dropna()))
     if _could_be_quantities(cleared, words):
         notes.append(_note(column, "ambiguous_numbers", cleared.dropna()))
+    if _has_mixed_currencies(cleared, words):
+        notes.append(_note(column, "mixed_currencies", cleared.dropna()))
     return notes + _label_variants(column, cleared)
+
+
+def _has_mixed_currencies(values: pd.Series, words: set[str]) -> bool:
+    """Whether amounts carry different currencies, which cannot be added up."""
+    parts = values.dropna().str.strip().map(_split_currency).dropna()
+    numbers = parts.map(lambda part: part[1])
+    return (
+        not words & _LABEL_WORDS
+        and len({part[0] for part in parts}) > 1
+        and bool(numbers.str.fullmatch(_NUMBER_SHAPE).all())
+    )
 
 
 def _could_be_quantities(values: pd.Series, words: set[str]) -> bool:
