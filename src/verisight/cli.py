@@ -13,6 +13,7 @@ from verisight.config import Settings
 from verisight.exceptions import ConfigurationError
 from verisight.execution.claim_verification import ClaimOperation
 from verisight.execution.context import PopulationFilter, QueryContextBuilder
+from verisight.execution.direct import Clarification, DirectAnswer
 from verisight.execution.exceptions import QueryValidationError
 from verisight.execution.generation_telemetry import capture_generation_calls
 from verisight.execution.investigation_result import (
@@ -26,6 +27,7 @@ from verisight.execution.metric_display import (
     render_metric,
     summarize_advisory_reviews,
 )
+from verisight.execution.trust import TrustLevel
 from verisight.ingestion.exceptions import DataLoadError
 from verisight.ingestion.models import CsvReadOptions
 from verisight.public_api import run_public_operation
@@ -52,6 +54,13 @@ def _nonnegative_int(value: str) -> int:
     if number < 0:
         raise argparse.ArgumentTypeError("Value must be a nonnegative integer.")
     return number
+
+
+_TRUST_NOT_RUN = {
+    "level": "not_run",
+    "reason": "The SQL audit and second query run only with --cross-check.",
+}
+_FAILED_TRUST = (TrustLevel.NEEDS_REVIEW, TrustLevel.NOT_VERIFIED)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -156,6 +165,15 @@ def _parser() -> argparse.ArgumentParser:
                 help=(
                     "First wait before a retry; each later wait doubles, up to "
                     "8 seconds (default: 1)."
+                ),
+            )
+            command.add_argument(
+                "--cross-check",
+                action="store_true",
+                help=(
+                    "Apply the website's checks: answer exact questions without a "
+                    "model, then audit the SQL and recalculate with a second query "
+                    "(at least one more model call)."
                 ),
             )
     return parser
@@ -268,6 +286,29 @@ def _profile_view(analysis: DatasetAnalysisResult) -> dict[str, object]:
     }
 
 
+def _direct_report(
+    request: dict[str, object], direct: DirectAnswer | Clarification
+) -> tuple[dict[str, object], int]:
+    """Report a question the fixed rules answered, or could not settle alone."""
+    if isinstance(direct, Clarification):
+        return {
+            "kind": "clarification_needed",
+            "request": request,
+            "prompt": direct.prompt,
+            "options": direct.options,
+        }, 1
+    return {
+        "kind": "direct_answer",
+        "request": request,
+        "workflow_status": InvestigationStatus.COMPLETE.value,
+        "conclusion": direct.conclusion,
+        "sql": direct.sql,
+        "claim": direct.claim,
+        "result": direct.observation.result,
+        "trust": direct.trust,
+    }, 0
+
+
 def _run(
     args: argparse.Namespace, population: tuple[PopulationFilter, ...]
 ) -> tuple[dict[str, object], int]:
@@ -309,6 +350,7 @@ def _run(
         "population_mode": "caller_selected" if population else "unscoped",
         "model": settings.gemini_model,
         "max_steps": args.max_steps,
+        "cross_check": args.cross_check,
         "max_investigation_seconds": settings.max_investigation_seconds,
         "request_timeout_seconds": settings.gemini_request_timeout_seconds,
         "provider_retries": settings.gemini_max_retries,
@@ -333,6 +375,16 @@ def _run(
     }
     if args.preview:
         return preview, 0
+    single_value = contract is None or contract.operations == (ClaimOperation.VALUE,)
+    if (
+        args.cross_check
+        and single_value
+        and not population
+        and args.metric_description is None
+    ):
+        direct = app.dashboard_builder(args.paths).answerer.answer(args.question)
+        if direct is not None:
+            return _direct_report(request, direct)
     if settings.gemini_api_key is None or not settings.gemini_api_key.strip():
         raise ConfigurationError("Investigation requires a configured model key.")
     # This is a preliminary inspection: the facade reloads paths for investigation.
@@ -350,6 +402,7 @@ def _run(
         max_steps=args.max_steps,
         population=population,
         claim_output_contract=contract,
+        cross_check=args.cross_check,
     )
     assessment = None if contract is None else result.assess_output(contract)
     report: dict[str, object] = {
@@ -360,12 +413,15 @@ def _run(
         "advisory_reviews": summarize_advisory_reviews(result),
         "population": result.population,
         "profile": _profile_view(result.analysis),
+        "trust": result.trust if args.cross_check else _TRUST_NOT_RUN,
         "numerical_statements": result.quantitative_statements,
         "unverified_model_interpretation": result.conclusion,
         "investigation": result,
     }
-    succeeded = result.status is InvestigationStatus.COMPLETE and (
-        assessment is None or assessment.accepted
+    succeeded = (
+        result.status is InvestigationStatus.COMPLETE
+        and (assessment is None or assessment.accepted)
+        and (result.trust is None or result.trust.level not in _FAILED_TRUST)
     )
     if args.metric_description is not None:
         try:

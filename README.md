@@ -623,7 +623,8 @@ remains workflow-based. See [Output contracts](docs/output-contracts.md).
 
 ## Trust levels
 
-Every website answer carries a trust level and the checks behind it:
+Every website answer, and every command-line answer with `--cross-check`, carries
+a trust level and the checks behind it:
 
 | Level | Meaning |
 | --- | --- |
@@ -675,8 +676,9 @@ same query apart from aliases, quoting and the order of AND conditions. A repeat
 adds no evidence, so the answer stays at "Number matches SQL only". Agreement
 between different queries is still evidence, not proof: both can make the same
 mistake, and that is more likely when one model writes both. Set
-`VERISIGHT_GEMINI_CROSS_CHECK_MODEL` to a different model to reduce that risk. The
-CLI does not run this check.
+`VERISIGHT_GEMINI_CROSS_CHECK_MODEL` to a different model to reduce that risk. On the
+command line, add `--cross-check` to run this check, the SQL audit and the
+answers without AI. Without it, the report shows the trust level as `not_run`.
 
 ## Partial results and safe diagnostics
 
