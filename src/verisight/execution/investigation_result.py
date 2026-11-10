@@ -30,7 +30,7 @@ from verisight.execution.investigation import FailedQueryAttempt
 from verisight.execution.narrative_audit import (
     NarrativeDigitCoverage,
     NarrativeNumberToken,
-    contains_english_cardinal_words,
+    cardinal_words_outside,
     find_narrative_numbers,
 )
 from verisight.execution.narrative_context import audit_conclusion
@@ -304,7 +304,7 @@ class InvestigationResult:
             violations.append("unlinked_numeric_tokens")
         if self.narrative_digit_coverage.unparsed_digit_count:
             violations.append("unparsed_digits")
-        if contains_english_cardinal_words(self.conclusion):
+        if cardinal_words_outside(self.conclusion, self.question):
             violations.append("english_cardinal_words")
         return ClaimOutputAssessment(
             contract=contract,

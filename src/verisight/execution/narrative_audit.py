@@ -211,11 +211,16 @@ def _parse_number(raw: str) -> Decimal | None:
     return value if value.is_finite() else None
 
 
-def contains_english_cardinal_words(text: str) -> bool:
-    """Detect a fixed set of whole-word English cardinals for contract mode.
+def cardinal_words_outside(text: str, question: str) -> list[str]:
+    """Return cardinal words in ``text`` that ``question`` does not itself use.
 
-    This rejects even matching values and nonquantitative uses of these words.
-    It neither parses their values nor checks truth, direction, fractions,
-    ordinals, other number words, or other languages.
+    Repeating "six decimal places" from a question introduces no new quantity.
+    Other uses are rejected in contract mode, even when they match a value. This
+    does not parse values or check truth, fractions, ordinals or other languages.
     """
-    return _ENGLISH_CARDINAL_WORD.search(text) is not None
+    asked = {word.casefold() for word in _ENGLISH_CARDINAL_WORD.findall(question)}
+    return [
+        word
+        for word in _ENGLISH_CARDINAL_WORD.findall(text)
+        if word.casefold() not in asked
+    ]

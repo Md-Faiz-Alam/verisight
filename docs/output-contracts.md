@@ -18,7 +18,8 @@ Acceptance requires all of the following:
   number from the question, such as a year.
 - No digit characters remain unparsed by the existing narrative audit.
 - No whole-word English cardinals from the bounded contract vocabulary appear
-  in the conclusion, even if they express a supported claim value.
+  in the conclusion, even if they express a supported claim value, unless the
+  question uses the same word.
 
 These checks preserve the verifier's existing tolerances and rounding rules.
 An incomplete result or an empty claim list cannot satisfy a nonempty contract.
@@ -71,7 +72,7 @@ In contract mode, structured synthesis also checks the same narrative predicates
 as final assessment: every detected numeric token must link to a returned claim
 expected value, all digit characters must be covered by parsed tokens, and
 conclusions must not contain the bounded English cardinal words listed below.
-Numbers repeated from the question are allowed. These failures use the existing
+Numbers and cardinal words repeated from the question are allowed. These failures use the existing
 `unlinked_narrative_number` category and share the single repair attempt with
 schema and shape failures; they do not receive an additional attempt.
 Repair instructions require removing prose numbers when their claims are removed,
@@ -98,7 +99,9 @@ evidence, such as a percentage that cites a count cell, uses the same single
 repair attempt with the `claim_value_mismatch` category. A value that equals the
 evidence rounded to the claim's own decimal places is not rejected here; it
 reaches verification unchanged, so rounding policies apply and genuine
-contradictions are still reported.
+contradictions are still reported. A difference claim is also supported when it
+equals the exact difference at its own decimal places and SQL returned exactly
+that rounded number in another cell of the same row.
 
 ### Final-value recovery query
 

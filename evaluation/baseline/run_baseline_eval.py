@@ -28,6 +28,7 @@ import argparse
 import csv
 import hashlib
 import json
+import re
 import statistics
 import subprocess
 import time
@@ -47,6 +48,7 @@ MAX_PROVIDER_ERRORS_IN_A_ROW = 3
 PROMINENT = "prominent"
 WARNED = "warned"
 NONE = "none"
+_DIFFERENCE_COLUMN = re.compile(r"diff|minus", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -146,12 +148,27 @@ def score(question: Question, answer: Answer) -> str:
     return f"{'correct' if right else 'wrong'}_{answer.visibility}"
 
 
-def final_cell(rows: Iterable[tuple[Any, ...]]) -> Decimal | None:
-    """The last number of a one-row result; several rows hold no single answer."""
+def final_cell(
+    rows: Iterable[tuple[Any, ...]],
+    columns: tuple[str, ...] = (),
+    kind: str = "number",
+) -> Decimal | None:
+    """The answer of a one-row result; several rows hold no single answer.
+
+    For a difference, a column named as one counts first, because the result can
+    also hold the two numbers it subtracts, in any order. Otherwise it is the last
+    number.
+    """
     listed = list(rows)
     if len(listed) != 1:
         return None
-    for cell in reversed(listed[0]):
+    cells = list(listed[0])
+    named = [
+        cell
+        for name, cell in zip(columns, cells, strict=False)
+        if kind == "difference" and _DIFFERENCE_COLUMN.search(name)
+    ]
+    for cell in [*named, *reversed(cells)]:
         if type(cell) in (int, float, Decimal):
             value = Decimal(str(cell))
             return value if value.is_finite() else None
@@ -208,7 +225,7 @@ def answer_plain(app: Any, question: Question, data_dir: Path) -> Answer:
             if is_provider_failure(error):
                 return Answer(provider_error=True)
             return Answer(details={"error": type(error).__name__})
-        number = final_cell(result.rows)
+        number = final_cell(result.rows, result.columns, question.kind)
         visibility = PROMINENT if number is not None else NONE
         return Answer(number, visibility, details={"sql": [plan.sql]})
 
@@ -243,7 +260,12 @@ def answer_numbers(app: Any, question: Question, data_dir: Path) -> Answer:
             if is_provider_failure(error):
                 return Answer(provider_error=True)
             return Answer(details={"error": type(error).__name__})
-        details = {"sql": [item.sql for item in result.observations]}
+        rejected = result.synthesis_failure
+        details = {
+            "sql": [item.sql for item in result.observations],
+            "rejected_as": None if rejected is None else rejected.validation_reason,
+            "violations": list(result.assess_output(contract).violations),
+        }
         for failure in (result.investigation_failure, result.synthesis_failure):
             if failure is not None and str(failure.kind.value).startswith("provider"):
                 return Answer(provider_error=True, details=details)
@@ -265,7 +287,8 @@ def read_website_answer(
     calls = len(body.get("model_calls") or [])
     if status != 200:
         busy = body.get("code") in ("provider_unavailable", "busy", "rate_limited")
-        return Answer(provider_error=busy, calls=calls, details={"status": status})
+        details = {"status": status, "code": body.get("code")}
+        return Answer(provider_error=busy, calls=calls, details=details)
     cross = body.get("cross_check") or {}
     trust = body.get("trust") or {}
     details = {
@@ -280,6 +303,8 @@ def read_website_answer(
             if check["status"] == "failed"
         ],
         "web_outcome": body.get("outcome"),
+        "rejected_as": (body.get("failure") or {}).get("validation_reason"),
+        "violations": (body.get("assessment") or {}).get("violations"),
     }
     failure = body.get("failure") or {}
     if str(failure.get("kind", "")).startswith("provider"):
@@ -549,13 +574,44 @@ def run(root: Path, setups: list[str], pause: float) -> None:
         print(setup, json.dumps(counts))
 
 
+def rescore_plain(root: Path) -> None:
+    """Replay plain Gemini's saved SQL with the current answer rule, keeping both."""
+    from verisight import VeriSight
+    from verisight.config import Settings
+
+    questions = {q.question_id: q for q in load_questions(root)}
+    app = VeriSight(settings=Settings(gemini_api_key=None))
+    source = root / "runs" / "plain.jsonl"
+    target = root / "runs" / "plain-rescored.jsonl"
+    with target.open("x", encoding="utf-8", newline="\n") as log:
+        for line in source.read_text("utf-8").splitlines():
+            record = json.loads(line)
+            question = questions[record["id"]]
+            sql = record["details"].get("sql")
+            if sql:
+                paths = [root / "data" / name for name in question.files]
+                result = app.execute(paths, sql[0])
+                number = final_cell(result.rows, result.columns, question.kind)
+                answer = Answer(number, PROMINENT if number is not None else NONE)
+                outcome = score(question, answer)
+                if outcome != record["outcome"]:
+                    print(f"{record['id']}: {record['outcome']} -> {outcome}")
+                record.update(number=number, outcome=outcome)
+            log.write(json.dumps(record, default=str) + "\n")
+
+
+def _results_path(root: Path, setup: str) -> Path:
+    rescored = root / "runs" / f"{setup}-rescored.jsonl"
+    return rescored if rescored.exists() else root / "runs" / f"{setup}.jsonl"
+
+
 def report(root: Path) -> None:
     questions = load_questions(root)
     by_id = {question.question_id: question for question in questions}
     summary: dict[str, Any] = {}
     review: list[dict[str, Any]] = []
     for setup in SETUPS:
-        path = root / "runs" / f"{setup}.jsonl"
+        path = _results_path(root, setup)
         if not path.exists():
             continue
         records = [json.loads(line) for line in path.read_text("utf-8").splitlines()]
@@ -600,6 +656,7 @@ def main() -> int:
     parser.add_argument("--freeze", action="store_true")
     parser.add_argument("--check", action="store_true", help="Validate the questions.")
     parser.add_argument("--run", nargs="+", choices=SETUPS)
+    parser.add_argument("--rescore-plain", action="store_true")
     parser.add_argument("--report", action="store_true")
     parser.add_argument("--pause-seconds", type=float, default=20.0)
     args = parser.parse_args()
@@ -610,6 +667,8 @@ def main() -> int:
         freeze(args.root)
     if args.run:
         run(args.root, args.run, args.pause_seconds)
+    if args.rescore_plain:
+        rescore_plain(args.root)
     if args.report:
         report(args.root)
     return 0

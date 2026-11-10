@@ -712,3 +712,31 @@ def test_contract_rejects_bounded_cardinal_words_without_certifying_meaning(
     assert assessment.task_semantics_verified is False
     assert result.narrative_verified is False
     assert result.conclusion == conclusion
+
+
+@pytest.mark.parametrize(
+    ("question", "accepted"),
+    [
+        ("What is the metric, rounded to six decimal places?", True),
+        ("What is the metric?", False),
+        ("What is the SIX metric?", True),
+    ],
+)
+def test_contract_allows_number_words_the_question_used(
+    question: str, accepted: bool
+) -> None:
+    result = replace(
+        _audited_result("The metric, to six decimal places, is 50.", "50"),
+        question=question,
+        observations=(
+            QueryObservation(
+                question="Read the metric.",
+                sql="SELECT 50 AS metric",
+                result=QueryResult(columns=("metric",), rows=((50,),)),
+            ),
+        ),
+    )
+
+    assessment = result.assess_output(ClaimOutputContract((ClaimOperation.VALUE,)))
+
+    assert assessment.accepted is accepted

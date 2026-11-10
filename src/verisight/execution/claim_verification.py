@@ -29,6 +29,9 @@ class ClaimOperation(StrEnum):
     DIFFERENCE = "difference"
 
 
+MAX_ROUNDED_PLACES = 12
+
+
 class VerificationStatus(StrEnum):
     """Outcome of deterministic numerical claim verification."""
 
@@ -283,12 +286,66 @@ class NumericalClaimVerifier:
                 ),
             )
 
+        if self._sql_rounded_difference(claim, observations, actual, expected):
+            return ClaimVerificationResult(
+                status=VerificationStatus.SUPPORTED,
+                actual=expected,
+                expected=expected,
+                absolute_tolerance=tolerance,
+                reason=(
+                    "The claimed value equals the difference as rounded by SQL "
+                    "in the same result row."
+                ),
+            )
+
         return ClaimVerificationResult(
             status=VerificationStatus.CONTRADICTED,
             actual=actual,
             expected=expected,
             absolute_tolerance=tolerance,
             reason="The numerical evidence contradicts the claimed value.",
+        )
+
+    @classmethod
+    def _sql_rounded_difference(
+        cls,
+        claim: NumericalClaim,
+        observations: tuple[QueryObservation, ...],
+        actual: Decimal,
+        expected: Decimal,
+    ) -> bool:
+        """Whether SQL itself returned this difference, rounded, beside its parts.
+
+        The two cited cells must be in one row, the claim must equal their exact
+        difference at the claim's own decimal places, and another cell of that row
+        must hold exactly the claimed number. So the number still comes from an
+        executed query, and a rounding the query did not make is still rejected.
+        """
+        right = claim.right
+        if right is None or (
+            (claim.left.observation_index, claim.left.row_index)
+            != (right.observation_index, right.row_index)
+        ):
+            return False
+        places = -cast(int, expected.as_tuple().exponent)
+        if not 0 <= places <= MAX_ROUNDED_PLACES:
+            return False
+        try:
+            rounded = _round_for_policy(actual, DecimalRoundingPolicy(places))
+        except DecimalException:
+            return False
+        if rounded != expected:
+            return False
+        # Both references resolved already, so this row exists.
+        result = observations[right.observation_index].result
+        cited = (claim.left.column, right.column)
+        return any(
+            name not in cited
+            and type(cell) in (int, float, Decimal)
+            and _decimal_number(cell, name="Evidence value") == expected
+            for name, cell in zip(
+                result.columns, result.rows[right.row_index], strict=False
+            )
         )
 
     @classmethod

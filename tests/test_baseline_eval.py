@@ -466,3 +466,65 @@ def test_numbers_setup_records_a_provider_failure(tmp_path: Path) -> None:
     )
 
     assert answer.provider_error is True
+
+
+@pytest.mark.parametrize(
+    ("columns", "row", "kind", "value"),
+    [
+        (("difference", "a", "b"), (5, 9, 4), "difference", Decimal(5)),
+        (("a", "b", "a_minus_b"), (9, 4, 5), "difference", Decimal(5)),
+        (("a", "b"), (9, 4), "difference", Decimal(4)),
+        (("difference", "a"), (5, 9), "number", Decimal(9)),
+        (("difference", "a"), ("n/a", 9), "difference", Decimal(9)),
+    ],
+    ids=["named-first", "named-last", "no-name", "only-for-differences", "text-name"],
+)
+def test_a_difference_column_is_read_by_name(
+    columns: tuple[str, ...], row: tuple[object, ...], kind: str, value: Decimal
+) -> None:
+    assert runner.final_cell([row], columns, kind) == value
+
+
+def test_rescoring_keeps_the_original_and_writes_a_copy(tmp_path: Path) -> None:
+    root = _root(
+        tmp_path,
+        "q1,orders.csv,difference,Gap?,250,0\nq2,orders.csv,number,Total?,350,0\n",
+    )
+    (root / "runs").mkdir()
+    sql = "SELECT 300 - 50 AS difference, 300 AS a, 50 AS b"
+    lines = [
+        {
+            "id": "q1",
+            "outcome": "wrong_prominent",
+            "number": "50",
+            "details": {"sql": [sql]},
+        },
+        {"id": "q2", "outcome": "provider_error", "number": None, "details": {}},
+    ]
+    original = "".join(json.dumps(line) + "\n" for line in lines)
+    (root / "runs" / "plain.jsonl").write_text(original, "utf-8")
+
+    runner.rescore_plain(root)
+
+    rescored = (root / "runs" / "plain-rescored.jsonl").read_text("utf-8").splitlines()
+    assert json.loads(rescored[0])["outcome"] == "correct_prominent"
+    assert json.loads(rescored[1])["outcome"] == "provider_error"
+    assert (root / "runs" / "plain.jsonl").read_text("utf-8") == original
+    assert runner._results_path(root, "plain").name == "plain-rescored.jsonl"
+    assert runner._results_path(root, "full").name == "full.jsonl"
+
+
+def test_a_rejected_answer_records_why() -> None:
+    reply = _reply(
+        status="incomplete",
+        failure={
+            "kind": "synthesis_error",
+            "validation_reason": "unlinked_narrative_number",
+        },
+        assessment={"accepted": False, "violations": ["english_cardinal_words"]},
+    )
+
+    answer = runner.read_website_answer(200, reply, _question())
+
+    assert answer.details["rejected_as"] == "unlinked_narrative_number"
+    assert answer.details["violations"] == ["english_cardinal_words"]

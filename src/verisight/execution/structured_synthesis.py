@@ -30,7 +30,7 @@ from verisight.execution.gemini import (
 from verisight.execution.generation import TextGenerationClient
 from verisight.execution.investigation import InvestigationState
 from verisight.execution.narrative_audit import (
-    contains_english_cardinal_words,
+    cardinal_words_outside,
     find_narrative_numbers,
 )
 from verisight.execution.narrative_context import NarrativeAudit, audit_conclusion
@@ -260,7 +260,8 @@ class StructuredInvestigationSynthesizer:
                 "labels, Unicode digits, or scaled suffixes that leave digits "
                 "unparsed. Use numeric literals for quantities, never number words. "
                 "Contract mode also rejects common English cardinal words "
-                "even in context labels; use nonquantitative descriptions. "
+                "even in context labels, unless the original question uses the "
+                "same word; use nonquantitative descriptions. "
                 "For example, write 'with a matching entry' instead of "
                 "'with at least one matching entry'. "
                 "Use nonquantitative context descriptions. Omit out-of-scope "
@@ -291,7 +292,7 @@ class StructuredInvestigationSynthesizer:
                 values = self._unlinked_numeric_values(synthesis, state)
                 if values:
                     details["unlinked_numeric_values"] = values
-                words = self._forbidden_cardinal_words(synthesis)
+                words = self._forbidden_cardinal_words(synthesis, state.question)
                 if words:
                     details["forbidden_english_cardinal_words"] = words
                 unparsed = self._audit(synthesis, state).coverage.unparsed_digit_count
@@ -362,11 +363,13 @@ class StructuredInvestigationSynthesizer:
             ) from exc
 
     @staticmethod
-    def _forbidden_cardinal_words(synthesis: StructuredSynthesis) -> list[str]:
-        """Return at most eight distinct words from the existing forbidden set."""
+    def _forbidden_cardinal_words(
+        synthesis: StructuredSynthesis, question: str = ""
+    ) -> list[str]:
+        """Return at most eight distinct forbidden words the question did not use."""
         words: list[str] = []
-        for word in re.findall(r"\w+", synthesis.conclusion.casefold()):
-            if not contains_english_cardinal_words(word) or word in words:
+        for word in cardinal_words_outside(synthesis.conclusion.casefold(), question):
+            if word in words:
                 continue
             words.append(word)
             if len(words) == 8:
@@ -491,7 +494,7 @@ class StructuredInvestigationSynthesizer:
             if (
                 audit.unlinked
                 or audit.coverage.unparsed_digit_count
-                or contains_english_cardinal_words(synthesis.conclusion)
+                or cardinal_words_outside(synthesis.conclusion, state.question)
             ):
                 raise _SynthesisFormatError("unlinked_narrative_number")
             return synthesis

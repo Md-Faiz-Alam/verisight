@@ -1357,6 +1357,40 @@ def test_cardinal_repair_feedback_is_bounded(
     )
 
 
+def test_repair_feedback_leaves_out_words_the_question_used() -> None:
+    synthesis = StructuredSynthesis(conclusion="To six places, one is 30.", claims=())
+
+    words = StructuredInvestigationSynthesizer._forbidden_cardinal_words(
+        synthesis, "Round to six decimal places."
+    )
+
+    assert words == ["one"]
+
+
+def test_contract_accepts_a_number_word_repeated_from_the_question() -> None:
+    state = replace(
+        _build_state(),
+        question="What is the total, to six decimal places?",
+        claim_output_contract=ClaimOutputContract((ClaimOperation.VALUE,)),
+    ).add_observation(
+        QueryObservation(
+            question="Measure the total.",
+            sql="SELECT 30 AS total",
+            result=QueryResult(columns=("total",), rows=((30,),)),
+        )
+    )
+    conclusion = "To six decimal places, the total is 30."
+    client = _SequenceClient(
+        [json.dumps({"conclusion": conclusion, "claims": [_claim()]})]
+    )
+
+    synthesis = StructuredInvestigationSynthesizer(client).synthesize(state)
+
+    assert len(client.prompts) == 1
+    assert "unless the original question uses the same word" in client.prompts[0]
+    assert synthesis.conclusion == conclusion
+
+
 @pytest.mark.parametrize("recover", [True, False])
 @pytest.mark.parametrize(
     "conclusion,extra_feedback",
