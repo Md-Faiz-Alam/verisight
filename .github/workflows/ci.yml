@@ -91,6 +91,15 @@ jobs:
       - name: Type-check and build
         run: npm run build
 
+      - name: Run unit tests
+        run: npm test
+
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: npm run test:e2e
+
   snapshot-wheel:
     name: Windows Python 3.11.9 / snapshot and wheel
     runs-on: windows-latest

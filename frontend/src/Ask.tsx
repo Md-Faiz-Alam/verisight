@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { exact, post } from "./lib";
 import { DataTable, Icon, Sql, Trail, TrustBadge, TRUST } from "./ui";
-import type { Answer, Config, Dataset, Turn } from "./types";
+import type { Answer, Cell, Config, Dataset, Turn } from "./types";
 
 const FAILURES: Record<string, string> = {
   provider_unavailable: "Gemini was busy or unavailable. Wait a minute and ask again.",
@@ -21,6 +21,13 @@ function failureText(answer: Answer): string {
 function headline(answer: Answer) {
   const verification = answer.claims?.[0]?.verification;
   return answer.outcome === "verified" && answer.claims?.length === 1 ? (verification?.actual ?? null) : null;
+}
+
+/** The cell that holds the answer; a result often lists the parts first. */
+function citedCell(step: { columns: string[]; rows: Cell[][] }, value: string | number | null) {
+  if (value === null || step.rows.length !== 1) return undefined;
+  const column = step.rows[0].findIndex((cell) => cell !== null && String(cell) === String(value));
+  return column >= 0 ? ([0, column] as [number, number]) : undefined;
 }
 
 function Evidence({ turn }: { turn: Turn | null }) {
@@ -45,11 +52,7 @@ function Evidence({ turn }: { turn: Turn | null }) {
           <h3>{answer.steps!.length > 1 ? `Query ${index + 1}` : "Query"}</h3>
           <Sql sql={step.sql} />
           {step.columns.length > 0 && (
-            <DataTable
-              columns={step.columns}
-              rows={step.rows}
-              highlight={value !== null && step.rows.length === 1 ? [0, step.columns.length - 1] : undefined}
-            />
+            <DataTable columns={step.columns} rows={step.rows} highlight={citedCell(step, value)} />
           )}
         </section>
       ))}

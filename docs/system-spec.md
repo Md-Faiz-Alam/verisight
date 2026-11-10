@@ -120,7 +120,7 @@ result existed. A *regression* target protects a result that was already known.
 | R2 | Predeclared | A failed mandatory check can never produce "Verified"; evidence already computed stays visible with its incomplete status | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R3 | Predeclared | A provider failure never produces a number that was not computed | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | M1 | Predeclared | Peak process memory under 1 GB across a full local workload: loaded datasets, profiling, two questions at once and second queries | passed | 781 MiB, [`measure_memory.py`](../evaluation/measure_memory.py) |
-| W1 | Predeclared | Browser tests pass in Chromium at 1280×800 and 375×812 for upload, asking, reading results, errors and keyboard use, with exact numbers and trust labels | planned | |
+| W1 | Predeclared | Browser tests pass in Chromium at 1280×800 and 375×812 for upload, asking, reading results, errors and keyboard use, with exact numbers and trust labels | passed | [`app.spec.ts`](../frontend/tests/e2e/app.spec.ts), [`lib.test.ts`](../frontend/tests/unit/lib.test.ts) |
 
 C1 to C4 were measured at commit `ea707d4`. Fixes for the failures in C2 and C3
 were made afterwards and need new questions to be measured.
