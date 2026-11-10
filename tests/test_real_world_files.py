@@ -5,7 +5,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from verisight import VeriSight
 from verisight.config import Settings
+from verisight.ingestion.exceptions import DataLoadError
 from verisight.ingestion.models import LoadedTable
 from verisight.ingestion.service import DatasetLoader
 
@@ -180,3 +182,57 @@ def test_mixed_dates_with_one_unclear_value_stay_text(tmp_path: Path) -> None:
     values = ["2012-01-31", "2012/02/29", "03/04/2012"]
 
     assert _column(tmp_path, "value", values).data["value"].tolist() == values
+
+
+def _workbook(path: Path, sheets: dict[str, list[list[object]]]) -> Path:
+    with pd.ExcelWriter(path) as writer:
+        for name, rows in sheets.items():
+            pd.DataFrame(rows).to_excel(
+                writer, sheet_name=name, index=False, header=False
+            )
+    return path
+
+
+DATA_SHEET: list[list[object]] = [["region", "amount"], ["East", 10], ["West", 20]]
+
+
+def test_blank_worksheets_are_skipped_and_reported(tmp_path: Path) -> None:
+    path = _workbook(
+        tmp_path / "book.xlsx",
+        {"Sales": DATA_SHEET, "Sheet2": [], "Sheet3": [[None, ""], ["", None]]},
+    )
+
+    dataset = DatasetLoader(SETTINGS).load([path])
+
+    assert [table.name for table in dataset.tables] == ["Sales"]
+    note = next(n for n in dataset.tables[0].value_notes if n.rule != "label_variants")
+    assert note.rule == "skipped_blank_sheets"
+    assert (note.affected_count, note.examples) == (2, ("Sheet2", "Sheet3"))
+
+
+def test_a_workbook_with_blank_sheets_can_be_queried(tmp_path: Path) -> None:
+    path = _workbook(tmp_path / "book.xlsx", {"Sales": DATA_SHEET, "Sheet2": []})
+    app = VeriSight(settings=SETTINGS)
+
+    result = app.execute(path, "SELECT SUM(amount) FROM Sales")
+
+    assert result.rows[0][0] == 30
+
+
+def test_a_workbook_with_no_data_gets_a_clear_error(tmp_path: Path) -> None:
+    path = _workbook(tmp_path / "book.xlsx", {"Sheet1": [], "Sheet2": []})
+
+    with pytest.raises(DataLoadError, match="no data in any worksheet"):
+        DatasetLoader(SETTINGS).load([path])
+
+
+def test_an_empty_json_file_does_not_stop_other_files(tmp_path: Path) -> None:
+    orders = tmp_path / "orders.csv"
+    orders.write_text("region,amount\nEast,10\nWest,20\n", encoding="utf-8")
+    empty = tmp_path / "empty.json"
+    empty.write_text("[]", encoding="utf-8")
+    app = VeriSight(settings=SETTINGS)
+
+    result = app.execute([orders, empty], "SELECT SUM(amount) FROM orders")
+
+    assert result.rows[0][0] == 30

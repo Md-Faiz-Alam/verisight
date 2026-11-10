@@ -68,6 +68,7 @@ class ExcelLoader:
             )
 
         tables: list[LoadedTable] = []
+        blank_sheets: list[str] = []
 
         try:
             if metadata.file_extension == ".xlsx":
@@ -102,8 +103,11 @@ class ExcelLoader:
                         keep_default_na=False,
                         na_filter=False,
                     )
+                    if _is_blank(top):
+                        blank_sheets.append(sheet_name)
+                        continue
                     skipped = _header_row(top)
-                    source_columns = [] if top.empty else top.iloc[skipped].tolist()
+                    source_columns = top.iloc[skipped].tolist()
                     named, blank_notes = CsvLoader._name_blank_headers(
                         [str(column) for column in source_columns]
                     )
@@ -147,10 +151,29 @@ class ExcelLoader:
         except Exception as exc:
             raise DataLoadError(f"Could not load Excel file: {metadata.path}") from exc
 
+        if not tables:
+            raise DataLoadError("Excel workbook has no data in any worksheet.")
+        if blank_sheets:
+            first = tables[0]
+            first.value_notes = (
+                *first.value_notes,
+                ValueNote(
+                    column=str(first.data.columns[0]),
+                    rule="skipped_blank_sheets",
+                    affected_count=len(blank_sheets),
+                    examples=tuple(blank_sheets[:3]),
+                ),
+            )
+
         return LoadedWorkbook(
             source=metadata,
             tables=tables,
         )
+
+
+def _is_blank(top: pd.DataFrame) -> bool:
+    """A sheet with no cells, or only empty ones, holds no table."""
+    return top.empty or bool((top == "").to_numpy().all())
 
 
 def _header_row(top: pd.DataFrame) -> int:

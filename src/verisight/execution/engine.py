@@ -252,6 +252,8 @@ class DuckDBExecutor:
 
         try:
             for table in dataset.tables:
+                if table.data.columns.empty:
+                    continue  # DuckDB cannot register a table with no columns.
                 filters = tuple(
                     item
                     for item in self._population

@@ -13,7 +13,7 @@ from verisight import VeriSight
 from verisight.config import Settings
 from verisight.error_reporting import ErrorCode
 from verisight.execution.engine import DuckDBExecutor
-from verisight.ingestion.exceptions import TableValidationError
+from verisight.ingestion.exceptions import DataLoadError, TableValidationError
 from verisight.ingestion.models import LoadedDataset, LoadedTable, SourceMetadata
 from verisight.public_api import run_public_operation
 from verisight.quality.models import QualityIssueType, QualitySeverity
@@ -205,13 +205,12 @@ def test_excel_repairs_headers_on_every_sheet(tmp_path: Path) -> None:
     assert [c.name for c in schema.tables[1].columns] == ["value", "value_2"]
 
 
-def test_excel_empty_sheet_remains_supported(tmp_path: Path) -> None:
+def test_excel_workbook_with_no_data_is_refused_clearly(tmp_path: Path) -> None:
     path = tmp_path / "empty.xlsx"
     pd.DataFrame().to_excel(path, index=False)
-    result = VeriSight(settings=_settings()).analyze(path)
-    table = result.analysis.schema.tables[0]
-    assert table.row_count == 0
-    assert table.column_count == 0
+
+    with pytest.raises(DataLoadError, match="no data in any worksheet"):
+        VeriSight(settings=_settings()).analyze(path)
 
 
 def test_excel_names_columns_that_only_have_later_values(tmp_path: Path) -> None:

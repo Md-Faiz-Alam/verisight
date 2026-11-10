@@ -422,6 +422,11 @@ _NOTE_ISSUES: dict[str, tuple[QualityIssueType, QualitySeverity, str]] = {
         QualitySeverity.WARNING,
         "Lines above the column headers were skipped.",
     ),
+    "skipped_blank_sheets": (
+        QualityIssueType.FILE_STRUCTURE,
+        QualitySeverity.INFO,
+        "Worksheets with nothing in them were skipped.",
+    ),
     "renamed_duplicate_column": (
         QualityIssueType.FILE_STRUCTURE,
         QualitySeverity.WARNING,

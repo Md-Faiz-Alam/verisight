@@ -80,6 +80,7 @@ NoteRule = Literal[
     "note_rows",
     "minus_signs",
     "skipped_title_rows",
+    "skipped_blank_sheets",
     "renamed_duplicate_column",
     "guessed_encoding",
     "reshaped_json",

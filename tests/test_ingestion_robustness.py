@@ -141,7 +141,7 @@ def test_excel_preserves_duplicate_rows(tmp_path: Path) -> None:
     assert table.data.iloc[0].equals(table.data.iloc[1])
 
 
-def test_excel_preserves_multiple_sheets_and_empty_sheet(
+def test_excel_keeps_data_sheets_and_reports_a_blank_one(
     tmp_path: Path,
 ) -> None:
     file_path = tmp_path / "business.xlsx"
@@ -175,18 +175,10 @@ def test_excel_preserves_multiple_sheets_and_empty_sheet(
 
     workbook = ExcelLoader(Settings()).load(file_path)
 
-    assert workbook.table_count == 3
-    assert [table.name for table in workbook.tables] == [
-        "Customers",
-        "Empty",
-        "Orders",
-    ]
-
-    empty_table = workbook.tables[1]
-
-    assert empty_table.row_count == 0
-    assert empty_table.column_count == 0
-    assert empty_table.source.sheet_name == "Empty"
+    assert workbook.table_count == 2
+    assert [table.name for table in workbook.tables] == ["Customers", "Orders"]
+    note = workbook.tables[0].value_notes[-1]
+    assert (note.rule, note.examples) == ("skipped_blank_sheets", ("Empty",))
 
 
 def test_excel_preserves_mixed_type_column(tmp_path: Path) -> None:
@@ -350,18 +342,17 @@ def test_messy_multi_file_dataset_preserves_data_and_schema(
     )
 
     assert dataset.source_count == 3
-    assert dataset.table_count == 4
+    assert dataset.table_count == 3
 
     assert [table.name for table in dataset.tables] == [
         "customers",
         "events",
         "Orders",
-        "Empty",
     ]
 
     schema = SchemaInferer().infer_dataset(dataset)
 
-    assert schema.table_count == 4
+    assert schema.table_count == 3
 
     schemas = {table.name: table for table in schema.tables}
 
@@ -385,15 +376,7 @@ def test_messy_multi_file_dataset_preserves_data_and_schema(
     assert order_columns["amount"].missing_count == 1
     assert order_columns["amount"].nullable is True
 
-    empty_schema = schemas["Empty"]
-
-    assert empty_schema.row_count == 0
-    assert empty_schema.column_count == 0
-    assert empty_schema.columns == ()
-
     assert dataset.tables[0].source.path == csv_path
     assert dataset.tables[1].source.path == json_path
     assert dataset.tables[2].source.path == excel_path
     assert dataset.tables[2].source.sheet_name == "Orders"
-    assert dataset.tables[3].source.path == excel_path
-    assert dataset.tables[3].source.sheet_name == "Empty"
