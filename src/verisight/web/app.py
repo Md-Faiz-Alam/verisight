@@ -58,6 +58,7 @@ from verisight.web.store import (
     RateLimiter,
     StoredDataset,
     StoreFullError,
+    remove_leftover_directories,
     safe_file_name,
 )
 
@@ -481,6 +482,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        remove_leftover_directories(limits.dataset_ttl_seconds)
         cleanup = asyncio.create_task(remove_expired())
         try:
             yield

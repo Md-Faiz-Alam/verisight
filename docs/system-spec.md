@@ -20,15 +20,16 @@ and are never changed.
 | Copies kept loaded for fast charts | 4 uploads |
 
 File size alone does not bound memory, because rows and columns vary. The largest
-files tested live are 42,049 rows by 6 columns and 10,000 rows by 14 columns. A file
-near the 20 MB limit has not been tested end to end yet (see target M1).
+files tested live are 42,049 rows by 6 columns and 10,000 rows by 14 columns. Files
+near the 20 MB limit were tested only for memory, with scripted replies (see target
+M1).
 
 ### Temporary uploaded copies
 
 The website works on a temporary copy of each upload. A copy is deleted when you
 remove it or 60 minutes after upload. Expired copies are removed on a check that
-runs every 60 seconds. A normal shutdown removes all copies. What happens after a
-crash has not been tested yet (see target R1).
+runs every 60 seconds. A normal shutdown removes all copies. After a crash or power
+loss, copies older than the 60 minutes are removed the next time the website starts.
 
 ## Supported questions
 
@@ -115,14 +116,18 @@ result existed. A *regression* target protects a result that was already known.
 | C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | failed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
 | C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
 | C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
-| R1 | Predeclared | Concurrency, expiry, eviction, restart and crash-recovery tests pass | planned | |
-| R2 | Predeclared | A failed mandatory check can never produce "Verified"; evidence already computed stays visible with its incomplete status | planned | |
-| R3 | Predeclared | A provider failure never produces a number that was not computed | planned | |
-| M1 | Predeclared | Peak process memory under 1 GB across a full local workload: loaded datasets, profiling, two questions at once and second queries | planned | |
+| R1 | Predeclared | Concurrency, expiry, eviction, restart and crash-recovery tests pass | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
+| R2 | Predeclared | A failed mandatory check can never produce "Verified"; evidence already computed stays visible with its incomplete status | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
+| R3 | Predeclared | A provider failure never produces a number that was not computed | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
+| M1 | Predeclared | Peak process memory under 1 GB across a full local workload: loaded datasets, profiling, two questions at once and second queries | failed | 1,442 MiB, [`measure_memory.py`](../evaluation/measure_memory.py) |
 | W1 | Predeclared | Browser tests pass in Chromium at 1280×800 and 375×812 for upload, asking, reading results, errors and keyboard use, with exact numbers and trust labels | planned | |
 
 C1 to C4 were measured at commit `ea707d4`. Fixes for the failures in C2 and C3
 were made afterwards and need new questions to be measured.
+
+M1 was measured with scripted replies on five uploads of one 19.5 MB file with
+charts, two questions at once with second queries, then one upload of five such
+files. It reached 998 MiB before the five-file upload and 1,442 MiB after it.
 
 **Definitions.** *Caught* means the audit or the population review reports at least
 one problem for that query. *Shown prominently* means the large answer on the

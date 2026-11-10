@@ -45,6 +45,26 @@ class StoredDataset:
     prepared: object = field(default=None, repr=False)
 
 
+def remove_leftover_directories(
+    ttl_seconds: int, *, clock: Callable[[], float] = time.time
+) -> int:
+    """Delete upload folders that a crash or power loss left behind.
+
+    Only folders older than an upload may live are touched, so a second copy of
+    the server running on the same computer keeps its uploads.
+    """
+    removed = 0
+    for folder in Path(tempfile.gettempdir()).glob("verisight-*"):
+        try:
+            stale = folder.is_dir() and clock() - folder.stat().st_mtime > ttl_seconds
+        except OSError:
+            continue
+        if stale:
+            shutil.rmtree(folder, ignore_errors=True)
+            removed += 1
+    return removed
+
+
 class StoreFullError(Exception):
     """Every upload slot is taken by uploads that are still being checked."""
 
