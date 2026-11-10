@@ -7,8 +7,9 @@ agreement is evidence, not proof: both queries can share the same mistake,
 more so when one model writes both.
 """
 
+import re
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, DecimalException
 from enum import StrEnum
 from typing import Literal
 
@@ -16,6 +17,11 @@ import sqlglot
 from sqlglot import exp
 
 from verisight.execution.analytical import AnalyticalQueryRunner
+from verisight.execution.claim_verification import (
+    MAX_ROUNDED_PLACES,
+    DecimalRoundingPolicy,
+    _round_for_policy,
+)
 from verisight.execution.deadline import InvestigationDeadlineExceeded
 from verisight.execution.exceptions import (
     QueryExecutionError,
@@ -29,6 +35,25 @@ from verisight.execution.validation import _population_terms
 CROSS_CHECK_COLUMN = "cross_check_answer"
 # Absorbs binary floating-point noise only; a rounded display does not agree.
 _RELATIVE_TOLERANCE = Decimal("1e-9")
+_PLACE_WORDS = [
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+]
+_PLACES_ASKED = re.compile(
+    rf"\b([0-9]{{1,2}}|{'|'.join(_PLACE_WORDS)})[ -](?:decimals?|places?|dp)\b",
+    re.IGNORECASE,
+)
 
 CROSS_CHECK_INSTRUCTION = (
     "INDEPENDENT CROSS-CHECK: work out this answer from scratch, using only the "
@@ -129,7 +154,9 @@ class IndependentCrossChecker:
                 primary_value=answer,
                 identical_sql=identical,
             )
-        agreed = _same_number(answer, independent)
+        agreed = _same_number(answer, independent) or _same_when_rounded(
+            question, answer, independent
+        )
         return CrossCheck(
             status=CrossCheckStatus.AGREED if agreed else CrossCheckStatus.DISAGREED,
             reason="values_match" if agreed else "values_differ",
@@ -190,6 +217,26 @@ def _number_sources(tree: exp.Expression) -> None:
             column.set("table", None if alone else exp.to_identifier(position))
     for node in sources:
         node.set("alias", None)
+
+
+def _same_when_rounded(question: str, first: Decimal, second: Decimal) -> bool:
+    """Compare at the decimal places the question itself asks for.
+
+    This query is told to return an unrounded result, while the first query may
+    round as asked. Without a stated number of places, nothing is relaxed.
+    """
+    asked = _PLACES_ASKED.search(question)
+    if asked is None:
+        return False
+    word = asked[1].casefold()
+    places = _PLACE_WORDS.index(word) if word in _PLACE_WORDS else int(word)
+    if places > MAX_ROUNDED_PLACES:
+        return False
+    policy = DecimalRoundingPolicy(places)
+    try:
+        return _round_for_policy(first, policy) == _round_for_policy(second, policy)
+    except DecimalException:
+        return False
 
 
 def _canonical_sql(sql: str) -> str:

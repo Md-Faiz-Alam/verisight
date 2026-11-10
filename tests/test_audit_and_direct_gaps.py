@@ -310,3 +310,81 @@ def test_clients_that_stop_asking_are_forgotten() -> None:
     limiter.allow("c")
 
     assert set(limiter._events) == {"c"}
+
+
+CODED = (
+    "yr,day,amount,score\n"
+    "0,2011-01-05,10,\n"
+    "0,2011-02-05,20,0\n"
+    "1,2012-01-05,30,5\n"
+    "1,2012-02-05,40,0\n"
+)
+
+
+@pytest.fixture
+def coded(tmp_path: Path) -> LoadedDataset:
+    path = tmp_path / "rentals.csv"
+    path.write_text(CODED, encoding="utf-8")
+    return DatasetLoader(SETTINGS).load([path])
+
+
+@pytest.mark.parametrize(
+    ("year", "sql", "found"),
+    [
+        (2012, "SELECT SUM(amount) FROM rentals WHERE yr = 1", False),
+        (2012, "SELECT SUM(amount) FROM rentals WHERE 1 = yr", False),
+        (2011, "SELECT SUM(amount) FROM rentals WHERE yr = 1", True),
+        (2012, "SELECT SUM(amount) FROM rentals", True),
+        (2012, "SELECT SUM(amount) FROM rentals WHERE yr = 9", True),
+        (2012, "SELECT SUM(amount) FROM rentals WHERE region = 1", True),
+        (2012, "SELECT SUM(amount) FROM rentals WHERE yr = amount", True),
+    ],
+    ids=[
+        "right",
+        "reversed",
+        "wrong-year",
+        "no-filter",
+        "no-rows",
+        "no-column",
+        "no-number",
+    ],
+)
+def test_a_coded_year_is_read_from_the_date_column(
+    coded: LoadedDataset, year: int, sql: str, found: bool
+) -> None:
+    question = f"What was the total amount in {year}?"
+
+    assert ("period_not_selected" in _codes(coded, question, sql)) is found
+
+
+def test_a_coded_year_without_a_date_column_stays_unproven(tmp_path: Path) -> None:
+    path = tmp_path / "rentals.csv"
+    path.write_text("yr,amount\n0,10\n1,20\n", encoding="utf-8")
+    dataset = DatasetLoader(SETTINGS).load([path])
+    sql = "SELECT SUM(amount) FROM rentals WHERE yr = 1"
+
+    codes = _codes(dataset, "What was the total amount in 2012?", sql)
+
+    assert "period_not_selected" in codes
+
+
+@pytest.mark.parametrize(
+    ("question", "sql", "found"),
+    [
+        (
+            "How many rows have a recorded score of exactly zero?",
+            "SELECT COUNT(*) FROM rentals WHERE score = 0",
+            False,
+        ),
+        (
+            "How many rows have a recorded score?",
+            "SELECT COUNT(*) FROM rentals WHERE amount > 0",
+            True,
+        ),
+    ],
+    ids=["compares-that-column", "compares-another-column"],
+)
+def test_a_known_value_filter_must_cover_the_named_column(
+    coded: LoadedDataset, question: str, sql: str, found: bool
+) -> None:
+    assert ("unknown_values_counted" in _codes(coded, question, sql)) is found

@@ -575,6 +575,19 @@ def _missing_as_zero(
                 )
 
 
+def _known_column_compared(question: str, tree: exp.Expression) -> bool:
+    """Whether the query compares the column named after "recorded" or "known".
+
+    A row whose value is missing can never satisfy such a comparison.
+    """
+    words = _KNOWN_VALUE.split(question, maxsplit=1)[-1].casefold()[:60]
+    return any(
+        column.name.replace("_", " ").casefold() in words
+        for node in tree.find_all(exp.EQ, exp.GT, exp.GTE, exp.LT, exp.LTE, exp.Between)
+        for column in node.find_all(exp.Column)
+    )
+
+
 def _missing_values(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
     """Compare a question about missing or known values with the query's filters."""
     if _NO_VALUE.search(question):
@@ -594,7 +607,10 @@ def _missing_values(question: str, tree: exp.Expression) -> Iterator[AuditFindin
             _KNOWN_VALUE.search(question)
             and any(isinstance(c.this, exp.Star) for c in tree.find_all(exp.Count))
         )
-    ) and tree.find(exp.Is, exp.NEQ, exp.In, exp.Not) is None:
+    ) and (
+        tree.find(exp.Is, exp.NEQ, exp.In, exp.Not) is None
+        and not _known_column_compared(question, tree)
+    ):
         yield AuditFinding(
             "unknown_values_counted",
             "The question is limited to known values, but the query keeps rows "
@@ -606,6 +622,34 @@ def _literal_texts(tree: exp.Expression) -> list[str]:
     return [node.this for node in tree.find_all(exp.Literal)]
 
 
+def _coded_filter_selects_year(
+    tree: exp.Expression, tables: dict[str, LoadedTable], year: int
+) -> bool:
+    """Whether a filter such as ``yr = 1`` selects only that year.
+
+    A date column in the same table shows what the code means. Without one, the
+    meaning of the code is unknown and the period still counts as not selected.
+    """
+    for node in tree.find_all(exp.EQ):
+        for side, literal in (
+            (node.this, node.expression),
+            (node.expression, node.this),
+        ):
+            value = _numeric_literal(literal)
+            if value is None or not isinstance(side, exp.Column):
+                continue
+            for table in tables.values():
+                if not _has_column(table, side.name):
+                    continue
+                data = table.data
+                rows = data[data[_actual_name(table, side.name)] == value]
+                dates = rows.select_dtypes(include="datetime")
+                for name in dates.columns:
+                    if set(dates[name].dropna().dt.year) == {year}:
+                        return True
+    return False
+
+
 def _period(
     question: str, tree: exp.Expression, tables: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
@@ -613,7 +657,11 @@ def _period(
     texts = _literal_texts(tree)
     columns = " ".join(str(c) for t in tables.values() for c in t.data.columns)
     for year in _YEAR.findall(question):
-        if year not in columns and not any(year in text for text in texts):
+        if (
+            year not in columns
+            and not any(year in text for text in texts)
+            and not _coded_filter_selects_year(tree, tables, int(year))
+        ):
             yield AuditFinding(
                 "period_not_selected",
                 f"The question names {year}, but the query never selects that year.",

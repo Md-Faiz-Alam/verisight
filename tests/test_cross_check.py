@@ -123,6 +123,74 @@ def test_only_floating_point_noise_counts_as_the_same_number(
     assert _check(_Runner(rows=((cell,),)), answer).status is status
 
 
+@pytest.mark.parametrize(
+    ("question", "answer", "cell", "status"),
+    [
+        (
+            "What is it, rounded to six places?",
+            Decimal("21.650236"),
+            21.650235875999996,
+            CrossCheckStatus.AGREED,
+        ),
+        (
+            "Round the share to six decimals.",
+            Decimal("30.268918073796"),
+            30.268918,
+            CrossCheckStatus.AGREED,
+        ),
+        (
+            "What is it, rounded to six places?",
+            Decimal("21.650236"),
+            21.7,
+            CrossCheckStatus.DISAGREED,
+        ),
+        (
+            "What is it?",
+            Decimal("21.650236"),
+            21.650235875999996,
+            CrossCheckStatus.DISAGREED,
+        ),
+        ("Round it.", Decimal("100"), 100.4, CrossCheckStatus.DISAGREED),
+        (
+            "Round to one decimal.",
+            Decimal("1.5"),
+            Decimal("1.61"),
+            CrossCheckStatus.DISAGREED,
+        ),
+        (
+            "Round to 6 places.",
+            Decimal("1.5"),
+            Decimal("1E+40"),
+            CrossCheckStatus.DISAGREED,
+        ),
+        (
+            "Round to 50 places.",
+            Decimal("1.5"),
+            Decimal("1.5000001"),
+            CrossCheckStatus.DISAGREED,
+        ),
+    ],
+    ids=[
+        "second-unrounded",
+        "first-unrounded",
+        "really-different",
+        "rounding-not-asked",
+        "whole-number-proves-nothing",
+        "close-but-not-rounding",
+        "too-large-to-round",
+        "too-many-places",
+    ],
+)
+def test_rounding_counts_only_when_the_question_asks_for_it(
+    question: str, answer: Decimal, cell: QueryScalar, status: CrossCheckStatus
+) -> None:
+    runner = _Runner(rows=((cell,),))
+
+    check = IndependentCrossChecker(runner).check(question, answer, PRIMARY)
+
+    assert check.status is status
+
+
 def test_named_column_is_found_among_others() -> None:
     runner = _Runner(("left_total", "CROSS_CHECK_ANSWER"), ((7, 100),))
 
