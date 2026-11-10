@@ -3,7 +3,8 @@
 VeriSight answers questions about tabular data from any domain by writing SQL,
 running it, and accepting a number only when that number is found in the SQL
 result. This page reports every live run of its evaluations, including
-failures. No run was repeated to replace a worse one.
+failures. No run was repeated to replace a worse one. One comparison restarted
+after a crash, as described below.
 
 ## At a glance
 
@@ -239,6 +240,70 @@ different number marked it for review. The run found two bugs, since fixed, that
 caused 3 false warnings and the one missing number. These questions helped find
 those bugs, so they no longer measure new code.
 
+### Comparison with plain Gemini (30 questions, 4 unseen datasets)
+
+Red wine quality, forest fires, daily bike rentals and concrete strength, in CSV
+and Excel. The project owner wrote 20 answerable, 5 ambiguous and 5 unanswerable
+questions, with answers worked out separately, before any setup saw them. The
+runner, questions and data were frozen by hash at `ea707d4`, and each setup answered
+each question once with `gemini-3.1-flash-lite`. The second query used
+`gemini-3.5-flash-lite`.
+
+- **Plain Gemini:** Gemini writes one SQL query and DuckDB runs it. It uses
+  VeriSight's cleaned data and SQL prompt, so it is a strong baseline, not raw Gemini.
+- **Number checks:** the investigation, with each number matched to a SQL result.
+- **Full VeriSight:** the website's path, with the SQL audit and second query.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 19 | 14 | 15 |
+| Wrong number, of 20 answerable | 1 | 1 | 0 |
+| No number, of 20 answerable | 0 | 5 | 5 |
+| Number given where none exists, of 10 | 9 | 5 | 6 |
+| Correctly gave no number, of 10 | 1 | 5 | 4 |
+| Bad numbers shown prominently | 10 | 6 | 1 |
+| Bad numbers visible anywhere | 10 | 6 | 6 |
+| Correct answers carrying a warning | 0 of 19 | 0 of 14 | 4 of 15 |
+| Gemini calls | 30 | 150 | 172 |
+| Median seconds per question | 3 | 15 | 14 |
+
+Against the targets in the [system specification](system-spec.md), full VeriSight
+showed far fewer bad numbers prominently (C1 passed). It delivered 75% of the
+answerable questions against plain Gemini's 95%, a gap of 20 points where 10 was
+allowed (C2 failed). It put a warning on 27% of its correct answers where 10% was
+allowed (C3 failed). A warned number is still visible, so "safer" does not mean the
+problem is gone.
+
+- The second query confirmed 12 right answers and doubted 2. It disagreed on 4 of
+  the 6 numbers given where none exists, which moved those answers to review.
+- Plain Gemini's score was corrected after the run. The scorer read the last numeric
+  column, so a correct difference held in the first column was marked wrong. The
+  saved SQL was replayed with a rule that reads a difference column by name, and the
+  original record is kept.
+- The first attempt stopped at question 16 when blank Excel sheets crashed the query
+  engine. That bug was fixed and the comparison restarted from question 1 at
+  `ea707d4`, so all three setups ran the same code. The 15 attempts before the crash
+  are kept and not counted.
+
+These are one run of 30 questions written by the project's own side.
+
+**Fixes made after this run.** Replaying the saved queries showed that VeriSight's SQL
+held the right number on 4 of its 5 missed answers. Rounded differences were being
+rejected, and that has been fixed. Re-asking those 4 questions gave 4 right numbers,
+2 verified and 2 with a warning. Replaying the audit showed that 6 warnings on correct
+answers had three general causes, also fixed: years stored as codes, "recorded" read
+too broadly, and rounded numbers compared with unrounded ones. The table above is the
+result before these fixes. These questions helped find the bugs, so a new score needs
+new questions.
+
+### Confirmation runs
+
+Short live runs checked individual changes and are not accuracy scores. Across 10
+questions for the second query's different route, 6 for simple questions and 10 for a
+second model, every number was right or withheld: 25 right numbers and 1 question with
+no number, which a later fix addressed. Other checks re-asked single questions after
+a fix.
+
 ## Examples from live runs
 
 **Label variants (v2 run 3).** *How many orders were shipped?* The status column
@@ -301,7 +366,7 @@ because `NOT IN` never matches null.
   but not every one. Formats outside the documented cleaning rules stay as text.
 - Provider errors depend on the free model tier's load and are excluded from the
   correct and wrong counts, not hidden: they appear in every table.
-- 267 attempts across 94 questions is evidence, not a reliability guarantee.
+- 357 scored attempts across 124 questions is evidence, not a reliability guarantee.
 
 ## Reproduce
 

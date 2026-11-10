@@ -111,15 +111,18 @@ result existed. A *regression* target protects a result that was already known.
 | D2 | Regression | Ambiguous damage is rejected or flagged, never guessed | passed | [`test_damaged_files.py`](../tests/test_damaged_files.py) |
 | A1 | Regression | Missed mistakes: of the 31 frozen wrong queries, at least 75% are caught | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
 | A2 | Regression | False warnings: none on the 31 frozen correct queries | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
-| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | planned | |
-| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | planned | |
-| C3 | Predeclared | False warnings on at most 10% of correct answers | planned | |
-| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | planned | |
+| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
+| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | failed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
+| C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
+| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
 | R1 | Predeclared | Concurrency, expiry, eviction, restart and crash-recovery tests pass | planned | |
 | R2 | Predeclared | A failed mandatory check can never produce "Verified"; evidence already computed stays visible with its incomplete status | planned | |
 | R3 | Predeclared | A provider failure never produces a number that was not computed | planned | |
 | M1 | Predeclared | Peak process memory under 1 GB across a full local workload: loaded datasets, profiling, two questions at once and second queries | planned | |
 | W1 | Predeclared | Browser tests pass in Chromium at 1280×800 and 375×812 for upload, asking, reading results, errors and keyboard use, with exact numbers and trust labels | planned | |
+
+C1 to C4 were measured at commit `ea707d4`. Fixes for the failures in C2 and C3
+were made afterwards and need new questions to be measured.
 
 **Definitions.** *Caught* means the audit or the population review reports at least
 one problem for that query. *Shown prominently* means the large answer on the
