@@ -1,5 +1,6 @@
 """Temporary storage for uploaded datasets, and simple per-client rate limits."""
 
+import gc
 import re
 import shutil
 import tempfile
@@ -41,6 +42,7 @@ class StoredDataset:
     paths: tuple[Path, ...]
     created: float
     profile: dict[str, object] = field(default_factory=dict)
+    size_bytes: int = 0
     # Loaded form for fast dashboards; it is dropped with the dataset.
     prepared: object = field(default=None, repr=False)
 
@@ -86,11 +88,13 @@ class DatasetStore:
         max_datasets: int,
         clock: Callable[[], float] = time.monotonic,
         max_prepared: int = 4,
+        max_prepared_bytes: int = 60 * 1024 * 1024,
     ) -> None:
         self._ttl = ttl_seconds
         self._max = max_datasets
         self._clock = clock
         self._max_prepared = max_prepared
+        self._max_prepared_bytes = max_prepared_bytes
         self._lock = threading.Lock()
         self._items: dict[str, StoredDataset] = {}
         self._pending: dict[str, Path] = {}
@@ -147,14 +151,41 @@ class DatasetStore:
                 self._prepared.move_to_end(dataset.dataset_id)
                 return cast(T, value)
         built = build()
+        dropped = False
         with self._lock:
             if dataset.dataset_id in self._items:
                 dataset.prepared = built
                 self._prepared[dataset.dataset_id] = None
-                while len(self._prepared) > self._max_prepared:
-                    oldest, _ = self._prepared.popitem(last=False)
-                    self._items[oldest].prepared = None
+                dropped = self._trim_prepared(incoming=0)
+        if dropped:
+            gc.collect()
         return built
+
+    def make_room(self, incoming_bytes: int) -> None:
+        """Let go of loaded uploads that would not fit beside a new one."""
+        with self._lock:
+            dropped = self._trim_prepared(incoming=incoming_bytes)
+        if dropped:
+            gc.collect()
+
+    def _trim_prepared(self, *, incoming: int) -> bool:
+        """Drop the oldest loaded uploads; the newest stays unless room is needed.
+
+        Returns whether any were dropped. A loaded upload holds reference cycles,
+        so its memory returns only when the collector runs.
+        """
+        dropped = False
+        while self._prepared:
+            loaded = sum(self._items[key].size_bytes for key in self._prepared)
+            over = loaded + incoming > self._max_prepared_bytes
+            if len(self._prepared) <= self._max_prepared and not over:
+                break
+            if incoming == 0 and len(self._prepared) == 1:
+                break
+            oldest, _ = self._prepared.popitem(last=False)
+            self._items[oldest].prepared = None
+            dropped = True
+        return dropped
 
     def purge_expired(self) -> None:
         now = self._clock()

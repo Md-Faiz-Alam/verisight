@@ -17,7 +17,7 @@ and are never changed.
 | Formats | CSV, TSV, JSON, JSONL, XLS, XLSX |
 | Website upload | 20 MB per file, up to 5 files per upload |
 | Temporary copies held at once | 100 uploads; beyond that the oldest is removed |
-| Copies kept loaded for fast charts | 4 uploads |
+| Copies kept loaded for fast charts | 4 uploads, within 60 MB of files |
 
 File size alone does not bound memory, because rows and columns vary. The largest
 files tested live are 42,049 rows by 6 columns and 10,000 rows by 14 columns. Files
@@ -119,15 +119,17 @@ result existed. A *regression* target protects a result that was already known.
 | R1 | Predeclared | Concurrency, expiry, eviction, restart and crash-recovery tests pass | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R2 | Predeclared | A failed mandatory check can never produce "Verified"; evidence already computed stays visible with its incomplete status | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R3 | Predeclared | A provider failure never produces a number that was not computed | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
-| M1 | Predeclared | Peak process memory under 1 GB across a full local workload: loaded datasets, profiling, two questions at once and second queries | failed | 1,442 MiB, [`measure_memory.py`](../evaluation/measure_memory.py) |
+| M1 | Predeclared | Peak process memory under 1 GB across a full local workload: loaded datasets, profiling, two questions at once and second queries | passed | 781 MiB, [`measure_memory.py`](../evaluation/measure_memory.py) |
 | W1 | Predeclared | Browser tests pass in Chromium at 1280×800 and 375×812 for upload, asking, reading results, errors and keyboard use, with exact numbers and trust labels | planned | |
 
 C1 to C4 were measured at commit `ea707d4`. Fixes for the failures in C2 and C3
 were made afterwards and need new questions to be measured.
 
-M1 was measured with scripted replies on five uploads of one 19.5 MB file with
-charts, two questions at once with second queries, then one upload of five such
-files. It reached 998 MiB before the five-file upload and 1,442 MiB after it.
+M1 was measured on this computer with scripted replies and generated data: five
+uploads of one 19.5 MB file with charts, two questions at once with second queries,
+then one upload of five such files. It first reached 1,442 MiB and failed. After
+freeing unused memory promptly, it reached 781 MiB. Real files can differ, and the
+measurement on a deployed container is still to be done.
 
 **Definitions.** *Caught* means the audit or the population review reports at least
 one problem for that query. *Shown prominently* means the large answer on the

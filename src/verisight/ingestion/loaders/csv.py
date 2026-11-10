@@ -419,7 +419,8 @@ class CsvLoader(BaseTableLoader):
             if non_missing.empty:
                 continue
 
-            values = non_missing.astype(str)
+            # Repeated values need checking only once.
+            values = non_missing.drop_duplicates().astype(str)
             normalized = values.str.lower()
 
             if normalized.isin(_BOOLEAN_LITERALS).all():
@@ -468,9 +469,10 @@ class CsvLoader(BaseTableLoader):
                 series,
                 errors="raise",
             )
+            distinct = pd.to_numeric(values, errors="raise")
             if any(
                 Decimal(original) != Decimal(str(converted))
-                for original, converted in zip(values, numeric.dropna(), strict=True)
+                for original, converted in zip(values, distinct, strict=True)
             ):
                 data[column] = series.map(
                     lambda value: None if pd.isna(value) else Decimal(value)

@@ -8,6 +8,7 @@ request; a supplied key is used for that request only and is never stored.
 """
 
 import asyncio
+import gc
 import json
 import re
 import shutil
@@ -465,6 +466,7 @@ def create_app(
         max_datasets=limits.max_datasets,
         clock=clock,
         max_prepared=limits.max_prepared_datasets,
+        max_prepared_bytes=limits.max_prepared_mb * 1024 * 1024,
     )
     upload_limiter = RateLimiter(limits.uploads_per_hour, clock=clock)
     question_limiter = RateLimiter(limits.questions_per_hour, clock=clock)
@@ -564,11 +566,16 @@ def create_app(
     async def register(
         dataset_id: str, directory: Path, paths: list[Path]
     ) -> dict[str, object]:
+        size_bytes = sum(path.stat().st_size for path in paths)
+        datasets.make_room(size_bytes)
         try:
             profile = await run_in_threadpool(analyze, tuple(paths))
         except BaseException:
             datasets.release(dataset_id)
             raise
+        finally:
+            # The loaded file sits in reference cycles until collected.
+            gc.collect()
         datasets.add(
             StoredDataset(
                 dataset_id=dataset_id,
@@ -576,6 +583,7 @@ def create_app(
                 paths=tuple(paths),
                 created=clock(),
                 profile=profile,
+                size_bytes=size_bytes,
             )
         )
         return {

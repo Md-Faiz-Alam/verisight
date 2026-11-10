@@ -326,8 +326,9 @@ def _stray_values(words: set[str], candidate: pd.Series) -> pd.Series | None:
     present = candidate.dropna().str.strip()
     if words & _IDENTIFIER_WORDS or len(present) < _MIN_ROWS_FOR_STRAYS:
         return None
-    shaped = present.str.fullmatch(_NUMBER_SHAPE) | present.str.fullmatch(_DATE_SHAPE)
-    outliers = present[~shaped]
+    distinct = present.drop_duplicates()
+    shaped = distinct.str.fullmatch(_NUMBER_SHAPE) | distinct.str.fullmatch(_DATE_SHAPE)
+    outliers = present[present.isin(set(distinct[~shaped]))]
     if (
         outliers.empty
         or len(outliers) > _MAX_STRAY_SHARE * len(present)
@@ -351,11 +352,12 @@ def _text_column(
     possible = stripped.isin(_POSSIBLY_MISSING)
     if possible.any():
         notes.append(_note(column, "possible_missing_labels", series[possible]))
-    if has_ambiguous_dates(cleared):
+    distinct = cleared.drop_duplicates()
+    if has_ambiguous_dates(distinct):
         notes.append(_note(column, "ambiguous_dates", cleared.dropna()))
-    if _could_be_quantities(cleared, words):
+    if _could_be_quantities(distinct, words):
         notes.append(_note(column, "ambiguous_numbers", cleared.dropna()))
-    if _has_mixed_currencies(cleared, words):
+    if _has_mixed_currencies(distinct, words):
         notes.append(_note(column, "mixed_currencies", cleared.dropna()))
     return notes + _label_variants(column, cleared)
 
@@ -384,6 +386,19 @@ def _could_be_quantities(values: pd.Series, words: set[str]) -> bool:
 
 
 def _parse_text(values: pd.Series, semicolons: bool, words: set[str]) -> _Parsed | None:
+    """Try each repeated value once first; most text columns stop here.
+
+    Every rule asks whether all or any values fit, so the distinct values give
+    the same refusal as the whole column at a fraction of the work.
+    """
+    distinct = values.drop_duplicates()
+    repeats = 2 * len(distinct) <= len(values)
+    if repeats and _typed_text(distinct, semicolons, words) is None:
+        return None
+    return _typed_text(values, semicolons, words)
+
+
+def _typed_text(values: pd.Series, semicolons: bool, words: set[str]) -> _Parsed | None:
     """Type strings as dates or numbers, removing consistent formatting.
 
     Returns the typed column, the first format rule applied, a description of
@@ -624,7 +639,7 @@ def _clean_mixed(
 def _label_variants(column: str, series: pd.Series) -> list[ValueNote]:
     """Report labels that differ only by letter case or outer spaces."""
     spellings: dict[str, set[str]] = defaultdict(set)
-    for value in series.dropna():
+    for value in series.dropna().unique():
         spellings[value.strip().casefold()].add(value)
     groups = [sorted(group) for group in spellings.values() if len(group) > 1]
     if not groups:

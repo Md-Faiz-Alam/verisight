@@ -1,5 +1,6 @@
 """The website under load, expiry, restarts and provider failures, with no model."""
 
+import gc
 import json
 import os
 import shutil
@@ -415,3 +416,86 @@ def test_more_uploads_than_capacity_are_refused_cleanly(temporary: Path) -> None
 
     assert (response.status_code, response.json()["code"]) == (503, "busy")
     assert not held[1].exists()
+
+
+def _stored(store: DatasetStore, name: str, size: int, directory: Path) -> Any:
+    from verisight.web.store import StoredDataset
+
+    item = StoredDataset(name, directory, (), created=1.0, size_bytes=size)
+    store.add(item)
+    return item
+
+
+def test_loaded_uploads_stay_within_the_size_limit(tmp_path: Path) -> None:
+    store = DatasetStore(ttl_seconds=60, max_datasets=9, max_prepared_bytes=100)
+    first = _stored(store, "a", 60, tmp_path)
+    second = _stored(store, "b", 60, tmp_path)
+
+    store.prepared(first, lambda: "loaded a")
+    store.prepared(second, lambda: "loaded b")
+
+    assert first.prepared is None
+    assert second.prepared == "loaded b"
+
+
+def test_one_upload_larger_than_the_limit_can_still_stay_loaded(tmp_path: Path) -> None:
+    store = DatasetStore(ttl_seconds=60, max_datasets=9, max_prepared_bytes=10)
+    item = _stored(store, "a", 60, tmp_path)
+
+    store.prepared(item, lambda: "loaded")
+
+    assert item.prepared == "loaded"
+
+
+def test_a_new_upload_makes_room_only_when_needed(tmp_path: Path) -> None:
+    store = DatasetStore(ttl_seconds=60, max_datasets=9, max_prepared_bytes=100)
+    item = _stored(store, "a", 60, tmp_path)
+    store.prepared(item, lambda: "loaded")
+
+    store.make_room(10)
+    assert item.prepared == "loaded"
+
+    store.make_room(90)
+    assert item.prepared is None
+
+
+def _count_collections(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    calls: list[int] = []
+
+    def collect() -> int:
+        calls.append(1)
+        return 0
+
+    monkeypatch.setattr(gc, "collect", collect)
+    return calls
+
+
+def test_dropping_a_loaded_upload_frees_its_memory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = DatasetStore(ttl_seconds=60, max_datasets=9, max_prepared_bytes=100)
+    first = _stored(store, "a", 60, tmp_path)
+    second = _stored(store, "b", 60, tmp_path)
+    store.prepared(first, lambda: "loaded")
+    calls = _count_collections(monkeypatch)
+
+    store.prepared(second, lambda: "loaded")
+    assert len(calls) == 1
+
+    store.make_room(100)
+    assert len(calls) == 2
+
+    store.make_room(1)
+    assert len(calls) == 2
+
+
+def test_each_upload_frees_its_temporary_copy(
+    temporary: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = create_app(settings=_settings(), web=WebSettings())
+    calls = _count_collections(monkeypatch)
+
+    with TestClient(app) as client:
+        _upload(client)
+
+    assert calls
