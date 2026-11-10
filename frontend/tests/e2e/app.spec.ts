@@ -287,6 +287,30 @@ test("removing the data returns to the start and deletes the upload", async ({ p
   expect(calls.removed).toEqual(["/api/datasets/d1"]);
 });
 
+test("one visible button removes the data at every screen size", async ({ page }) => {
+  const calls = await stub(page, () => ({}));
+  await openWorkspace(page);
+  const remove = page.locator('button[aria-label="Remove data"]:visible');
+  await expect(remove).toHaveCount(1);
+  await remove.click();
+
+  await expect(page.getByRole("button", { name: "Open the sample workspace" })).toBeVisible();
+  expect(calls.removed).toEqual(["/api/datasets/d1"]);
+});
+
+test("one visible button switches the theme at every screen size", async ({ page }) => {
+  await stub(page, () => ({}));
+  await openWorkspace(page);
+  const before = await page.evaluate(() => document.documentElement.dataset.theme ?? "");
+  const toggle = page.locator('button[aria-label="Switch colour theme"]:visible');
+  await expect(toggle).toHaveCount(1);
+  await toggle.click();
+
+  const after = await page.evaluate(() => document.documentElement.dataset.theme);
+  expect(after).not.toBe(before);
+  expect(["light", "dark"]).toContain(after);
+});
+
 test("every view fits the screen without sideways scrolling", async ({ page }) => {
   await stub(page, () => ({ json: answer("verified", "verified", "1234567.891") }));
   await page.goto("/static/");

@@ -212,6 +212,7 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .top h1 { font-size: 26px; line-height: 1.15; letter-spacing: -0.035em; font-weight: 600; }
 .top p { color: var(--ink-3); font-size: 13.5px; }
 .top-tools { display: flex; align-items: center; gap: 8px; flex: none; }
+.phone-only { display: none; }
 .search-btn { display: flex; align-items: center; gap: 8px; width: 240px; padding: 6px 8px 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink-3); font-size: 13px; text-align: left; }
 .search-btn:hover { border-color: var(--line-strong); }
 .search-btn span { flex: 1; }
@@ -414,6 +415,7 @@ kbd { padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; backg
   .q-cols { grid-template-columns: 1fr; }
   .search-btn { width: auto; }
   .search-btn span, .search-btn kbd { display: none; }
+  .phone-only { display: grid; }
   .top h1 { font-size: 22px; }
   .why { display: none; }
   .search input { width: 140px; }

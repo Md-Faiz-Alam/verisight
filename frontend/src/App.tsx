@@ -221,6 +221,13 @@ function Workspace({
               <span>Search or ask</span>
               <kbd>Ctrl K</kbd>
             </button>
+            {/* The sidebar's own buttons are hidden on narrow screens. */}
+            <button type="button" className="ghost-icon phone-only" onClick={toggleTheme} aria-label="Switch colour theme">
+              <Icon name="moon" />
+            </button>
+            <button type="button" className="ghost-icon phone-only" onClick={onRemove} aria-label="Remove data">
+              <Icon name="logout" />
+            </button>
             {view === "overview" && (
               <button type="button" className="btn small" onClick={() => window.print()}>
                 <Icon name="download" size={13} /> PDF
