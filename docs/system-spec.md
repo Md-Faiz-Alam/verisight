@@ -97,7 +97,9 @@ A check attempted is not always a check completed:
 | Not requested | The command line ran without `--cross-check` | Trust level is `not_run`, with the reason |
 
 An exact question answered by fixed rules uses no model, so it has no second query
-and is labelled "Computed without AI".
+and is labelled "Computed without AI". When the SQL audit finds that the data does
+not hold what was asked, such as a price taken from a column holding no money, the
+answer is "Not verified" and the website shows no number.
 
 ## Targets
 

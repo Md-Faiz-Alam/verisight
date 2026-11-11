@@ -266,6 +266,7 @@ const CHECK_NAMES: Record<string, string> = {
   population_review: "Right rows selected",
   second_query: "Independent second query",
   second_query_audit: "Second query checked against your data",
+  data_holds_measure: "Data holds what was asked",
 };
 
 export function Trail({ checks }: { checks: TrustCheck[] }) {

@@ -201,6 +201,21 @@ test("an explained refusal is not called a failure", async ({ page }) => {
   await expect(page.locator(".notice.warn")).toHaveText("No number was given. The answer above explains why.");
 });
 
+test("an answer about something the data does not hold shows no number", async ({ page }) => {
+  const hidden = {
+    ...answer("not_verified", "unverified", "8.847"),
+    answer: "No number is shown. The question asks for money, but acidity does not hold money amounts.",
+    failure: { kind: "measure_not_in_data" },
+  };
+  await stub(page, () => ({ json: hidden }));
+  await openWorkspace(page);
+  await ask(page, "What is the average price in euros?");
+
+  await expect(page.locator(".answer-num")).toHaveCount(0);
+  await expect(page.locator(".turn")).not.toContainText("8.847");
+  await expect(page.locator(".notice.warn")).toContainText("does not appear to hold what was asked");
+});
+
 test("an answer computed without AI shows its number and no model calls", async ({ page }) => {
   const direct = { ...answer("computed", "verified", "350"), model_calls: [], cross_check: null };
   await stub(page, () => ({ json: direct }));

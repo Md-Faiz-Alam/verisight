@@ -528,3 +528,11 @@ def test_a_rejected_answer_records_why() -> None:
 
     assert answer.details["rejected_as"] == "unlinked_narrative_number"
     assert answer.details["violations"] == ["english_cardinal_words"]
+
+
+def test_a_hidden_number_is_not_counted_as_shown() -> None:
+    reply = _reply(outcome="unverified", trust={"level": "not_verified", "checks": []})
+
+    answer = runner.read_website_answer(200, reply, _question())
+
+    assert (answer.number, answer.visibility) == (None, "none")

@@ -12,6 +12,8 @@ from verisight.execution.sql_audit import SqlAudit, audit_sql
 from verisight.execution.trust import CheckStatus, TrustCheck, TrustLevel, TrustReport
 from verisight.ingestion.models import LoadedDataset
 
+MEASURE_CHECK = "data_holds_measure"
+
 
 def _audit_check(name: str, audits: list[SqlAudit]) -> TrustCheck:
     details = [f.detail for audit in audits for f in audit.findings]
@@ -121,6 +123,16 @@ def assess_trust(
         )
         for index in cited
     ]
+    missing = [
+        finding.detail
+        for audit in audits
+        for finding in audit.findings
+        if finding.code == "measure_not_in_data"
+    ]
+    if missing:
+        # The number measures something else, so no label can make it useful.
+        check = TrustCheck(MEASURE_CHECK, CheckStatus.FAILED, missing[0])
+        return TrustReport(TrustLevel.NOT_VERIFIED, (number, check))
     second = result.cross_check
     second_audits = (
         []

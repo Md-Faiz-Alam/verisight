@@ -48,6 +48,7 @@ from verisight.execution.investigation_result import (
 )
 from verisight.execution.metric_display import summarize_advisory_reviews
 from verisight.execution.trust import TrustLevel
+from verisight.execution.trust_assessment import MEASURE_CHECK
 from verisight.logging import configure_logging
 from verisight.public_api import run_public_operation
 from verisight.serialization import to_jsonable
@@ -408,6 +409,15 @@ def _answer_view(
         "model_calls": to_jsonable(tuple(calls)),
         "elapsed_seconds": round(elapsed, 2),
     }
+    missing = [
+        check.detail
+        for check in (() if result.trust is None else result.trust.checks)
+        if check.name == MEASURE_CHECK
+    ]
+    if missing:
+        # The model's sentence states the number, so it is replaced, not shown.
+        view["answer"] = f"No number is shown. {missing[0]}"
+        view["failure"] = {"kind": "measure_not_in_data"}
     return cast(dict[str, object], _browser_safe(view))
 
 

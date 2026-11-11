@@ -163,3 +163,79 @@ def test_other_integer_columns_are_not_read_as_year_codes(
 
 def test_no_codes_add_nothing_to_the_description() -> None:
     assert format_coded_years(QueryContext(relations=())) == ""
+
+
+def test_the_website_hides_a_number_the_data_cannot_hold(tmp_path: Path) -> None:
+    import json
+
+    from fastapi.testclient import TestClient
+
+    from verisight import VeriSight
+    from verisight.execution.generative import GenerativeQueryPlanner
+    from verisight.execution.generative_investigator import GenerativeInvestigator
+    from verisight.execution.structured_synthesis import (
+        StructuredInvestigationSynthesizer,
+    )
+    from verisight.web import create_app
+    from verisight.web.config import WebSettings
+
+    class Script:
+        def __init__(self, items: list[str]) -> None:
+            self.items = list(items)
+
+        def generate(self, prompt: str) -> str:
+            return self.items.pop(0)
+
+    decide = [
+        json.dumps({"action": "investigate", "reasoning": "r", "question": "Price"}),
+        json.dumps({"action": "finish", "reasoning": "r", "question": None}),
+    ]
+    sql = "SELECT AVG(acidity) AS average_price FROM data"
+    written = json.dumps(
+        {
+            "conclusion": "The average price is 7.1 euros.",
+            "claims": [
+                {
+                    "operation": "value",
+                    "expected": "7.1",
+                    "left": {
+                        "observation_index": 0,
+                        "row_index": 0,
+                        "column": "average_price",
+                    },
+                    "right": None,
+                }
+            ],
+        }
+    )
+
+    def factory(settings: Settings) -> VeriSight:
+        return VeriSight(
+            settings=settings.model_copy(update={"gemini_cross_check_model": None}),
+            planner=GenerativeQueryPlanner(Script([sql, sql])),
+            investigator=GenerativeInvestigator(Script(decide)),
+            synthesizer=StructuredInvestigationSynthesizer(Script([written] * 2)),
+        )
+
+    app = create_app(
+        settings=Settings(gemini_api_key=None), web=WebSettings(), factory=factory
+    )
+    with TestClient(app) as client:
+        upload = client.post(
+            "/api/datasets",
+            files=[("files", ("data.csv", b"acidity,score\n7.4,7\n6.8,5\n"))],
+        )
+        reply = client.post(
+            f"/api/datasets/{upload.json()['dataset_id']}/ask",
+            json={
+                "question": "What is the average price in euros?",
+                "consent": True,
+                "api_key": "k",
+            },
+        ).json()
+
+    assert reply["trust"]["level"] == "not_verified"
+    assert reply["outcome"] == "unverified"
+    assert "7.1" not in reply["answer"]
+    assert reply["answer"].startswith("No number is shown.")
+    assert reply["failure"] == {"kind": "measure_not_in_data"}

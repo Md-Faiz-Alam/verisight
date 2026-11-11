@@ -318,7 +318,8 @@ def read_website_answer(
     assessment = body.get("assessment")
     verified = body.get("outcome") == "verified"
     accepted = verified or (isinstance(assessment, dict) and assessment.get("accepted"))
-    if body.get("status") != "complete" or len(claims) != 1 or not accepted:
+    hidden = trust.get("level") == "not_verified"
+    if body.get("status") != "complete" or len(claims) != 1 or not accepted or hidden:
         return Answer(calls=calls, details=details)
     check = claims[0]["verification"]
     if check["status"] != "supported" or check["actual"] is None:
