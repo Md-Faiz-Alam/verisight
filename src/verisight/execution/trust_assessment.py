@@ -3,6 +3,7 @@
 from verisight.execution.claim_verification import VerificationStatus
 from verisight.execution.context import QueryContext
 from verisight.execution.cross_check import CrossCheckStatus
+from verisight.execution.decisions import InvestigationAction
 from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
@@ -61,6 +62,14 @@ def _second_query_check(result: InvestigationResult) -> TrustCheck:
             CheckStatus.NOT_ASSESSED,
             "No independent second calculation was available.",
         )
+    if check.reason == "second_query_refused":
+        return TrustCheck(
+            "second_query",
+            CheckStatus.FAILED,
+            "Asked the same question without seeing this answer, a second query "
+            "was refused: the data may not hold what was asked, or the question "
+            "may need a definition.",
+        )
     if check.status is CrossCheckStatus.AGREED and check.identical_sql:
         return TrustCheck(
             "second_query",
@@ -109,6 +118,14 @@ def assess_trust(
 ) -> TrustReport:
     """Decide the level: any failed check blocks it, and agreement earns it."""
     number = _number_check(result, accepted)
+    if result.declined is not None:
+        name = (
+            MEASURE_CHECK
+            if result.declined.action is InvestigationAction.NOT_IN_DATA
+            else DEFINED_CHECK
+        )
+        check = TrustCheck(name, CheckStatus.FAILED, result.declined.message)
+        return TrustReport(TrustLevel.NOT_VERIFIED, (number, check))
     if number.status is CheckStatus.FAILED:
         return TrustReport(TrustLevel.NOT_VERIFIED, (number,))
     cited = sorted(

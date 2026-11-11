@@ -17,6 +17,7 @@ from verisight.execution.claim_verification import (
 )
 from verisight.execution.context import PopulationFilter
 from verisight.execution.cross_check import CrossCheck
+from verisight.execution.decisions import DECLINING_ACTIONS, InvestigationAction
 from verisight.execution.exceptions import (
     SynthesisValidationError,
     SynthesisValidationReason,
@@ -190,6 +191,50 @@ class InvestigationFailure:
         return cls(stage=stage, kind=to_public_error(error).code.value)
 
 
+DECLINED_MESSAGES: dict[InvestigationAction, str] = {
+    InvestigationAction.NOT_IN_DATA: (
+        "The data does not appear to hold what the question asks for."
+    ),
+    InvestigationAction.NEEDS_DEFINITION: (
+        "The question depends on a word or comparison that it does not define. "
+        "Say what it means to get a number."
+    ),
+}
+
+
+@dataclass(frozen=True, slots=True)
+class DeclinedQuestion:
+    """The investigator stopped because no query could answer the question.
+
+    ``explanation`` is the model's own reason. It is kept only when it states
+    no number, in digits or words, since nothing here was checked against SQL.
+    """
+
+    action: InvestigationAction
+    explanation: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.action not in DECLINING_ACTIONS:
+            raise ValueError("A declined question needs a declining action.")
+
+    @classmethod
+    def from_reasoning(
+        cls, action: InvestigationAction, reasoning: str, question: str
+    ) -> "DeclinedQuestion":
+        """Keep the model's reason unless it could pass off an unchecked number."""
+        text = " ".join(reasoning.split())
+        states_number = any(character.isdigit() for character in text) or bool(
+            cardinal_words_outside(text, question)
+        )
+        return cls(action, None if states_number or not text else text)
+
+    @property
+    def message(self) -> str:
+        """Fixed wording for the outcome, followed by the reason when kept."""
+        fixed = DECLINED_MESSAGES[self.action]
+        return fixed if self.explanation is None else f"{fixed} {self.explanation}"
+
+
 @dataclass(frozen=True, slots=True)
 class InvestigationResult:
     """Result produced by an autonomous analytical investigation."""
@@ -208,6 +253,7 @@ class InvestigationResult:
     initial_query_required: bool = field(default=False, kw_only=True)
     cross_check: CrossCheck | None = field(default=None, kw_only=True)
     trust: TrustReport | None = field(default=None, kw_only=True)
+    declined: DeclinedQuestion | None = field(default=None, kw_only=True)
     narrative_verified: bool = field(default=False, init=False)
     verified_claims: tuple["VerifiedNumericalClaim", ...] = field(init=False)
     quantitative_statements: tuple["ClaimLinkedStatement", ...] = field(init=False)
@@ -242,6 +288,14 @@ class InvestigationResult:
         ):
             raise ValueError(
                 "Investigation failure requires an incomplete investigation."
+            )
+
+        if (
+            self.declined is not None
+            and self.status is not InvestigationStatus.INCOMPLETE
+        ):
+            raise ValueError(
+                "A declined question requires an incomplete investigation."
             )
 
         report = self.verify_claims(self.generated_claims)

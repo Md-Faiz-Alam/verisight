@@ -9,6 +9,14 @@ class InvestigationAction(StrEnum):
 
     INVESTIGATE = "investigate"
     FINISH = "finish"
+    # Stop without a number: forcing a query here makes the model invent one.
+    NOT_IN_DATA = "not_in_data"
+    NEEDS_DEFINITION = "needs_definition"
+
+
+DECLINING_ACTIONS = frozenset(
+    {InvestigationAction.NOT_IN_DATA, InvestigationAction.NEEDS_DEFINITION}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,4 +43,9 @@ class InvestigationDecision:
         if self.action is InvestigationAction.FINISH and self.question is not None:
             raise ValueError(
                 "A finish decision must not include an analytical question."
+            )
+
+        if self.action in DECLINING_ACTIONS and self.question is not None:
+            raise ValueError(
+                "A declining decision must not include an analytical question."
             )

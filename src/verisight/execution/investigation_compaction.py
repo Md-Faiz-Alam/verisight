@@ -7,6 +7,7 @@ from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
 from verisight.execution.investigation_prompting import (
+    INVESTIGATION_DECLINE_RULES,
     INVESTIGATION_REPETITION_RULES,
     INVESTIGATION_STEP_BUDGET_RULES,
 )
@@ -63,9 +64,10 @@ class InvestigationCompaction:
             "missing metric when another analytical attempt is available; "
             "otherwise explain the scale limitation.\n"
             + INVESTIGATION_REPETITION_RULES
+            + INVESTIGATION_DECLINE_RULES
             + "Do not generate SQL. Request exactly one analytical question.\n"
             "Return exactly one JSON object without Markdown fences:\n"
-            '{"action":"investigate"|"finish",'
+            '{"action":"investigate"|"finish"|"not_in_data"|"needs_definition",'
             '"reasoning":"string","question":"string"|null}\n\n'
         )
 

@@ -109,7 +109,8 @@ In contract mode, a finished synthesis whose evidence lacks the requested final
 value gets one recovery query, if an analytical step remains. The triggers are a
 terminal `invalid_claim_reference` or `claim_value_mismatch` failure, a
 complete synthesis with empty claims, or a `claim_output_contract_mismatch`
-failure when every result has several rows, so no single cell holds the answer.
+failure, where the claims cite several cells because the answer is split over
+rows or over columns that hold only its parts.
 The recovery query plans the original
 question, asking for each value the claim needs as its own numeric result
 column. Synthesis then runs once more on all observations, without another

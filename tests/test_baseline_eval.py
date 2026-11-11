@@ -452,7 +452,7 @@ def test_numbers_setup_rejects_the_wrong_claim_shape(tmp_path: Path) -> None:
     root = _root(tmp_path, "")
 
     answer = runner.answer_numbers(
-        _engine([SQL], GOOD), _question(kind="difference"), root / "data"
+        _engine([SQL, SQL], GOOD), _question(kind="difference"), root / "data"
     )
 
     assert answer.number is None

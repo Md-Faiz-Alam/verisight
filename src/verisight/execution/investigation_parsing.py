@@ -15,7 +15,10 @@ from verisight.execution.exceptions import InvestigationError
 INVESTIGATION_DECISION_JSON_SCHEMA: dict[str, object] = {
     "type": "object",
     "properties": {
-        "action": {"type": "string", "enum": ["investigate", "finish"]},
+        "action": {
+            "type": "string",
+            "enum": [action.value for action in InvestigationAction],
+        },
         "reasoning": {"type": "string"},
         "question": {"anyOf": [{"type": "string"}, {"type": "null"}]},
     },

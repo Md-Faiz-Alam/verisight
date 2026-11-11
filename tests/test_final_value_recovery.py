@@ -262,7 +262,9 @@ def test_a_total_split_over_rows_uses_the_recovery_query(tmp_path: Path) -> None
     assert "return one row with that number" in planner.prompts[1]
 
 
-def test_a_wrong_claim_shape_with_a_single_row_does_not_recover(tmp_path: Path) -> None:
+def test_parts_of_a_percentage_in_one_row_use_the_recovery_query(
+    tmp_path: Path,
+) -> None:
     two = json.dumps(
         {
             "conclusion": "There are 2 yes results of 4.",
@@ -273,16 +275,18 @@ def test_a_wrong_claim_shape_with_a_single_row_does_not_recover(tmp_path: Path) 
     result, _, planner, _ = _run(
         tmp_path,
         decide=[_decision("Count yes results and all results"), _decision(None)],
-        plan=[COUNT_SQL],
-        synth=[two, two],
+        plan=[COUNT_SQL, PERCENT_SQL],
+        synth=[two, two, GOOD],
     )
 
-    assert result.synthesis_failure is not None
-    assert (
-        result.synthesis_failure.validation_reason == "claim_output_contract_mismatch"
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.synthesis_recovery == SynthesisRecovery(
+        "claim_output_contract_mismatch", True, True
     )
-    assert result.synthesis_recovery is None
-    assert len(planner.prompts) == 1
+    assert "each as its own numeric result column" in planner.prompts[1]
+    assert [item.verification.actual for item in result.verified_claims] == [
+        Decimal("50.0")
+    ]
 
 
 def test_failed_recovery_query_returns_the_first_outcome(tmp_path: Path) -> None:

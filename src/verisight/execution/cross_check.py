@@ -33,6 +33,8 @@ from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.validation import _population_terms
 
 CROSS_CHECK_COLUMN = "cross_check_answer"
+# A column no calculation produces by accident: the second query declined.
+CROSS_CHECK_REFUSAL_COLUMN = "cross_check_refused"
 # Absorbs binary floating-point noise only; a rounded display does not agree.
 _RELATIVE_TOLERANCE = Decimal("1e-9")
 _PLACE_WORDS = [
@@ -57,7 +59,16 @@ _PLACES_ASKED = re.compile(
 
 CROSS_CHECK_INSTRUCTION = (
     "INDEPENDENT CROSS-CHECK: work out this answer from scratch, using only the "
-    "question and the data description. First decide which rows belong to the "
+    "question and the data description. First check that the data can answer "
+    "it. If no column records the quantity asked for, or the columns record "
+    "only a related but different quantity, do not substitute one and do not "
+    "estimate from outside knowledge. If the answer depends on a grading word, "
+    "group or comparison that neither the question nor the data defines, do not "
+    "choose a definition. In either case return exactly "
+    f"SELECT 'refused' AS {CROSS_CHECK_REFUSAL_COLUMN} and nothing else. Do not "
+    "refuse because values are messy or missing, because a join is needed, or "
+    "because the wording differs from a column that plainly holds the same "
+    "thing. Otherwise decide which rows belong to the "
     "population, which column holds the measure, and which calculation the "
     "question asks for. If a join can repeat rows, make sure each entity is "
     "counted once. Do not add rows that are totals of other rows to their own "
@@ -89,6 +100,7 @@ class CrossCheckStatus(StrEnum):
 CrossCheckReason = Literal[
     "values_match",
     "values_differ",
+    "second_query_refused",
     "not_a_single_number",
     "multiple_claims",
     "query_failed",
@@ -144,6 +156,15 @@ class IndependentCrossChecker:
             return _not_assessed("query_failed")
 
         sql = execution.plan.sql
+        if _refused(execution.result):
+            # The second model saw nothing in the data that holds what was asked.
+            return CrossCheck(
+                status=CrossCheckStatus.DISAGREED,
+                reason="second_query_refused",
+                sql=sql,
+                primary_value=answer,
+                identical_sql=False,
+            )
         identical = _canonical_sql(sql) == _canonical_sql(primary_sql)
         independent = _answer_cell(execution.result)
         if independent is None:
@@ -169,6 +190,12 @@ class IndependentCrossChecker:
 
 def _not_assessed(reason: CrossCheckReason) -> CrossCheck:
     return CrossCheck(status=CrossCheckStatus.NOT_ASSESSED, reason=reason)
+
+
+def _refused(result: QueryResult) -> bool:
+    return [column.casefold() for column in result.columns] == [
+        CROSS_CHECK_REFUSAL_COLUMN
+    ]
 
 
 def _answer_cell(result: QueryResult) -> Decimal | None:

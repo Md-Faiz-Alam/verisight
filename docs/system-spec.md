@@ -96,6 +96,15 @@ A check attempted is not always a check completed:
 | Skipped | The check could not run, for example after a provider failure or deadline, or it only repeated the first query | "Number matches SQL only" at best |
 | Not requested | The command line ran without `--cross-check` | Trust level is `not_run`, with the reason |
 
+Before writing any query, the model may decline a question: because the data does
+not hold what was asked, or because the question depends on a word or comparison it
+does not define. A declined question runs no query and gets "Not verified" with no
+number. The model's reason is shown only when it states no number.
+
+The second query may refuse in the same two cases. A refusal counts as a failed
+check, so the answer is "Needs review" and keeps its number with a warning. Neither
+step has been measured on new questions.
+
 An exact question answered by fixed rules uses no model, so it has no second query
 and is labelled "Computed without AI". When the SQL audit finds that the data does
 not hold what was asked, such as a price taken from a column holding no money, the

@@ -144,6 +144,20 @@ investigator. If the query fails, a later finish decision produces the existing
 "all attempted analytical queries failed" incomplete result; the query is not
 retried. A provider failure on that first query is raised as before, because no
 evidence exists yet.
+The investigator has two further actions, `not_in_data` and `needs_definition`.
+Either ends the run at once with an incomplete result whose `declined` field
+records the action. No query is planned for it, because a planner asked for a
+quantity the data lacks has no way to refuse and returns a query on some other
+column. The model's reasoning is kept as the explanation only when it contains no
+digits and no number words beyond those in the question. With trust checks on, a
+declined result is "Not verified" and fails `data_holds_measure` or
+`question_is_defined`. The planner itself still cannot refuse, so one-attempt runs
+and a finish before any query, which plan the original question directly, are not
+protected by this.
+The second query can refuse by returning the single column `cross_check_refused`.
+That is recorded as a disagreement with reason `second_query_refused` and fails the
+`second_query` check, which gives "Needs review". It does not remove the number,
+because one model's refusal is weaker evidence than a query that ran.
 In contract mode, a finished synthesis that lacks the requested final value may
 use one remaining step for a recovery query; see
 [Final-value recovery query](output-contracts.md#final-value-recovery-query).

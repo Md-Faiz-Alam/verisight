@@ -32,6 +32,26 @@ INVESTIGATION_STEP_BUDGET_RULES = (
     "comparison group or period to complete an answer.\n"
 )
 
+INVESTIGATION_DECLINE_RULES = (
+    "- not_in_data: stop without a number when the quantity the original "
+    "question asks for is recorded in no column and cannot be calculated from "
+    "the columns present. Do not substitute a different column, a proxy "
+    "measure, or outside knowledge such as typical rates or conversion factors "
+    "that the question did not supply. A related but different quantity, such "
+    "as a list price when the amount actually paid is asked for, does not hold "
+    "what was asked.\n"
+    "- needs_definition: stop without a number when the answer depends on a "
+    "grading word, group or comparison that neither the question nor the data "
+    "defines: a label of size, quality or recency with no threshold given and "
+    "no matching category value, or a comparison with nothing named to compare "
+    "against. Do not choose the threshold, category or comparison group "
+    "yourself.\n"
+    "- Never choose not_in_data or needs_definition because values are messy or "
+    "missing, because a join or several steps are needed, or because the "
+    "question's wording differs from a column or category value that plainly "
+    "holds the same thing. When the data holds what was asked, answer it.\n"
+)
+
 
 class InvestigationPromptBuilder:
     """Build deterministic prompts for autonomous investigation."""
@@ -91,8 +111,9 @@ class InvestigationPromptBuilder:
             "- finish: stop investigating only when the available evidence "
             "adequately addresses the material analytical aspects of the "
             "original question, or when the remaining aspects cannot be "
-            "usefully investigated from the available data.\n\n"
-            "Investigation completeness:\n"
+            "usefully investigated from the available data.\n"
+            + INVESTIGATION_DECLINE_RULES
+            + "\nInvestigation completeness:\n"
             "- Before choosing finish, compare the original question with "
             "the evidence actually present in the executed observations.\n"
             "- Identify the material analytical aspects explicitly requested "
@@ -197,11 +218,12 @@ class InvestigationPromptBuilder:
             "Rules:\n"
             "- Return exactly one JSON object and nothing else.\n"
             "- Do not use Markdown code fences.\n"
-            '- The action must be either "investigate" or "finish".\n'
+            '- The action must be "investigate", "finish", "not_in_data" or '
+            '"needs_definition".\n'
             "- Always include a concise, evidence-based reasoning string.\n"
             '- For "investigate", question must be a non-empty analytical '
             "question that can be answered from the dataset.\n"
-            '- For "finish", question must be null.\n'
+            "- For every other action, question must be null.\n"
             "- Request only one analytical question at a time.\n"
             "- Prefer questions that directly test, quantify, compare, "
             "disaggregate, or otherwise obtain evidence relevant to the "
@@ -254,7 +276,8 @@ class InvestigationPromptBuilder:
             "a causal conclusion.\n\n"
             "Response schema:\n"
             "{\n"
-            '  "action": "investigate" | "finish",\n'
+            '  "action": "investigate" | "finish" | "not_in_data" | '
+            '"needs_definition",\n'
             '  "reasoning": "string",\n'
             '  "question": "string" | null\n'
             "}\n\n"

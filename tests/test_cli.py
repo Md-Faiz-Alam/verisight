@@ -643,6 +643,9 @@ def test_cli_enforces_selected_output_contract_with_bounded_shape_repair(
     # synthesis then uses one recovery query and one final synthesis.
     recovery_sql = "SELECT SUM(amount) AS total FROM orders"
     synthesis = generation_responses[-1]
+    if shape_mismatch:
+        # A wrong shape survives its repair, then one recovery query is tried.
+        generation_responses.extend([recovery_sql, synthesis, synthesis])
     if mode == "contradicted":
         generation_responses.extend([synthesis, recovery_sql, synthesis, synthesis])
     if mode == "empty":
@@ -672,6 +675,12 @@ def test_cli_enforces_selected_output_contract_with_bounded_shape_repair(
                 "claim_value_mismatch" if mode == "contradicted" else "empty_claims"
             ),
             "repair_attempted": True if mode == "contradicted" else None,
+            "query_succeeded": True,
+        }
+    elif shape_mismatch:
+        assert recovery == {
+            "trigger": "claim_output_contract_mismatch",
+            "repair_attempted": True,
             "query_succeeded": True,
         }
     else:

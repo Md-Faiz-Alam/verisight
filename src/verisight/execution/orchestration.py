@@ -19,7 +19,7 @@ from verisight.execution.deadline import (
     check_deadline,
     investigation_deadline,
 )
-from verisight.execution.decisions import InvestigationAction
+from verisight.execution.decisions import DECLINING_ACTIONS, InvestigationAction
 from verisight.execution.exceptions import (
     InvestigationError,
     QueryExecutionError,
@@ -32,6 +32,7 @@ from verisight.execution.incomplete_evidence import IncompleteEvidenceError
 from verisight.execution.investigation import FailedQueryAttempt, InvestigationState
 from verisight.execution.investigation_result import (
     ClaimOutputContract,
+    DeclinedQuestion,
     InvestigationFailure,
     InvestigationResult,
     InvestigationStatus,
@@ -84,7 +85,7 @@ class InvestigationOrchestrator:
 
     With a claim output contract, a finished synthesis that cites a missing
     or inconsistent cell, returns no claims, or cannot match the contract
-    because every result is split over several rows, may use one remaining step
+    with the cells collected, may use one remaining step
     for a recovery query that asks for the final value as its own result
     cell. Synthesis then runs once more on all evidence; this happens at
     most once per investigation and is recorded as ``synthesis_recovery``.
@@ -261,6 +262,20 @@ class InvestigationOrchestrator:
                         ),
                     )
 
+                if decision.action in DECLINING_ACTIONS:
+                    # No query can answer this; asking for one invites a
+                    # number built on a column or definition the model chose.
+                    declined = DeclinedQuestion.from_reasoning(
+                        decision.action, decision.reasoning, state.question
+                    )
+                    return replace(
+                        self._incomplete(
+                            state, reason="the question could not be answered"
+                        ),
+                        conclusion=f"No number is shown. {declined.message}",
+                        declined=declined,
+                    )
+
                 if (
                     decision.action is InvestigationAction.FINISH
                     and state.observation_count == 0
@@ -422,10 +437,10 @@ class InvestigationOrchestrator:
                 return "invalid_claim_reference"
             if failure.validation_reason == "claim_value_mismatch":
                 return "claim_value_mismatch"
-            if failure.validation_reason == "claim_output_contract_mismatch" and all(
-                len(item.result.rows) != 1 for item in result.observations
-            ):
-                # Only rows per group exist, so no single cell holds the answer.
+            if failure.validation_reason == "claim_output_contract_mismatch":
+                # The claims cite several cells where one was asked for: the
+                # answer is split over rows, or over columns that hold only its
+                # parts, such as a count and a total for a percentage.
                 return "claim_output_contract_mismatch"
             return None
         if result.status is InvestigationStatus.COMPLETE and not (

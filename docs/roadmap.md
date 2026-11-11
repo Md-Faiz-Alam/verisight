@@ -23,7 +23,10 @@ it can be trusted, and gives no number rather than a misleading one. The
 
 1. **Fewer numbers where none should exist, and fewer false warnings.** In the
    second comparison VeriSight gave a number on 6 of 10 questions with no valid
-   answer, and warned on 6 of 18 correct answers.
+   answer, and warned on 6 of 18 correct answers. The model can now decline a
+   question the data cannot answer, or one that needs a definition, before any
+   query is written, and the second query can refuse too. Neither has been
+   measured on new questions, so how often they decline wrongly is unknown.
 2. **Ask about vague questions.** A question such as "how many count as high
    quality?" should get a clarifying question, not an assumption or an empty result.
 3. **Read which row a grouped answer cites,** so that a correct answer read from one

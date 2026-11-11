@@ -466,13 +466,14 @@ def test_cross_check_is_off_by_default(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("synth", "contract"),
+    ("synth", "contract", "queries"),
     [
-        ([_synthesis("No number could be established.")], None),
-        ([_synthesis("The total is 31.", _claim("31"))], None),
+        ([_synthesis("No number could be established.")], None, 1),
+        ([_synthesis("The total is 31.", _claim("31"))], None, 1),
         (
             [_synthesis("The total is 30.", _claim("30"))],
             (ClaimOperation.VALUE, ClaimOperation.VALUE),
+            2,
         ),
     ],
 )
@@ -480,13 +481,17 @@ def test_rejected_answers_spend_no_second_query(
     tmp_path: Path,
     synth: list[str | Exception],
     contract: tuple[ClaimOperation, ...] | None,
+    queries: int,
 ) -> None:
-    # A contract mismatch is repaired once, so that case needs a second response.
-    responses = synth + synth
-    result, planner = _investigate(tmp_path, [FIRST_SQL], responses, contract=contract)
+    # A contract mismatch is repaired once, then one recovery query is tried and
+    # its synthesis repaired once. None of the queries is a cross-check.
+    result, planner = _investigate(
+        tmp_path, [FIRST_SQL] * queries, synth * 4, contract=contract
+    )
 
     assert result.cross_check is None
-    assert len(planner.prompts) == 1
+    assert len(planner.prompts) == queries
+    assert all("INDEPENDENT CROSS-CHECK" not in item for item in planner.prompts)
 
 
 def test_incomplete_investigation_spends_no_second_query(tmp_path: Path) -> None:
