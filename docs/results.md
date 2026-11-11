@@ -296,6 +296,44 @@ too broadly, and rounded numbers compared with unrounded ones. The table above i
 result before these fixes. These questions helped find the bugs, so a new score needs
 new questions.
 
+### Second comparison with plain Gemini (30 new questions, 4 new files)
+
+Raisin varieties (Excel), automobiles, and a pair of related orders and customers
+files, none used before. The project owner wrote 20 answerable, 5 ambiguous and 5
+unanswerable questions, with answers worked out separately and without aiming at
+the problems fixed after the first comparison. The runner, questions and data were
+frozen by hash at `a335001`, which includes those fixes, and each setup answered each
+question once.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 20 | 18 | 18 |
+| Wrong number, of 20 answerable | 0 | 0 | 0 |
+| No number, of 20 answerable | 0 | 2 | 2 |
+| Number given where none exists, of 10 | 8 | 6 | 6 |
+| Correctly gave no number, of 10 | 2 | 4 | 4 |
+| Bad numbers shown prominently | 8 | 6 | 2 |
+| Bad numbers visible anywhere | 8 | 6 | 6 |
+| Correct answers carrying a warning | 0 of 20 | 0 of 18 | 6 of 18 |
+| Gemini calls | 30 | 144 | 167 |
+| Median seconds per question | 7 | 16 | 16 |
+
+Against the targets, full VeriSight again showed far fewer bad numbers prominently
+(C1 passed) and now delivered 90% of answerable questions against plain Gemini's
+100%, exactly the 10 points allowed (C2 passed). It warned on 33% of its correct
+answers where 10% is allowed (C3 failed). Three of those six warnings came from the
+SQL audit; the other three were "Number matches SQL only" because the second query
+repeated the first.
+
+- Plain Gemini answered every answerable question correctly. One of its two refusals
+  happened only because its query returned too many rows.
+- Both missed answers failed the same way in both VeriSight setups: the written
+  answer did not match the single number that was asked for.
+- On questions with no valid answer, VeriSight still gave a number 6 times out of
+  10, and 2 of those were shown as verified. The second query disagreed on 2 others.
+
+These are one run of 30 questions written by the project's own side.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10

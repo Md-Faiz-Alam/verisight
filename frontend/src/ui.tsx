@@ -267,6 +267,7 @@ const CHECK_NAMES: Record<string, string> = {
   second_query: "Independent second query",
   second_query_audit: "Second query checked against your data",
   data_holds_measure: "Data holds what was asked",
+  question_is_defined: "Question says what it means",
 };
 
 export function Trail({ checks }: { checks: TrustCheck[] }) {

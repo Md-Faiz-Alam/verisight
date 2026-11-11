@@ -125,6 +125,89 @@ _PERSON_COLUMN_WORDS = frozenset(
     ]
 )
 _MEASURED = (exp.Sum, exp.Avg, exp.Max, exp.Min, exp.Median)
+# Grading words that need a definition: "large" means nothing until a threshold
+# or a category is given. Superlatives such as "largest" are calculations instead.
+_VAGUE_WORDS = frozenset(
+    [
+        "large",
+        "big",
+        "huge",
+        "small",
+        "tiny",
+        "high",
+        "low",
+        "cheap",
+        "expensive",
+        "economical",
+        "efficient",
+        "recent",
+        "recently",
+        "old",
+        "new",
+        "young",
+        "popular",
+        "good",
+        "bad",
+        "local",
+        "fast",
+        "slow",
+        "heavy",
+        "light",
+        "long",
+        "short",
+        "rich",
+        "poor",
+        "premium",
+        "frequent",
+        "rare",
+        "busy",
+        "major",
+        "minor",
+    ]
+)
+_COMPARED = (exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE, exp.In, exp.Like)
+_HOW_MUCH_MORE = re.compile(
+    r"\bhow (?:much|many) (?:higher|lower|more|less|bigger|smaller|larger|greater|"
+    r"longer|shorter|faster|slower|heavier|lighter|cheaper|older|younger)\b",
+    re.IGNORECASE,
+)
+_AGAINST = re.compile(r"\b(?:than|minus|compared|versus|vs)\b", re.IGNORECASE)
+_NUMBER_TEXT = re.compile(r"[0-9]+(?:\.[0-9]+)?")
+# Numbers a calculation may use without saying so: units, percentages, halves.
+_PLAIN_CONSTANTS = frozenset({0.0, 1.0, 2.0, 100.0, 1000.0})
+_MEASURE_PHRASE = re.compile(
+    r"\b(?:average|mean|total|sum of|median|maximum|minimum|highest|lowest)\s+"
+    r"(?:(?:of|the)\s+)*([a-z][a-z \-]{2,40})",
+    re.IGNORECASE,
+)
+_FILLER = frozenset(
+    [
+        "the",
+        "of",
+        "for",
+        "per",
+        "in",
+        "on",
+        "at",
+        "by",
+        "and",
+        "a",
+        "an",
+        "all",
+        "each",
+        "these",
+        "those",
+        "this",
+        "that",
+        "with",
+        "to",
+        "from",
+        "was",
+        "were",
+        "is",
+        "are",
+    ]
+)
 _PARTIAL_MATCH_WANTED = re.compile(
     r"\b(?:contain\w*|includ\w*|start\w*|begin\w*|end\w*|like|any kind)\b",
     re.IGNORECASE,
@@ -195,6 +278,10 @@ def audit_sql(
             *_broad_match(question, tree, categories),
             *_distinct_count(question, tree),
             *_measure_not_in_data(question, tree, used),
+            *_assumed_definition(question, tree),
+            *_missing_comparison(question),
+            *_invented_constants(question, tree),
+            *_measure_not_named(question, tree),
             *_calculation(question, tree, tables),
             *_median(question, tree),
             *_missing_as_zero(question, tree, used),
@@ -566,8 +653,20 @@ def _distinct_count(question: str, tree: exp.Expression) -> Iterator[AuditFindin
 
 
 def _column_words(name: str) -> set[str]:
-    words = set(re.findall(r"[a-z]+", name.casefold()))
+    """Split ``order_date``, ``orderDate`` and ``Order Date`` into the same words."""
+    parts = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])", name)
+    words = {part.casefold() for part in parts}
     return words | {word.removesuffix("s") for word in words}
+
+
+def _readable_word(word: str) -> bool:
+    """A real word, not an abbreviation such as ``cnt`` whose meaning is unknown."""
+    return len(word) > 3 and re.search(r"[aeiou]", word) is not None
+
+
+def _related(words: set[str], others: set[str]) -> bool:
+    """Words that share a stem, so "ordering" matches ``order``."""
+    return any(one[:4] == two[:4] for one in words for two in others)
 
 
 def _holds_money(tables: dict[str, LoadedTable], name: str) -> bool:
@@ -617,6 +716,87 @@ def _measure_not_in_data(
                 "The question counts different people, but the query counts no "
                 "column that identifies a person.",
             )
+
+
+def _question_numbers(question: str) -> set[float]:
+    return {float(text) for text in _NUMBER_TEXT.findall(question.replace(",", ""))}
+
+
+def _assumed_definition(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+    """Find a vague word the query defined by itself, as "large" = one category."""
+    words = set(re.findall(r"[a-z]+", question.casefold())) & _VAGUE_WORDS
+    if not words:
+        return
+    lowered = question.casefold()
+    asked = _question_numbers(question)
+    for node in tree.find_all(*_COMPARED):
+        for literal in node.find_all(exp.Literal):
+            if literal.is_string:
+                given = literal.this.casefold() in lowered
+            else:
+                given = float(literal.this) in asked | _PLAIN_CONSTANTS
+            if not given:
+                word = sorted(words)[0]
+                yield AuditFinding(
+                    "assumed_definition",
+                    f"The question does not say what counts as {word!r}, and the "
+                    f"query assumed {node.sql(dialect='duckdb')}. Say what counts as "
+                    f"{word!r} to get a number.",
+                )
+                return
+
+
+def _missing_comparison(question: str) -> Iterator[AuditFinding]:
+    """Find "how much higher" with nothing to compare against."""
+    match = _HOW_MUCH_MORE.search(question)
+    if match is not None and not _AGAINST.search(question):
+        yield AuditFinding(
+            "missing_comparison",
+            f"The question asks {match[0].casefold()!r} but not compared with what. "
+            "Say what to compare with to get a number.",
+        )
+
+
+def _invented_constants(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+    """Find numbers in a calculation that come from neither question nor data."""
+    asked = _question_numbers(question) | _PLAIN_CONSTANTS
+    for node in tree.find_all(exp.Mul, exp.Div, exp.Add, exp.Sub):
+        for side in (node.left, node.right):
+            value = _numeric_literal(side)
+            if value is not None and abs(value) not in asked:
+                yield AuditFinding(
+                    "invented_constant",
+                    f"The calculation uses {side.this}, which comes from neither "
+                    "the question nor the data.",
+                )
+                return
+
+
+def _measure_not_named(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+    """Find an average or total of a column the question never mentions."""
+    match = _MEASURE_PHRASE.search(question)
+    if match is None:
+        return
+    wanted = set(re.findall(r"[a-z]+", match[1].casefold())) - _FILLER
+    lowered = question.casefold()
+    measured = {
+        column.name
+        for node in tree.find_all(*_MEASURED)
+        for column in node.find_all(exp.Column)
+    }
+    mentioned = wanted | set(re.findall(r"[a-z]+", lowered))
+    unrelated = [
+        name
+        for name in sorted(measured)
+        if (named := {w for w in _column_words(name) - _FILLER if _readable_word(w)})
+        and not _related(named, mentioned)
+    ]
+    if wanted and unrelated and len(unrelated) == len(measured):
+        yield AuditFinding(
+            "measure_not_named",
+            f"The question asks about {match[1].strip()!r}, but the query measures "
+            f"{unrelated[0]}, which the question never mentions.",
+        )
 
 
 def _calculation(

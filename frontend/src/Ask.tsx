@@ -9,6 +9,7 @@ const FAILURES: Record<string, string> = {
   prompt_budget_exceeded: "This dataset is too large to describe in one request. Try narrower files.",
   synthesis_error: "The model's answer could not be matched to the SQL results.",
   measure_not_in_data: "The data does not appear to hold what was asked, so no number is shown.",
+  undefined_in_question: "The question needs a definition before it can be answered, so no number is shown.",
 };
 
 function failureText(answer: Answer): string {

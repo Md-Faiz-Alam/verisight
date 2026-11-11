@@ -635,16 +635,20 @@ can be trusted. The levels and their meaning are listed in the
    loaded rows: joins that repeat rows, filters on values the column lacks, named
    values left out, wrong calculations, missing periods (reading year codes from a
    date column), thresholds and ranges, reversed subtractions, counts of rows given
-   for "how many different", over-broad `LIKE`, and a measure the data does not
-   hold, such as a price taken from a column holding no money.
+   for "how many different", over-broad `LIKE`, a measure the data does not
+   hold, such as a price taken from a column holding no money, a vague word the
+   query defined by itself ("large" read as one category), "how much higher" with
+   nothing to compare against, numbers a calculation invented, and an average of a
+   column the question never mentions.
 4. **Second query.** `execution/cross_check.py` plans a query from the question
    alone, told to reach the number by another route. A repeat of the first query,
    apart from aliases and order, adds no evidence. When the question states decimal
    places, both numbers are compared at those places.
 5. **Level.** `execution/trust_assessment.py` combines these: any failed check gives
    "Needs review", and only all passed checks give "Verified". A measure the data
-   does not hold gives "Not verified", and the website replaces the model's sentence
-   so that no number is shown.
+   does not hold, a vague word the query defined by itself, or a comparison with
+   nothing to compare against gives "Not verified", and the website replaces the
+   model's sentence so that no number is shown.
 
 The data description sent to Gemini also names years stored as codes, such as `yr`
 0 for dates in 2011, when a date column proves the meaning.

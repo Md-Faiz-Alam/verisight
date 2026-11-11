@@ -99,7 +99,9 @@ A check attempted is not always a check completed:
 An exact question answered by fixed rules uses no model, so it has no second query
 and is labelled "Computed without AI". When the SQL audit finds that the data does
 not hold what was asked, such as a price taken from a column holding no money, the
-answer is "Not verified" and the website shows no number.
+answer is "Not verified" and the website shows no number. The same applies when the
+query had to define a vague word itself, such as "large", or when the question asks
+"how much higher" without saying than what.
 
 ## Targets
 
@@ -115,7 +117,7 @@ result existed. A *regression* target protects a result that was already known.
 | A1 | Regression | Missed mistakes: of the 31 frozen wrong queries, at least 75% are caught | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
 | A2 | Regression | False warnings: none on the 31 frozen correct queries | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
 | C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
-| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | failed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
+| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | passed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
 | C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
 | C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
 | R1 | Predeclared | Concurrency, expiry, eviction, restart and crash-recovery tests pass | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
@@ -124,8 +126,9 @@ result existed. A *regression* target protects a result that was already known.
 | M1 | Predeclared | Peak process memory under 1 GB across a full local workload: loaded datasets, profiling, two questions at once and second queries | passed | 781 MiB, [`measure_memory.py`](../evaluation/measure_memory.py) |
 | W1 | Predeclared | Browser tests pass in Chromium at 1280×800 and 375×812 for upload, asking, reading results, errors and keyboard use, with exact numbers and trust labels | passed | [`app.spec.ts`](../frontend/tests/e2e/app.spec.ts), [`lib.test.ts`](../frontend/tests/unit/lib.test.ts) |
 
-C1 to C4 were measured at commit `ea707d4`. Fixes for the failures in C2 and C3
-were made afterwards and need new questions to be measured.
+C1 to C4 were first measured at commit `ea707d4`, where C2 and C3 failed. After
+fixes, a second comparison on new questions at `a335001` passed C2 at exactly the
+10-point limit, and C3 failed again at 33%.
 
 M1 was measured on this computer with scripted replies and generated data: five
 uploads of one 19.5 MB file with charts, two questions at once with second queries,

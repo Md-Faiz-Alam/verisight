@@ -216,6 +216,20 @@ test("an answer about something the data does not hold shows no number", async (
   await expect(page.locator(".notice.warn")).toContainText("does not appear to hold what was asked");
 });
 
+test("a question that needs a definition shows no number", async ({ page }) => {
+  const hidden = {
+    ...answer("not_verified", "unverified", "450"),
+    answer: "No number is shown. The question does not say what counts as 'large'.",
+    failure: { kind: "undefined_in_question" },
+  };
+  await stub(page, () => ({ json: hidden }));
+  await openWorkspace(page);
+  await ask(page, "How many are large?");
+
+  await expect(page.locator(".answer-num")).toHaveCount(0);
+  await expect(page.locator(".notice.warn")).toContainText("needs a definition");
+});
+
 test("an answer computed without AI shows its number and no model calls", async ({ page }) => {
   const direct = { ...answer("computed", "verified", "350"), model_calls: [], cross_check: null };
   await stub(page, () => ({ json: direct }));

@@ -48,8 +48,8 @@ from verisight.execution.investigation_result import (
     InvestigationStatus,
 )
 from verisight.execution.metric_display import summarize_advisory_reviews
-from verisight.execution.trust import TrustLevel
-from verisight.execution.trust_assessment import MEASURE_CHECK
+from verisight.execution.trust import CheckStatus, TrustLevel
+from verisight.execution.trust_assessment import DEFINED_CHECK, MEASURE_CHECK
 from verisight.logging import configure_logging
 from verisight.public_api import run_public_operation
 from verisight.serialization import to_jsonable
@@ -86,6 +86,10 @@ _CONTRACTS = {
     "any": None,
 }
 _VERIFIED = (VerificationStatus.SUPPORTED, VerificationStatus.SUPPORTED_ROUNDED)
+_BLOCKED_KINDS = {
+    MEASURE_CHECK: "measure_not_in_data",
+    DEFINED_CHECK: "undefined_in_question",
+}
 _ENGINE_STATUS = {
     ErrorCode.PROVIDER_UNAVAILABLE: 503,
     ErrorCode.INTERNAL_ERROR: 500,
@@ -410,15 +414,15 @@ def _answer_view(
         "model_calls": to_jsonable(tuple(calls)),
         "elapsed_seconds": round(elapsed, 2),
     }
-    missing = [
-        check.detail
+    blocked = [
+        check
         for check in (() if result.trust is None else result.trust.checks)
-        if check.name == MEASURE_CHECK
+        if check.name in _BLOCKED_KINDS and check.status is CheckStatus.FAILED
     ]
-    if missing:
+    if blocked:
         # The model's sentence states the number, so it is replaced, not shown.
-        view["answer"] = f"No number is shown. {missing[0]}"
-        view["failure"] = {"kind": "measure_not_in_data"}
+        view["answer"] = f"No number is shown. {blocked[0].detail}"
+        view["failure"] = {"kind": _BLOCKED_KINDS[blocked[0].name]}
     return cast(dict[str, object], _browser_safe(view))
 
 

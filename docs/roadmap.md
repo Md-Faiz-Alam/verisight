@@ -21,9 +21,9 @@ it can be trusted, and gives no number rather than a misleading one. The
 
 ## Next, in order
 
-1. **Measure the latest fixes on new questions.** The comparison's targets for
-   correct answers delivered and false warnings failed, and the fixes since then
-   have not been measured. A fresh frozen set of about 30 questions is needed.
+1. **Fewer numbers where none should exist, and fewer false warnings.** In the
+   second comparison VeriSight gave a number on 6 of 10 questions with no valid
+   answer, and warned on 6 of 18 correct answers.
 2. **Ask about vague questions.** A question such as "how many count as high
    quality?" should get a clarifying question, not an assumption or an empty result.
 3. **Read which row a grouped answer cites,** so that a correct answer read from one

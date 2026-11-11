@@ -92,8 +92,11 @@ Every live run is published in [Live results](docs/results.md), failures include
   4 unseen public datasets: VeriSight showed 1 bad number prominently, against 10
   for Gemini alone, and no wrong number on any answerable question. It delivered 15
   correct answers out of 20 against Gemini's 19, and put a warning on 4 correct
-  answers. Fixes for those misses have been made but not yet measured on new
-  questions.
+  answers.
+- **A second comparison after fixes**, on 30 new questions and 4 new files: VeriSight
+  showed 2 bad numbers prominently against Gemini's 8, delivered 18 correct answers
+  against Gemini's 20, and warned on 6 correct answers. Both setups gave numbers on
+  most questions that had no valid answer.
 - **Earlier runs:** 150 development attempts gave 85 accepted answers, all correct.
   Held-out sets on unseen data first exposed 3 wrong accepted answers, which led to
   the SQL audit.
@@ -109,7 +112,7 @@ a trust level and the checks behind it:
 | Verified | The number equals its SQL result, the SQL audit found no known mistake, and a second query, written differently from the first, agreed. |
 | Number matches SQL only | The number equals its SQL result, but a check could not run, or the second query only repeated the first. |
 | Needs review | A check failed. The page says which one and why. |
-| Not verified | No number could be tied to an executed result, or the data does not hold what was asked, such as money or people. No number is shown. |
+| Not verified | No number could be tied to an executed result, the data does not hold what was asked, or the question needs a definition, such as what counts as "large". No number is shown. |
 
 **Answers without AI.** Plainly worded questions, such as "What is the total amount
 for East?" or "How many orders were shipped?", are compiled directly to SQL and need
