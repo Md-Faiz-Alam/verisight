@@ -14,6 +14,9 @@ function failureText(answer: Answer): string {
   const kind = answer.failure?.kind;
   if (kind && FAILURES[kind]) return FAILURES[kind];
   if (answer.status === "incomplete") return "VeriSight could not finish with a number it can check, so it does not show one.";
+  if (answer.status === "complete" && !answer.claims?.length) {
+    return "No number was given. The answer above explains why.";
+  }
   const level = answer.trust?.level;
   return level ? TRUST[level].note : "This answer could not be checked.";
 }

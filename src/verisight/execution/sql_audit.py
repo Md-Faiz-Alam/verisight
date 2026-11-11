@@ -61,6 +61,70 @@ _DISTINCT_WANTED = re.compile(
     r"\bhow many (?:different|distinct|unique)\b", re.IGNORECASE
 )
 _RANGE = re.compile(r"\bfrom ([0-9]+(?:\.[0-9]+)?) to ([0-9]+(?:\.[0-9]+)?)\b", re.I)
+# Words that ask for money, and words that name a column holding it.
+_MONEY_ASKED = re.compile(
+    r"\b(?:prices?|costs?|revenues?|spend(?:ing)?|salar(?:y|ies)|wages?|incomes?|"
+    r"profits?|fees?|fares?|euros?|dollars?|rupees?|currency)\b|[€$₹£¥]",
+    re.IGNORECASE,
+)
+_MONEY_COLUMN_WORDS = frozenset(
+    [
+        "amount",
+        "price",
+        "cost",
+        "revenue",
+        "sale",
+        "salary",
+        "wage",
+        "income",
+        "earning",
+        "spend",
+        "spending",
+        "profit",
+        "turnover",
+        "gross",
+        "fee",
+        "fare",
+        "budget",
+        "payment",
+        "paid",
+        "usd",
+        "eur",
+        "inr",
+        "gbp",
+        "dollar",
+        "euro",
+        "rupee",
+    ]
+)
+_PEOPLE_ASKED = re.compile(
+    r"\bhow many (?:(?:different|distinct|unique|individual|separate) )+"
+    r"(?:people|persons|individuals|customers|users|riders|patients|employees|"
+    r"students|members|visitors|clients|buyers|passengers)\b",
+    re.IGNORECASE,
+)
+_PERSON_COLUMN_WORDS = frozenset(
+    [
+        "id",
+        "name",
+        "email",
+        "customer",
+        "user",
+        "person",
+        "member",
+        "client",
+        "patient",
+        "employee",
+        "student",
+        "visitor",
+        "rider",
+        "buyer",
+        "passenger",
+        "account",
+        "phone",
+    ]
+)
+_MEASURED = (exp.Sum, exp.Avg, exp.Max, exp.Min, exp.Median)
 _PARTIAL_MATCH_WANTED = re.compile(
     r"\b(?:contain\w*|includ\w*|start\w*|begin\w*|end\w*|like|any kind)\b",
     re.IGNORECASE,
@@ -130,6 +194,7 @@ def audit_sql(
             *_named_value(question, tree, categories),
             *_broad_match(question, tree, categories),
             *_distinct_count(question, tree),
+            *_measure_not_in_data(question, tree, used),
             *_calculation(question, tree, tables),
             *_median(question, tree),
             *_missing_as_zero(question, tree, used),
@@ -498,6 +563,60 @@ def _distinct_count(question: str, tree: exp.Expression) -> Iterator[AuditFindin
             "distinct_not_counted",
             "The question counts different values, but the query counts rows.",
         )
+
+
+def _column_words(name: str) -> set[str]:
+    words = set(re.findall(r"[a-z]+", name.casefold()))
+    return words | {word.removesuffix("s") for word in words}
+
+
+def _holds_money(tables: dict[str, LoadedTable], name: str) -> bool:
+    """A column named for money, or one whose currency marks were removed."""
+    if _column_words(name) & _MONEY_COLUMN_WORDS:
+        return True
+    return any(
+        note.rule == "currency_symbol" and note.column.casefold() == name.casefold()
+        for table in tables.values()
+        for note in table.value_notes
+    )
+
+
+def _measure_not_in_data(
+    question: str, tree: exp.Expression, used: dict[str, LoadedTable]
+) -> Iterator[AuditFinding]:
+    """Find a question about money or people answered with some other column.
+
+    A price cannot be read from an acidity column, and summed visits do not
+    count different people. Counting rows that match a price is not affected.
+    """
+    measured = sorted(
+        {
+            column.name
+            for node in tree.find_all(*_MEASURED)
+            for column in node.find_all(exp.Column)
+        }
+    )
+    if (
+        _MONEY_ASKED.search(question)
+        and measured
+        and not any(_holds_money(used, name) for name in measured)
+    ):
+        yield AuditFinding(
+            "measure_not_in_data",
+            f"The question asks for money, but {measured[0]} does not hold money "
+            "amounts. The data may not contain what was asked.",
+        )
+    if _PEOPLE_ASKED.search(question):
+        identifies = any(
+            _column_words(column.name) & _PERSON_COLUMN_WORDS
+            for column in tree.find_all(exp.Column)
+        )
+        if not identifies or tree.find(exp.Distinct, exp.Group) is None:
+            yield AuditFinding(
+                "measure_not_in_data",
+                "The question counts different people, but the query counts no "
+                "column that identifies a person.",
+            )
 
 
 def _calculation(

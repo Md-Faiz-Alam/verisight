@@ -187,6 +187,20 @@ test("an answer with no checked number says so", async ({ page }) => {
   await expect(page.locator(".notice.warn")).toContainText("does not show one");
 });
 
+test("an explained refusal is not called a failure", async ({ page }) => {
+  const refusal = {
+    ...answer("not_verified", "unverified", null),
+    status: "complete",
+    answer: "The file has no year information, so the total for 2008 cannot be found.",
+  };
+  await stub(page, () => ({ json: refusal }));
+  await openWorkspace(page);
+  await ask(page, "What was the total in 2008?");
+
+  await expect(page.locator(".answer-num")).toHaveCount(0);
+  await expect(page.locator(".notice.warn")).toHaveText("No number was given. The answer above explains why.");
+});
+
 test("an answer computed without AI shows its number and no model calls", async ({ page }) => {
   const direct = { ...answer("computed", "verified", "350"), model_calls: [], cross_check: null };
   await stub(page, () => ({ json: direct }));

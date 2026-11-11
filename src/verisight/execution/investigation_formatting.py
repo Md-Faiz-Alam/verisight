@@ -8,7 +8,10 @@ from verisight.evidence import (
     freeze_evidence,
 )
 from verisight.execution.context import QueryRelation
-from verisight.execution.formatting import QueryContextFormatter
+from verisight.execution.formatting import (
+    QueryContextFormatter,
+    format_coded_years,
+)
 from verisight.execution.investigation import (
     FailedQueryAttempt,
     InvestigationState,
@@ -132,7 +135,7 @@ class InvestigationStateFormatter:
         for relation in context.relations:
             sections.append(self._format_relation(relation))
 
-        return "\n\n".join(sections)
+        return "\n\n".join(sections) + format_coded_years(context)
 
     @staticmethod
     def _format_relation(relation: QueryRelation) -> str:

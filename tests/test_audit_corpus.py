@@ -191,7 +191,7 @@ PAIRS = {
         "What did the orders cost altogether?",
         ALL_TOTAL,
         "SELECT SUM(discount) FROM orders",
-        False,
+        True,
     ),
     "opposite_filter": Pair(
         "How many orders did not ship?",

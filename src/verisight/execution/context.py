@@ -157,6 +157,61 @@ class ObservedTotalRows:
 
 
 _MAX_TOTAL_ROWS = 20
+_MAX_YEAR_CODES = 20
+_MAX_CODED_COLUMNS = 10
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedCodedYears:
+    """An integer column whose every value matches exactly one year of a date.
+
+    Derived from the loaded rows, such as ``yr`` 0 holding only 2011 dates. It is
+    evidence for planning, not a business rule.
+    """
+
+    relation: str
+    column: str
+    date_column: str
+    years: tuple[tuple[int, int], ...]
+
+
+def _coded_years(
+    data: pd.DataFrame, relation: "QueryRelation"
+) -> list[ObservedCodedYears]:
+    dates = [
+        column.name
+        for column in relation.columns
+        if column.logical_type is LogicalType.DATETIME
+    ]
+    found: list[ObservedCodedYears] = []
+    for column in relation.columns:
+        if column.logical_type is not LogicalType.INTEGER or not dates:
+            continue
+        counts = data[column.name].value_counts()
+        codes = counts.index
+        plain_years = all(1900 <= int(code) <= 2100 for code in codes)
+        # A code repeats across rows; a measure that happens to be unique does not.
+        if not 1 < len(codes) <= _MAX_YEAR_CODES or plain_years or counts.min() < 2:
+            continue
+        for date in dates:
+            pairs = (
+                pd.DataFrame({"code": data[column.name], "year": data[date].dt.year})
+                .dropna()
+                .drop_duplicates()
+            )
+            if (
+                len(pairs) == len(codes)
+                and pairs["code"].is_unique
+                and pairs["year"].is_unique
+            ):
+                years = tuple(
+                    sorted((int(code), int(year)) for code, year in pairs.to_numpy())
+                )
+                found.append(
+                    ObservedCodedYears(relation.relation_name, column.name, date, years)
+                )
+                break
+    return found
 
 
 def _complete_string_values(
@@ -199,6 +254,7 @@ class QueryContext:
     population: tuple[PopulationFilter, ...] = ()
     observed_categories: tuple[ObservedCategoryValues, ...] = ()
     total_rows: tuple[ObservedTotalRows, ...] = ()
+    coded_years: tuple[ObservedCodedYears, ...] = ()
     # Complete value sets for advisory review only; never formatted into prompts.
     review_categories: tuple[ObservedCategoryValues, ...] = field(
         default=(), repr=False
@@ -312,9 +368,15 @@ class QueryContextBuilder:
                 review.append(
                     ObservedCategoryValues(relation.relation_name, column.name, values)
                 )
+        coded = [
+            item
+            for table, relation in zip(dataset.tables, context.relations, strict=True)
+            for item in _coded_years(table.data, relation)
+        ][:_MAX_CODED_COLUMNS]
         return replace(
             context,
             observed_categories=tuple(categories),
             total_rows=tuple(totals),
             review_categories=tuple(review),
+            coded_years=tuple(coded),
         )
