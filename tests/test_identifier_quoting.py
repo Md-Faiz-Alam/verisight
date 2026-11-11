@@ -5,10 +5,21 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from verisight.analysis.models import DatasetAnalysis
+from verisight.analysis.result import AnalysisResultBuilder
 from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_repair import GenerativeQueryRepairer
+from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation_compaction import InvestigationCompaction
+from verisight.execution.investigation_prompting import (
+    INVESTIGATION_RELATION_NAMING_RULE,
+    InvestigationPromptBuilder,
+)
+from verisight.execution.repair_prompting import UNKNOWN_RELATION_DIAGNOSTIC
 from verisight.execution.service import AnalyticalExecutionService
 from verisight.ingestion.models import LoadedDataset, LoadedTable, SourceMetadata
+from verisight.ingestion.schema import DatasetSchema
+from verisight.profiling.models import DatasetProfile
 
 
 class RecordingClient:
@@ -105,3 +116,56 @@ def test_quoted_identifiers_execute_through_planning_and_repair(
         assert "RUNTIME ERROR:\nSQL execution failed.\n" in repair_client.prompts[0]
     # A SQL-looking column name remains data; the relation is still queryable.
     assert service.execute('SELECT COUNT(*) AS "n" FROM "orders"').rows == ((3,),)
+
+
+def test_a_display_name_in_the_sql_is_explained_to_the_repairer() -> None:
+    """The planner copied a sheet name; the repair must learn why it failed."""
+    source = SourceMetadata(
+        path=Path("houses.xlsx"),
+        file_name="houses.xlsx",
+        file_extension=".xlsx",
+        file_size_bytes=1,
+    )
+    table = LoadedTable(
+        name="工作表1",
+        data=pd.DataFrame({"house age": [5.0, 10.0, 30.0]}),
+        source=source,
+    )
+    table.relation_name = "table_1"
+    failed_sql = 'SELECT median("house age") AS "m" FROM "工作表1"'
+    planner_client = RecordingClient(failed_sql)
+    repair_client = RecordingClient('SELECT median("house age") AS "m" FROM "table_1"')
+    service = AnalyticalExecutionService(
+        LoadedDataset(tables=[table]),
+        planner=GenerativeQueryPlanner(planner_client),
+        repairer=GenerativeQueryRepairer(repair_client),
+    )
+
+    execution = service.run("What is the median house age?")
+
+    assert execution.result.rows == ((10.0,),)
+    assert (
+        f"RUNTIME ERROR:\n{UNKNOWN_RELATION_DIAGNOSTIC}\n" in (repair_client.prompts[0])
+    )
+
+
+@pytest.mark.parametrize("compacted", [False, True])
+def test_the_investigator_is_told_to_name_relations_by_identifier(
+    compacted: bool,
+) -> None:
+    analysis = AnalysisResultBuilder().build(
+        DatasetAnalysis(
+            sources=(),
+            schema=DatasetSchema(tables=()),
+            profile=DatasetProfile(tables=()),
+            issues=(),
+        )
+    )
+    state = InvestigationState(question="What is the median?", analysis=analysis)
+    prompt = (
+        InvestigationCompaction().investigator_prompt(state)
+        if compacted
+        else InvestigationPromptBuilder().build(state)
+    )
+
+    assert INVESTIGATION_RELATION_NAMING_RULE in prompt

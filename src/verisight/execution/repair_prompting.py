@@ -7,9 +7,24 @@ from verisight.execution.prompt_budget import PromptBudget
 from verisight.execution.prompting import ANALYTICAL_SCOPE_RULES, METRIC_SCALE_RULES
 from verisight.execution.repair import QueryRepairRequest
 
+# Raised by VeriSight's own relation check, so its meaning is known. The name it
+# quotes is model-written and is not repeated; the fixed advice is enough.
+_UNREGISTERED_RELATION = re.compile(
+    r"^Analytical query execution failed: relation '.*' is not registered\.$",
+    re.DOTALL,
+)
+UNKNOWN_RELATION_DIAGNOSTIC = (
+    "SQL unknown_relation error: FROM or JOIN names a relation that is not in "
+    "AVAILABLE DATA. Use a RELATION identifier exactly as given, never a DISPLAY "
+    "NAME, sheet name or file name."
+)
+
 
 def _safe_repair_diagnostic(error: str) -> str:
     """Return a bounded diagnostic category without raw runtime details."""
+
+    if _UNREGISTERED_RELATION.match(error):
+        return UNKNOWN_RELATION_DIAGNOSTIC
 
     match = re.match(
         r"^(Binder|Catalog|Parser|Conversion|Type|Out of Range) Error:",

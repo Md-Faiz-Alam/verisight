@@ -181,7 +181,16 @@ No mutable per-investigation context is stored on the execution service.
 
 Planner and repair prompts specify double-quoted identifiers, exact supplied
 names, and the distinction between relation identifiers and display names.
-Quoting does not authorize an unavailable relation.
+Quoting does not authorize an unavailable relation. Both investigator prompts
+also ask for relation identifiers in sub-questions, because the planner copies
+the name it is given: in the third comparison, a workbook whose only sheet had a
+non-English name lost three answerable questions when sub-questions used the
+sheet name.
+
+The repairer sees only a fixed category for a runtime error, never its raw text.
+For a relation that is not registered, that category names the problem and says
+to use a RELATION identifier, without repeating the model-written name. Before,
+it read only "SQL execution failed.", so repairs kept the same wrong name.
 
 Expected SQL parsing and source-resolution errors, including duplicate aliases,
 become `QueryValidationError`. Relation analysis must succeed before execution;

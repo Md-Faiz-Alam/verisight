@@ -32,6 +32,12 @@ INVESTIGATION_STEP_BUDGET_RULES = (
     "comparison group or period to complete an answer.\n"
 )
 
+INVESTIGATION_RELATION_NAMING_RULE = (
+    "- When a question names a relation, use its RELATION identifier exactly as "
+    "given, never its DISPLAY NAME, sheet name or file name. The SQL planner "
+    "copies the name it is given, and only RELATION identifiers can be queried.\n"
+)
+
 INVESTIGATION_DECLINE_RULES = (
     "- not_in_data: stop without a number when the quantity the original "
     "question asks for is recorded in no column and cannot be calculated from "
@@ -230,7 +236,8 @@ class InvestigationPromptBuilder:
             "original question.\n"
             "- Use only relations and columns present in QUERYABLE DATASET "
             "STRUCTURE when formulating analytical questions.\n"
-            "- Do not request raw row samples solely to learn what columns "
+            + INVESTIGATION_RELATION_NAMING_RULE
+            + "- Do not request raw row samples solely to learn what columns "
             "or relations exist when the supplied dataset structure already "
             "provides that information.\n"
             "- Formulate analytical questions according to the meaning of "
