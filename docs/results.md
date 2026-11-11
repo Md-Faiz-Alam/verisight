@@ -49,7 +49,7 @@ flowchart LR
 
 Gemini never supplies a final number on its own. Each number must cite a cell of
 an executed query, and the verifier compares the two exactly (see
-[Verification and narrative audit](../README.md#verification-and-narrative-audit)).
+[Verification and narrative audit](guide.md#verification-and-narrative-audit)).
 
 ## Evaluations
 

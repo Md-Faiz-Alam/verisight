@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from verisight import __version__
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.analytics.dashboard import (
     DashboardBuilder,
@@ -507,7 +508,7 @@ def create_app(
     app = FastAPI(
         title="VeriSight",
         summary="Ask questions about tabular data and get SQL-verified answers.",
-        version="0.2.0",
+        version=__version__,
         lifespan=lifespan,
     )
     app.add_middleware(
@@ -534,17 +535,25 @@ def create_app(
             return forwarded.split(",")[-1].strip()
         return str(getattr(request.client, "host", "unknown"))
 
-    def analyze(paths: tuple[Path, ...]) -> dict[str, object]:
+    def analyze(
+        paths: tuple[Path, ...],
+    ) -> tuple[dict[str, object], DashboardBuilder | None]:
+        """Read the files once for both the profile and the charts."""
         engine = factory(
             core.model_copy(
                 update={"allow_llm_data_disclosure": False, "gemini_api_key": None}
             )
         )
         hints: list[str] = []
+        built: list[DashboardBuilder] = []
 
         def load() -> DatasetAnalysisResult:
             try:
-                return engine.analyze(paths)
+                dataset = engine.load(paths)
+                with suppress(Exception):
+                    # Charts are optional here; opening them later tries again.
+                    built.append(engine.dashboard_builder(dataset))
+                return engine.analyze(dataset)
             except Exception as exc:
                 hint = _load_hint(exc)
                 if hint is not None:
@@ -561,7 +570,7 @@ def create_app(
                 _ENGINE_STATUS.get(report.code, 422), report.code.value, message
             )
         assert operation.value is not None
-        return _profile_view(operation.value)
+        return _profile_view(operation.value), (built[0] if built else None)
 
     def reserve() -> tuple[str, Path]:
         try:
@@ -579,23 +588,24 @@ def create_app(
         size_bytes = sum(path.stat().st_size for path in paths)
         datasets.make_room(size_bytes)
         try:
-            profile = await run_in_threadpool(analyze, tuple(paths))
+            profile, builder = await run_in_threadpool(analyze, tuple(paths))
         except BaseException:
             datasets.release(dataset_id)
             raise
         finally:
             # The loaded file sits in reference cycles until collected.
             gc.collect()
-        datasets.add(
-            StoredDataset(
-                dataset_id=dataset_id,
-                directory=directory,
-                paths=tuple(paths),
-                created=clock(),
-                profile=profile,
-                size_bytes=size_bytes,
-            )
+        stored = StoredDataset(
+            dataset_id=dataset_id,
+            directory=directory,
+            paths=tuple(paths),
+            created=clock(),
+            profile=profile,
+            size_bytes=size_bytes,
         )
+        datasets.add(stored)
+        if builder is not None:
+            datasets.prepared(stored, lambda: builder)
         return {
             "dataset_id": dataset_id,
             "files": [
@@ -842,15 +852,18 @@ def create_app(
             )
         try:
             return await run_in_threadpool(
-                investigate, stored.paths, question, body.answer_type, key
+                investigate, stored, question, body.answer_type, key
             )
         finally:
             slots.release()
 
     def investigate(
-        paths: tuple[Path, ...], question: str, answer_type: str, key: str
+        stored: StoredDataset, question: str, answer_type: str, key: str
     ) -> dict[str, object]:
         contract = _CONTRACTS[answer_type]
+        # The upload is usually loaded already; reading it again costs seconds.
+        loaded = run_public_operation(lambda: prepared_builder(stored).dataset).value
+        paths = stored.paths if loaded is None else loaded
         engine = factory(
             core.model_copy(
                 update={

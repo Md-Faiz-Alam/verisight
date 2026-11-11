@@ -49,6 +49,19 @@ python -m pytest --cov=verisight --cov=scripts --cov-report=term-missing --cov-f
 git diff --check
 ```
 
+The website's tests run in `frontend/`. The browser tests start a Vite server and
+stub every API call, so they need no Python server and no Gemini key. After
+changing the interface, rebuild it and commit `src/verisight/web/static`:
+
+```powershell
+npm test
+npm run test:e2e
+npm run build
+```
+
+Peak memory under a full local workload, with scripted replies and generated data,
+is measured with `python evaluation\measure_memory.py --out <new file>.json`.
+
 Include `scripts` explicitly in mypy and coverage commands. The project enables
 branch coverage. Full coverage is an engineering gate, not proof of analytical
 correctness.

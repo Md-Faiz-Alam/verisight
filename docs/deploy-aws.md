@@ -52,7 +52,7 @@ docker build -t verisight-web .
 docker run --rm -p 8000:8000 verisight-web
 ```
 
-Open <http://localhost:8000>, click **Try the demo**, and check that the data
+Open <http://localhost:8000>, click **Open the sample workspace**, and check that the data
 panel appears. Stop it with `Ctrl+C`.
 
 ## 2. Create the container service

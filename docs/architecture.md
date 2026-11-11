@@ -620,6 +620,40 @@ Saved reports include revision, tracked-change status, settings, timings,
 audits, and observed generation calls when available. Older reports may lack
 new fields. Missing telemetry is not evidence of zero provider calls.
 
+## Trust assessment and the website
+
+The website, and the command line with `--cross-check`, decide how far each answer
+can be trusted. The levels and their meaning are listed in the
+[README](../README.md#trust-levels).
+
+1. **Answers without AI.** `execution/direct.py` compiles plainly worded questions
+   to SQL when every part matches a real column, value, year or calculation, and
+   asks which column was meant when a value fits several. Anything else goes to the
+   investigation.
+2. **Number check.** The answer's number must equal a cell of an executed query.
+3. **SQL audit.** `execution/sql_audit.py` reads the query's structure against the
+   loaded rows: joins that repeat rows, filters on values the column lacks, named
+   values left out, wrong calculations, missing periods (reading year codes from a
+   date column), thresholds and ranges, reversed subtractions, counts of rows given
+   for "how many different", over-broad `LIKE`, and a measure the data does not
+   hold, such as a price taken from a column holding no money.
+4. **Second query.** `execution/cross_check.py` plans a query from the question
+   alone, told to reach the number by another route. A repeat of the first query,
+   apart from aliases and order, adds no evidence. When the question states decimal
+   places, both numbers are compared at those places.
+5. **Level.** `execution/trust_assessment.py` combines these: any failed check gives
+   "Needs review", and only all passed checks give "Verified". A measure the data
+   does not hold gives "Not verified", and the website replaces the model's sentence
+   so that no number is shown.
+
+The data description sent to Gemini also names years stored as codes, such as `yr`
+0 for dates in 2011, when a date column proves the meaning.
+
+The website keeps each upload in a temporary folder, loads it once for the profile,
+charts and questions, and frees loaded copies beyond 60 MB of files or 4 uploads.
+Uploads expire after 60 minutes, and folders left by a crash are removed at the next
+start. Two questions run at once; others get a clear "busy" reply.
+
 ## CI and remaining architecture work
 
 `.github/workflows/ci.yml` runs offline gates on Windows and Linux with Python

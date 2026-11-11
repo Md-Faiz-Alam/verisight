@@ -215,11 +215,21 @@ class VeriSight:
             population=population,
         )
 
+    def load(self, paths: str | Path | Iterable[str | Path]) -> LoadedDataset:
+        """Read and clean files once, for reuse by the methods below."""
+        return self._load_dataset(paths)
+
     def _load_dataset(
         self,
-        paths: str | Path | Iterable[str | Path],
+        paths: str | Path | Iterable[str | Path] | LoadedDataset,
     ) -> LoadedDataset:
-        """Normalize public path inputs and require at least one file path."""
+        """Normalize public path inputs and require at least one file path.
+
+        A dataset that is already loaded is used as it is.
+        """
+
+        if isinstance(paths, LoadedDataset):
+            return paths
 
         normalized: tuple[str | Path, ...]
 
@@ -245,7 +255,7 @@ class VeriSight:
 
     def analyze(
         self,
-        paths: str | Path | Iterable[str | Path],
+        paths: str | Path | Iterable[str | Path] | LoadedDataset,
     ) -> DatasetAnalysisResult:
         """Load and analyze one or more dataset files."""
 
@@ -255,7 +265,7 @@ class VeriSight:
         return self._result_builder.build(analysis)
 
     def dashboard_builder(
-        self, paths: str | Path | Iterable[str | Path]
+        self, paths: str | Path | Iterable[str | Path] | LoadedDataset
     ) -> DashboardBuilder:
         """Load files for dashboards, which are computed without a model."""
         return DashboardBuilder(
@@ -331,7 +341,7 @@ class VeriSight:
 
     def investigate(
         self,
-        paths: str | Path | Iterable[str | Path],
+        paths: str | Path | Iterable[str | Path] | LoadedDataset,
         question: str,
         *,
         max_steps: int = 5,

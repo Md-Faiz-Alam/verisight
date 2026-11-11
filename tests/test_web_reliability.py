@@ -259,14 +259,14 @@ def test_eviction_removes_only_the_oldest_upload(temporary: Path) -> None:
 def test_a_missing_upload_folder_is_a_clear_error_without_a_number(
     temporary: Path,
 ) -> None:
+    store = DatasetStore(ttl_seconds=600, max_datasets=5)
     app = create_app(
-        settings=_settings(),
-        web=WebSettings(),
-        factory=_engine,
+        settings=_settings(), web=WebSettings(), factory=_engine, store=store
     )
 
     with TestClient(app) as client:
         dataset_id = _upload(client)
+        store.make_room(10**12)  # no loaded copy left in memory
         folder = _folders(temporary)[0]
         shutil.rmtree(folder)
         status, body = _ask(client, dataset_id)
@@ -499,3 +499,49 @@ def test_each_upload_frees_its_temporary_copy(
         _upload(client)
 
     assert calls
+
+
+def test_an_upload_is_read_once_for_profile_charts_and_questions(
+    temporary: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from verisight.ingestion.service import DatasetLoader
+
+    reads: list[int] = []
+    real = DatasetLoader.load
+
+    def counted(self: DatasetLoader, paths: Any) -> Any:
+        reads.append(1)
+        return real(self, paths)
+
+    monkeypatch.setattr(DatasetLoader, "load", counted)
+    app = create_app(settings=_settings(), web=WebSettings(), factory=_engine)
+
+    with TestClient(app) as client:
+        dataset_id = _upload(client)
+        chart = client.post(f"/api/datasets/{dataset_id}/dashboard", json={})
+        status, body = _ask(client, dataset_id)
+
+    assert chart.status_code == 200
+    assert status == 200
+    assert body["claims"][0]["verification"]["actual"] in (350, "350")
+    assert len(reads) == 1
+
+
+def test_a_question_still_works_when_the_loaded_copy_cannot_be_made(
+    temporary: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(self: VeriSight, paths: Any) -> Any:
+        raise RuntimeError("charts unavailable")
+
+    store = DatasetStore(ttl_seconds=600, max_datasets=5)
+    app = create_app(
+        settings=_settings(), web=WebSettings(), factory=_engine, store=store
+    )
+    with TestClient(app) as client:
+        dataset_id = _upload(client)
+        store.make_room(10**12)
+        monkeypatch.setattr(VeriSight, "dashboard_builder", broken)
+        status, body = _ask(client, dataset_id)
+
+    assert status == 200
+    assert body["claims"][0]["verification"]["actual"] in (350, "350")

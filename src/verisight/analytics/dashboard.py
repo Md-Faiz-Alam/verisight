@@ -553,6 +553,8 @@ class DashboardBuilder:
         self._dataset = dataset
         self._executor = executor
         self.answerer = DirectAnswerer(dataset, executor)
+        # Shared with questions, so a loaded upload is not read again.
+        self.dataset = dataset
         self._schema = SchemaInferer().infer_dataset(dataset)
         self._plans: dict[str, _Plan] = {}
         self._links: tuple[TableLink, ...] | None = None

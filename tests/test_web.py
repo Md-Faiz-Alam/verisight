@@ -486,7 +486,8 @@ def test_dashboard_loads_a_dataset_once() -> None:
         assert client.post(url, json={}).status_code == 200
         assert client.post(url, json={}).status_code == 200
 
-    assert len(made) == before + 1
+    # The upload already loaded the files, so the charts read nothing again.
+    assert len(made) == before
 
 
 @pytest.mark.parametrize(
