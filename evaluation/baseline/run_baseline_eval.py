@@ -267,7 +267,9 @@ def answer_numbers(app: Any, question: Question, data_dir: Path) -> Answer:
             "violations": list(result.assess_output(contract).violations),
         }
         for failure in (result.investigation_failure, result.synthesis_failure):
-            if failure is not None and str(failure.kind.value).startswith("provider"):
+            # Investigation failures store their kind as text, synthesis
+            # failures as an enum; str() reads both the same way.
+            if failure is not None and str(failure.kind).startswith("provider"):
                 return Answer(provider_error=True, details=details)
         accepted = result.assess_output(contract).accepted
         if result.status is not InvestigationStatus.COMPLETE or not accepted:

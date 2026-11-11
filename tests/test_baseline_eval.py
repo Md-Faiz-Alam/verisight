@@ -12,7 +12,7 @@ import pytest
 
 from verisight import VeriSight
 from verisight.config import Settings
-from verisight.execution.gemini import GeminiGenerationError
+from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
 from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
@@ -536,3 +536,29 @@ def test_a_hidden_number_is_not_counted_as_shown() -> None:
     answer = runner.read_website_answer(200, reply, _question())
 
     assert (answer.number, answer.visibility) == (None, "none")
+
+
+@pytest.mark.parametrize(
+    ("error", "provider"),
+    [
+        (GeminiTransientError("busy"), True),
+        ("not json", False),
+    ],
+    ids=["provider", "other"],
+)
+def test_numbers_setup_reads_an_investigation_failure_after_a_query(
+    tmp_path: Path, error: Exception | str, provider: bool
+) -> None:
+    root = _root(tmp_path, "")
+    decide = json.dumps({"action": "investigate", "reasoning": "r", "question": "Q"})
+    engine = VeriSight(
+        settings=SETTINGS,
+        planner=GenerativeQueryPlanner(_Script([SQL])),
+        investigator=GenerativeInvestigator(_Script([decide, error])),
+        synthesizer=StructuredInvestigationSynthesizer(_Script([])),
+    )
+
+    answer = runner.answer_numbers(engine, _question(), root / "data")
+
+    assert answer.number is None
+    assert answer.provider_error is provider
