@@ -102,8 +102,10 @@ does not define. A declined question runs no query and gets "Not verified" with 
 number. The model's reason is shown only when it states no number.
 
 The second query may refuse in the same two cases. A refusal counts as a failed
-check, so the answer is "Needs review" and keeps its number with a warning. Neither
-step has been measured on new questions.
+check, so the answer is "Needs review" and keeps its number with a warning. In the
+third comparison the model declined 9 of the 10 questions without a valid answer and
+none of the 20 answerable ones. The second query never refused, so that step is
+still unmeasured.
 
 An exact question answered by fixed rules uses no model, so it has no second query
 and is labelled "Computed without AI". When the SQL audit finds that the data does
@@ -125,10 +127,10 @@ result existed. A *regression* target protects a result that was already known.
 | D2 | Regression | Ambiguous damage is rejected or flagged, never guessed | passed | [`test_damaged_files.py`](../tests/test_damaged_files.py) |
 | A1 | Regression | Missed mistakes: of the 31 frozen wrong queries, at least 75% are caught | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
 | A2 | Regression | False warnings: none on the 31 frozen correct queries | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
-| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
-| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | passed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
-| C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
-| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#comparison-with-plain-gemini-30-questions-4-unseen-datasets) |
+| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#third-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | passed | [`results.md`](results.md#third-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#third-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#third-comparison-with-plain-gemini-30-new-questions-4-new-files) |
 | R1 | Predeclared | Concurrency, expiry, eviction, restart and crash-recovery tests pass | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R2 | Predeclared | A failed mandatory check can never produce "Verified"; evidence already computed stays visible with its incomplete status | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R3 | Predeclared | A provider failure never produces a number that was not computed | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
@@ -137,7 +139,9 @@ result existed. A *regression* target protects a result that was already known.
 
 C1 to C4 were first measured at commit `ea707d4`, where C2 and C3 failed. After
 fixes, a second comparison on new questions at `a335001` passed C2 at exactly the
-10-point limit, and C3 failed again at 33%.
+10-point limit, and C3 failed again at 33%. A third comparison on new questions at
+`5e9f76a` showed no bad number at all, passed C2 at exactly the limit again, and
+failed C3 at 35%. The status column shows the third comparison.
 
 M1 was measured on this computer with scripted replies and generated data: five
 uploads of one 19.5 MB file with charts, two questions at once with second queries,

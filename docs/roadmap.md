@@ -18,15 +18,16 @@ it can be trusted, and gives no number rather than a misleading one. The
   memory measurement; and browser tests at desktop and phone sizes.
 - A frozen comparison with Gemini writing SQL alone, and a round of testing as
   different kinds of user. Both are in [Live results](results.md).
+- Declining questions the data cannot answer or that need a definition, before any
+  query. In the third comparison no answer showed a bad number, and no answerable
+  question was declined.
 
 ## Next, in order
 
-1. **Fewer numbers where none should exist, and fewer false warnings.** In the
-   second comparison VeriSight gave a number on 6 of 10 questions with no valid
-   answer, and warned on 6 of 18 correct answers. The model can now decline a
-   question the data cannot answer, or one that needs a definition, before any
-   query is written, and the second query can refuse too. Neither has been
-   measured on new questions, so how often they decline wrongly is unknown.
+1. **Fewer false warnings.** In the third comparison VeriSight gave no number on
+   all 10 questions without a valid answer, but warned on 6 of 17 correct answers,
+   5 of them because the second query repeated the first. Those five need a second
+   query that reaches simple answers by a genuinely different route.
 2. **Ask about vague questions.** A question such as "how many count as high
    quality?" should get a clarifying question, not an assumption or an empty result.
 3. **Read which row a grouped answer cites,** so that a correct answer read from one

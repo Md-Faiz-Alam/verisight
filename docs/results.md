@@ -334,6 +334,69 @@ repeated the first.
 
 These are one run of 30 questions written by the project's own side.
 
+### Third comparison with plain Gemini (30 new questions, 4 new files)
+
+Taiwan real-estate valuations (Excel, 414 rows), wheat seed measurements (CSV, 210
+rows), and a pair of related files from a desert rodent survey: 1,434 capture
+records joined to 54 species. None was used before, though the seeds resemble the
+earlier raisins in measuring kernel shape. The questions were prepared for the
+project with 20 answerable, 5 ambiguous and 5 unanswerable, answers worked out
+separately and wording kept away from the problems fixed so far. No question was
+tried in VeriSight or Gemini first. Fractional answers allow 0.01, to permit
+ordinary rounding to two places; earlier comparisons allowed 0.000001.
+
+Questions, data and runner were frozen by hash at `5e9f76a`, which adds three
+changes: the model may decline a question the data cannot answer or one that needs
+a definition, before any query; the second query may refuse in the same cases; and
+the recovery query runs after any claim shape mismatch.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 19 | 17 | 17 |
+| Wrong number, of 20 answerable | 0 | 0 | 0 |
+| No number, of 20 answerable | 1 | 3 | 3 |
+| Number given where none exists, of 10 | 5 | 0 | 0 |
+| Correctly gave no number, of 10 | 5 | 10 | 10 |
+| Bad numbers shown prominently | 5 | 0 | 0 |
+| Bad numbers visible anywhere | 5 | 0 | 0 |
+| Correct answers carrying a warning | 0 of 19 | 0 of 17 | 6 of 17 |
+| Gemini calls | 30 | 114 | 130 |
+| Median seconds per question | 11 | 31 | 30 |
+
+Against the targets, full VeriSight showed no bad number (C1 passed) and delivered
+85% of answerable questions against plain Gemini's 95%, exactly the 10 points
+allowed (C2 passed). It warned on 35% of its correct answers where 10% is allowed
+(C3 failed).
+
+- Nine of the 10 questions without a valid answer were declined in one Gemini call
+  each, before any query. The tenth ended with no number after six calls. No
+  answerable question was declined.
+- Five of the six warnings were "Number matches SQL only": on simple questions such
+  as an average of one column, the second query wrote the same SQL as the first, so
+  it added no independent evidence. The sixth came from the audit flagging the
+  second query, not the answer.
+- All three missed answers were on the Excel file, whose only sheet is named
+  `工作表1` ("Sheet 1"). The investigator sometimes named that sheet in its
+  sub-questions, the planner copied it into `FROM`, and the table is registered as
+  `table_1`. The repairer was told only "SQL execution failed.", so each repair kept
+  the wrong name. Plain Gemini, which gets the original question, answered two of
+  the three. Re-asked live, the missed questions failed the same way, and one
+  passed when the investigator happened to use `table_1`. This was fixed after the
+  run in `64896ea`: the repairer is now told the table is unknown and to use the
+  identifier. Re-asked once more after the fix, the median question was named
+  wrongly again, repaired to `table_1`, and answered correctly with 16.1.
+- The run stopped at question 21 of the number-checks setup when the runner, not
+  VeriSight, crashed on an investigation failure whose kind it read wrongly. The
+  runner was fixed in `06161a2`, which changes nothing else, and re-frozen with the
+  same question and data hashes. The run resumed from question 21; no answered
+  question was asked again. Two full-VeriSight questions lost to provider errors
+  were retried once, as the runner always does, and both came back correct with a
+  warning.
+
+Getting no bad number on 10 questions without a valid answer still allows a true
+rate of up to about 30%. These are one run of 30 questions prepared on the
+project's own side.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10
@@ -341,6 +404,13 @@ questions for the second query's different route, 6 for simple questions and 10 
 second model, every number was right or withheld: 25 right numbers and 1 question with
 no number, which a later fix addressed. Other checks re-asked single questions after
 a fix.
+
+Before the third comparison, the decline step was checked on 20 questions from the
+second comparison, all 10 without a valid answer and 10 answerable ones. Nine of the
+10 got no number, against 4 in that comparison, and no answerable question was
+declined. The one remaining number answered when orders arrived from the date they
+were shipped, and it was shown as verified. Those questions were already known, so
+this was a check, not a score.
 
 ## Examples from live runs
 
