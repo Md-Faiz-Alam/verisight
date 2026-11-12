@@ -397,6 +397,30 @@ Getting no bad number on 10 questions without a valid answer still allows a true
 rate of up to about 30%. These are one run of 30 questions prepared on the
 project's own side.
 
+**A change made after this run: the single-route rule.** A repeated second query
+now passes when the query has only one route and a different model wrote the
+second query (see the [guide](guide.md#independent-cross-check)). Before it was
+adopted, the rule was replayed offline, without model calls, on the saved answers
+of all three comparisons:
+
+| Saved answers | First version of the rule | Version adopted |
+| --- | --- | --- |
+| First comparison | no change | no change |
+| Second comparison | 3 correct answers verified, **1 bad number verified** | 2 correct answers verified, no bad number |
+| Third comparison | 5 correct answers verified | 5 correct answers verified |
+
+The first version would have shown a bad number as verified. Asked *What
+percentage of orders arrived at the customer by the required date?*, which the
+data cannot answer because it holds no arrival date, both models wrote
+`shippedDate <= requiredDate`, the same wrong definition. The adopted version
+therefore also excludes any query that compares or combines two columns. That
+exclusion was written after seeing this answer, and it also keeps a warning on one
+correct answer, an average of days between ordering and shipping.
+
+On the third comparison's saved answers, the adopted version leaves 1 warning on 17
+correct answers, about 6%. These answers helped design the rule, so this is not a
+C3 result: that needs a fourth comparison on new questions.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10

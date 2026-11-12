@@ -399,7 +399,9 @@ class VeriSight:
             claim_output_contract=claim_output_contract,
             cross_checker=(
                 IndependentCrossChecker(
-                    execution_service.with_planner(self._cross_check_planner(planner))
+                    execution_service.with_planner(self._cross_check_planner(planner)),
+                    separate_model=self._settings.gemini_cross_check_model
+                    not in (None, self._settings.gemini_model),
                 )
                 if cross_check
                 else None

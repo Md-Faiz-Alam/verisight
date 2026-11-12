@@ -116,8 +116,13 @@ class CrossCheck:
     ``identical_sql`` is true when both queries are the same apart from column
     and table aliases, identifier quoting and the order of AND conditions. The
     second query then
-    repeated the first formulation instead of reaching the number another way,
-    so its agreement adds no independent evidence.
+    repeated the first formulation instead of reaching the number another way.
+
+    ``single_route`` is recorded for a repeat only. It is true when the query
+    reads one table with no join, grouping, subquery, distinct values or window,
+    so no other route could test anything beyond the same choice of rows, column
+    and calculation. ``separate_model`` is true when another model wrote the
+    second query. A repeat counts as evidence only when both are true.
     """
 
     status: CrossCheckStatus
@@ -126,13 +131,18 @@ class CrossCheck:
     primary_value: Decimal | None = None
     independent_value: Decimal | None = None
     identical_sql: bool | None = None
+    single_route: bool | None = None
+    separate_model: bool | None = None
 
 
 class IndependentCrossChecker:
     """Plan, run and compare one blind recalculation of an answer."""
 
-    def __init__(self, runner: AnalyticalQueryRunner) -> None:
+    def __init__(
+        self, runner: AnalyticalQueryRunner, *, separate_model: bool = False
+    ) -> None:
         self._runner = runner
+        self._separate_model = separate_model
 
     def check(self, question: str, answer: Decimal, primary_sql: str) -> CrossCheck:
         """Compare ``answer`` with a query planned from ``question`` alone.
@@ -164,8 +174,10 @@ class IndependentCrossChecker:
                 sql=sql,
                 primary_value=answer,
                 identical_sql=False,
+                separate_model=self._separate_model,
             )
         identical = _canonical_sql(sql) == _canonical_sql(primary_sql)
+        single_route = _single_route(primary_sql) if identical else None
         independent = _answer_cell(execution.result)
         if independent is None:
             return CrossCheck(
@@ -174,6 +186,8 @@ class IndependentCrossChecker:
                 sql=sql,
                 primary_value=answer,
                 identical_sql=identical,
+                single_route=single_route,
+                separate_model=self._separate_model,
             )
         agreed = _same_number(answer, independent) or _same_when_rounded(
             question, answer, independent
@@ -185,6 +199,8 @@ class IndependentCrossChecker:
             primary_value=answer,
             independent_value=independent,
             identical_sql=identical,
+            single_route=single_route,
+            separate_model=self._separate_model,
         )
 
 
@@ -264,6 +280,99 @@ def _same_when_rounded(question: str, first: Decimal, second: Decimal) -> bool:
         return _round_for_policy(first, policy) == _round_for_policy(second, policy)
     except DecimalException:
         return False
+
+
+# Structures where another route can expose a mistake the obvious one hides:
+# rows repeated by a join, the grain of a group, a nested population, values
+# counted once, or a row picked by order.
+_ROUTE_STRUCTURES: tuple[type[exp.Expression], ...] = (
+    exp.Join,
+    exp.Group,
+    exp.Having,
+    exp.Window,
+    exp.Distinct,
+    exp.With,
+    exp.Subquery,
+    exp.SetOperation,
+    exp.Lateral,
+    exp.Unnest,
+    # Aggregates that pick one row's value depend on ties and order.
+    exp.ArgMax,
+    exp.ArgMin,
+    exp.First,
+    exp.Last,
+    exp.AnyValue,
+)
+
+
+# Nodes that only join conditions or carry a value along; they relate nothing.
+_COMBINERS: tuple[type[exp.Expression], ...] = (
+    exp.Select,
+    exp.From,
+    exp.Where,
+    exp.Alias,
+    exp.And,
+    exp.Or,
+    exp.Not,
+    exp.Paren,
+    exp.Case,
+    exp.If,
+)
+
+
+def _columns(node: exp.Expression) -> frozenset[str]:
+    return frozenset(column.name.casefold() for column in node.find_all(exp.Column))
+
+
+def _relates_columns(tree: exp.Select, projection: exp.Expression) -> bool:
+    """Return whether the query builds a quantity from two different columns.
+
+    Comparing a column with a value only chooses rows. Comparing or combining
+    two columns, as in ``shipped <= required``, ``price - cost`` or
+    ``SUM(a) / SUM(b)``, defines a new concept, and two models can share the
+    same wrong definition. Such a query is never treated as single-route.
+    """
+    for node in tree.find_all(exp.Expression):
+        # Arithmetic over aggregates is compared aggregate by aggregate below.
+        if isinstance(node, _COMBINERS) or node.find(exp.AggFunc) is not None:
+            continue
+        if len(_columns(node)) > 1:
+            return True
+    outermost = [
+        node
+        for node in projection.find_all(exp.AggFunc)
+        if node.find_ancestor(exp.AggFunc) is None
+    ]
+    # COUNT(*) reads no column; it counts the same rows, so it relates nothing.
+    measures = {_columns(node) for node in outermost} - {frozenset()}
+    return len(measures) > 1
+
+
+def _single_route(sql: str) -> bool:
+    """Return whether no other route could test more than the same choices.
+
+    The query must read one table in one SELECT, return one expression built
+    from aggregates, use none of the structures above, and never relate two
+    columns. Its row conditions may sit in WHERE or inside the aggregate;
+    either way they choose the same rows. This is decided from the SQL alone,
+    never from the question.
+    """
+    tree = sqlglot.parse_one(sql, read="duckdb")
+    if not isinstance(tree, exp.Select) or len(list(tree.find_all(exp.Select))) != 1:
+        return False
+    if tree.find(*_ROUTE_STRUCTURES) is not None:
+        return False
+    if len(list(tree.find_all(exp.Table))) != 1 or len(tree.expressions) != 1:
+        return False
+    projection = tree.expressions[0]
+    if projection.find(exp.AggFunc) is None:
+        return False
+    if any(
+        column.find_ancestor(exp.AggFunc) is None
+        for column in projection.find_all(exp.Column)
+    ):
+        return False
+    return not _relates_columns(tree, projection)
 
 
 def _canonical_sql(sql: str) -> str:

@@ -299,6 +299,17 @@ def read_website_answer(
         "second_query": cross.get("status"),
         "second_value": cross.get("independent_value"),
         "repeated_query": cross.get("identical_sql"),
+        "single_route": cross.get("single_route"),
+        "separate_model": cross.get("separate_model"),
+        "second_sql": cross.get("sql"),
+        "second_query_check": next(
+            (
+                check["status"]
+                for check in trust.get("checks", [])
+                if check["name"] == "second_query"
+            ),
+            None,
+        ),
         "failed_checks": [
             check["name"]
             for check in trust.get("checks", [])
@@ -462,7 +473,11 @@ def second_query_value(
             tally[
                 "caught_a_wrong_answer" if not right else "doubted_a_right_answer"
             ] += 1
-        elif status == "agreed" and details.get("repeated_query") is not True:
+        elif status == "agreed" and (
+            details.get("repeated_query") is not True
+            # A repeat on a query with no other route, from another model.
+            or details.get("second_query_check") == "passed"
+        ):
             tally["confirmed_right" if right else "shared_the_mistake"] += 1
         else:
             tally["added_no_evidence"] += 1

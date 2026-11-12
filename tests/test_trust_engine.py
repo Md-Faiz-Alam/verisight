@@ -2,6 +2,8 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -33,7 +35,10 @@ from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
 from verisight.execution.sql_audit import SqlAudit, audit_sql
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
-from verisight.execution.trust import CheckStatus, TrustLevel, TrustReport
+from verisight.execution.trust import CheckStatus, TrustCheck, TrustLevel, TrustReport
+from verisight.execution.trust_assessment import (
+    _second_query_check as _second_query_check_of,
+)
 from verisight.execution.trust_assessment import assess_trust
 from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.service import DatasetLoader
@@ -755,6 +760,56 @@ def test_second_query_that_repeats_the_first_is_only_a_number_match(
     second = result.trust.checks[3]
     assert second.status is CheckStatus.NOT_ASSESSED
     assert "same way as the first" in second.detail
+
+
+def _second_query_check(cross_check: CrossCheck) -> TrustCheck:
+    # Only the second query's record is read.
+    holder = cast(InvestigationResult, SimpleNamespace(cross_check=cross_check))
+    return _second_query_check_of(holder)
+
+
+@pytest.mark.parametrize(
+    ("single_route", "separate_model", "status"),
+    [
+        (True, True, CheckStatus.PASSED),
+        (True, False, CheckStatus.NOT_ASSESSED),
+        (False, True, CheckStatus.NOT_ASSESSED),
+        (None, None, CheckStatus.NOT_ASSESSED),
+    ],
+)
+def test_a_repeat_counts_only_on_a_single_route_from_another_model(
+    single_route: bool | None, separate_model: bool | None, status: CheckStatus
+) -> None:
+    check = _second_query_check(
+        CrossCheck(
+            CrossCheckStatus.AGREED,
+            "values_match",
+            sql=REPEAT,
+            identical_sql=True,
+            single_route=single_route,
+            separate_model=separate_model,
+        )
+    )
+
+    assert check.status is status
+    if status is CheckStatus.PASSED:
+        assert "another model" in check.detail
+        assert "no other route" in check.detail
+
+
+def test_a_disagreeing_repeat_still_fails() -> None:
+    check = _second_query_check(
+        CrossCheck(
+            CrossCheckStatus.DISAGREED,
+            "values_differ",
+            sql=REPEAT,
+            identical_sql=True,
+            single_route=True,
+            separate_model=True,
+        )
+    )
+
+    assert check.status is CheckStatus.FAILED
 
 
 def test_second_query_agreeing_on_a_flawed_query_is_not_enough(tmp_path: Path) -> None:

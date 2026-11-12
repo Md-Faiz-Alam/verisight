@@ -93,13 +93,19 @@ A check attempted is not always a check completed:
 | --- | --- | --- |
 | Completed | The check ran and passed | Counts toward "Verified" |
 | Failed | The check ran and found a problem | "Needs review" at best |
-| Skipped | The check could not run, for example after a provider failure or deadline, or it only repeated the first query | "Number matches SQL only" at best |
+| Skipped | The check could not run, for example after a provider failure or deadline, or it only repeated the first query on a query with another possible route, or one model wrote both | "Number matches SQL only" at best |
 | Not requested | The command line ran without `--cross-check` | Trust level is `not_run`, with the reason |
 
 Before writing any query, the model may decline a question: because the data does
 not hold what was asked, or because the question depends on a word or comparison it
 does not define. A declined question runs no query and gets "Not verified" with no
 number. The model's reason is shown only when it states no number.
+
+A second query that repeats the first counts as a completed check only for a
+single-route query: one table, one value built from aggregates, no join, grouping,
+subquery, distinct values or window, and no comparison or combination of two
+columns. It must also come from a different model than the first query. See the
+[guide](guide.md#independent-cross-check).
 
 The second query may refuse in the same two cases. A refusal counts as a failed
 check, so the answer is "Needs review" and keeps its number with a warning. In the
@@ -141,7 +147,9 @@ C1 to C4 were first measured at commit `ea707d4`, where C2 and C3 failed. After
 fixes, a second comparison on new questions at `a335001` passed C2 at exactly the
 10-point limit, and C3 failed again at 33%. A third comparison on new questions at
 `5e9f76a` showed no bad number at all, passed C2 at exactly the limit again, and
-failed C3 at 35%. The status column shows the third comparison.
+failed C3 at 35%. The status column shows the third comparison. A change made after
+it, the single-route rule, is expected to lower false warnings; only a fourth
+comparison on new questions can show whether C3 passes.
 
 M1 was measured on this computer with scripted replies and generated data: five
 uploads of one 19.5 MB file with charts, two questions at once with second queries,

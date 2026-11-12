@@ -366,8 +366,25 @@ def test_answer_is_verified_only_when_the_second_query_agrees() -> None:
     assert "WHERE state" in disagreed["cross_check"]["sql"]
 
 
-def test_second_query_that_repeats_the_first_is_not_shown_as_verified() -> None:
-    app = create_app(settings=_settings("server-key"), web=WebSettings())
+@pytest.mark.parametrize(
+    ("second_model", "outcome", "level"),
+    [
+        (None, "unverified", "number_matched"),
+        ("gemini-3.1-flash-lite", "unverified", "number_matched"),
+        ("another-model", "verified", "verified"),
+    ],
+    ids=["same-model-unset", "same-model-named", "another-model"],
+)
+def test_a_repeated_single_route_query_counts_only_from_another_model(
+    second_model: str | None, outcome: str, level: str
+) -> None:
+    settings = Settings(
+        gemini_api_key="server-key",
+        allow_llm_data_disclosure=False,
+        gemini_model="gemini-3.1-flash-lite",
+        gemini_cross_check_model=second_model,
+    )
+    app = create_app(settings=settings, web=WebSettings())
     script = _script("The total is 930.", "930")
     script[-1] = "SELECT SUM(amount) AS cross_check_answer FROM data"
     with TestClient(app) as client:
@@ -379,8 +396,10 @@ def test_second_query_that_repeats_the_first_is_not_shown_as_verified() -> None:
     assert answer["assessment"]["accepted"] is True
     assert answer["cross_check"]["status"] == "agreed"
     assert answer["cross_check"]["identical_sql"] is True
-    assert answer["outcome"] == "unverified"
-    assert answer["trust"]["level"] == "number_matched"
+    assert answer["cross_check"]["single_route"] is True
+    assert answer["cross_check"]["separate_model"] is (second_model == "another-model")
+    assert answer["outcome"] == outcome
+    assert answer["trust"]["level"] == level
 
 
 def test_dashboard_is_computed_without_a_key_and_filters(client: TestClient) -> None:

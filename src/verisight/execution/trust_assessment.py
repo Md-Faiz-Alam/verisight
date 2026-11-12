@@ -70,6 +70,20 @@ def _second_query_check(result: InvestigationResult) -> TrustCheck:
             "was refused: the data may not hold what was asked, or the question "
             "may need a definition.",
         )
+    if (
+        check.status is CrossCheckStatus.AGREED
+        and check.identical_sql
+        and check.single_route
+        and check.separate_model
+    ):
+        return TrustCheck(
+            "second_query",
+            CheckStatus.PASSED,
+            "A second query, written by another model without seeing the first, "
+            "chose the same table, rows, column and calculation. With no join, "
+            "grouping or subquery, no other route could test more than those "
+            "choices.",
+        )
     if check.status is CrossCheckStatus.AGREED and check.identical_sql:
         return TrustCheck(
             "second_query",

@@ -306,35 +306,73 @@ def test_the_summary_reports_every_number_the_targets_need() -> None:
 
 
 def test_the_second_query_is_measured_against_the_written_answers() -> None:
-    questions = _questions(6)
+    questions = _questions(7)
     questions[5] = runner.Question(
         "q5", ("o",), "number", "?", None, "AMBIGUOUS", Decimal(0)
     )
     rows = [
-        ("q0", "wrong_warned", "disagreed", False),
-        ("q1", "correct_warned", "disagreed", False),
-        ("q2", "correct_prominent", "agreed", False),
-        ("q3", "wrong_prominent", "agreed", False),
-        ("q4", "correct_warned", "agreed", True),
-        ("q5", "unsafe_warned", "agreed", False),
+        ("q0", "wrong_warned", "disagreed", False, None),
+        ("q1", "correct_warned", "disagreed", False, "failed"),
+        ("q2", "correct_prominent", "agreed", False, "passed"),
+        ("q3", "wrong_prominent", "agreed", False, "passed"),
+        ("q4", "correct_warned", "agreed", True, "not_assessed"),
+        ("q5", "unsafe_warned", "agreed", False, "passed"),
+        # A single-route repeat written by another model counts.
+        ("q6", "correct_prominent", "agreed", True, "passed"),
     ]
     records: list[dict[str, Any]] = [
         {
             "id": name,
             "outcome": outcome,
             "number": "1",
-            "details": {"second_query": status, "repeated_query": repeated},
+            "details": {
+                "second_query": status,
+                "repeated_query": repeated,
+                "second_query_check": check,
+            },
         }
-        for name, outcome, status, repeated in rows
+        for name, outcome, status, repeated, check in rows
     ] + [{"id": "q0", "outcome": "missed", "number": None, "details": {}}]
 
     assert runner.second_query_value(questions, records) == {
         "caught_a_wrong_answer": 1,
         "doubted_a_right_answer": 1,
-        "confirmed_right": 1,
+        "confirmed_right": 2,
         "shared_the_mistake": 1,
         "added_no_evidence": 1,
     }
+
+
+def test_a_website_answer_records_the_second_query() -> None:
+    reply = _reply(
+        cross_check={
+            "status": "agreed",
+            "identical_sql": True,
+            "single_route": True,
+            "separate_model": True,
+            "sql": "SELECT SUM(x) FROM t",
+        },
+        trust={
+            "level": "verified",
+            "checks": [
+                {"name": "sql_audit", "status": "passed"},
+                {"name": "second_query", "status": "passed"},
+            ],
+        },
+    )
+
+    details = runner.read_website_answer(200, reply, _question()).details
+
+    assert details["single_route"] is True
+    assert details["separate_model"] is True
+    assert details["second_sql"] == "SELECT SUM(x) FROM t"
+    assert details["second_query_check"] == "passed"
+
+
+def test_a_website_answer_without_a_second_query_check_records_none() -> None:
+    details = runner.read_website_answer(200, _reply(), _question()).details
+
+    assert details["second_query_check"] is None
 
 
 def test_a_changed_question_file_blocks_the_run(

@@ -113,8 +113,8 @@ a trust level and the checks behind it:
 | Level | Meaning |
 | --- | --- |
 | Computed without AI | Fixed rules wrote the SQL because the question matched exact columns and values. |
-| Verified | The number equals its SQL result, the SQL audit found no known mistake, and a second query, written differently from the first, agreed. |
-| Number matches SQL only | The number equals its SQL result, but a check could not run, or the second query only repeated the first. |
+| Verified | The number equals its SQL result, the SQL audit found no known mistake, and a second query, written differently from the first, agreed. On a simple one-table query with no other route, a matching query from a different model also counts. |
+| Number matches SQL only | The number equals its SQL result, but a check could not run, or the second query only repeated the first where another route was possible. |
 | Needs review | A check failed. The page says which one and why. |
 | Not verified | No number could be tied to an executed result, the data does not hold what was asked, or the question needs a definition, such as what counts as "large". No number is shown. |
 

@@ -508,7 +508,18 @@ shares the investigation's time budget.
 The website marks an answer as verified only on `agreed`, and only when the second
 query was written differently from the first. `identical_sql` records a repeat: the
 same query apart from aliases, quoting and the order of AND conditions. A repeat
-adds no evidence, so the answer stays at "Number matches SQL only". Agreement
+usually adds no evidence, so the answer stays at "Number matches SQL only".
+
+The exception is a query with only one route, recorded as `single_route`: it reads
+one table, returns one value built from aggregates, has no join, grouping,
+subquery, distinct values, window or row-picking aggregate such as `arg_max`, and
+never compares or combines two columns. `AVG(area)` or `SUM(amount) WHERE region =
+'East'` qualify. `shipped <= required`, `price - cost` and `SUM(a) / SUM(b)` do
+not, because relating two columns defines a new concept, and two models can share
+the same wrong definition. For a single-route query, a blind repeat written by a
+different model, recorded as `separate_model`, still shows that both models chose
+the same rows, column and calculation, so it passes the check. When one model
+writes both queries, a repeat never counts. Agreement
 between different queries is still evidence, not proof: both can make the same
 mistake, and that is more likely when one model writes both. Set
 `VERISIGHT_GEMINI_CROSS_CHECK_MODEL` to a different model to reduce that risk. On the

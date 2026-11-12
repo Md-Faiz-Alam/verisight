@@ -79,6 +79,7 @@ def test_matching_numbers_agree_and_keep_both_values() -> None:
         primary_value=ANSWER,
         independent_value=Decimal("100"),
         identical_sql=False,
+        separate_model=False,
     )
     question, original = runner.calls[0]
     assert question.startswith("How much?\n\nINDEPENDENT CROSS-CHECK")
@@ -260,6 +261,90 @@ def test_repeated_formulation_is_recorded(sql: str, identical: bool) -> None:
 
     assert check.status is CrossCheckStatus.AGREED
     assert check.identical_sql is identical
+
+
+@pytest.mark.parametrize(
+    ("primary", "single"),
+    [
+        ("SELECT SUM(amount) AS total FROM sales", True),
+        ("SELECT median(amount) FROM sales", True),
+        ("SELECT AVG(amount) FROM sales WHERE region = 'East' AND amount > 0", True),
+        (
+            "SELECT 100.0 * SUM(CASE WHEN region = 'East' THEN 1 ELSE 0 END) "
+            "/ NULLIF(COUNT(*), 0) FROM sales",
+            True,
+        ),
+        ("SELECT COUNT(*) FROM sales WHERE LOWER(TRIM(status)) = 'shipped'", True),
+        ("SELECT MAX(amount) - MIN(amount) FROM sales", True),
+        (
+            "SELECT SUM(CASE WHEN region = 'East' THEN amount END) "
+            "/ COUNT(CASE WHEN region = 'East' THEN amount END) FROM sales",
+            True,
+        ),
+        ("SELECT SUM(amount) FROM sales WHERE region = 'E' AND year = 2020", True),
+        # Relating two columns defines a concept that both models could share.
+        ("SELECT COUNT(*) FROM sales WHERE shipped <= required", False),
+        (
+            "SELECT 100.0 * SUM(CASE WHEN shipped <= required THEN 1 ELSE 0 END) "
+            "/ NULLIF(COUNT(*), 0) FROM sales",
+            False,
+        ),
+        ("SELECT AVG(date_diff('day', ordered, shipped)) FROM sales", False),
+        ("SELECT SUM(price - cost) FROM sales", False),
+        ("SELECT SUM(price) / SUM(cost) FROM sales", False),
+        ("SELECT AVG(COALESCE(amount, bonus)) FROM sales", False),
+        ("SELECT SUM(s.amount) FROM sales AS s JOIN regions AS r ON s.r = r.r", False),
+        ("SELECT region, SUM(amount) FROM sales GROUP BY region", False),
+        ("SELECT SUM(amount) FROM sales GROUP BY region", False),
+        ("SELECT COUNT(DISTINCT region) FROM sales", False),
+        ("SELECT SUM(amount) FROM (SELECT amount FROM sales) AS s", False),
+        ("SELECT SUM(amount) FROM sales WHERE r IN (SELECT r FROM regions)", False),
+        ("WITH s AS (SELECT amount FROM sales) SELECT SUM(amount) FROM s", False),
+        ("SELECT SUM(amount) OVER () FROM sales", False),
+        ("SELECT arg_max(region, amount) FROM sales", False),
+        ("SELECT SUM(amount) FROM sales UNION SELECT SUM(amount) FROM sales", False),
+        ("SELECT amount FROM sales", False),
+        ("SELECT amount + SUM(amount) FROM sales", False),
+        ("SELECT SUM(amount), COUNT(*) FROM sales", False),
+        ("SELECT SUM(a.x) FROM sales AS a, sales AS b", False),
+    ],
+)
+def test_single_route_is_recorded_for_a_repeat(primary: str, single: bool) -> None:
+    second = primary.replace("FROM sales", "FROM sales", 1)
+    checker = IndependentCrossChecker(_Runner(sql=second), separate_model=True)
+
+    check = checker.check("How much?", ANSWER, primary)
+
+    assert check.identical_sql is True
+    assert check.single_route is single
+    assert check.separate_model is True
+
+
+def test_single_route_is_not_recorded_when_the_queries_differ() -> None:
+    check = _check(_Runner())
+
+    assert check.identical_sql is False
+    assert check.single_route is None
+
+
+def test_single_route_is_kept_when_the_result_is_not_one_number() -> None:
+    check = IndependentCrossChecker(_Runner(rows=(), sql=PRIMARY)).check(
+        "How much?", ANSWER, PRIMARY
+    )
+
+    assert check.status is CrossCheckStatus.NOT_ASSESSED
+    assert check.single_route is True
+
+
+def test_a_refusal_records_which_model_wrote_it() -> None:
+    runner = _Runner(("cross_check_refused",), (("refused",),))
+
+    check = IndependentCrossChecker(runner, separate_model=True).check(
+        "How much?", ANSWER, PRIMARY
+    )
+
+    assert check.reason == "second_query_refused"
+    assert check.separate_model is True
 
 
 WHERE_SQL = "SELECT SUM(amount) AS total FROM sales WHERE "
