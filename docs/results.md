@@ -474,9 +474,15 @@ The single bad number answered an ambiguous question about "the period selected 
 our analysis" with the median over all races. Full VeriSight showed it with a warning;
 number checks showed it prominently.
 
-Both missed answers were on the absenteeism workbook. One query was right, counting
-different employee IDs, but the written answer was rejected on its claim shape. The
-other investigation ended after two model calls. Neither cause is established yet.
+Both missed answers were on the absenteeism workbook, and both ran out of time rather
+than going wrong. Each stopped at exactly 180 seconds, the website's budget for one
+question, in the middle of a run of Gemini "503 unavailable" errors on the questions
+just before and after them, so slow or retried model calls used up the budget.
+VeriSight reported both as incomplete, which the runner scores as a missed answer
+rather than a provider error. Re-asked live afterwards, both were answered correctly
+through the website path and through the number-checks path, in 10 Gemini calls. The
+runner now records the reason VeriSight gives when a run stops early, so the next
+comparison will show this without a re-run.
 
 Gemini failed often during this run. It took four passes over three days to finish:
 126 attempts in all, 36 of them lost to provider errors. Each pass retried only

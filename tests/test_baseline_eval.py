@@ -600,3 +600,19 @@ def test_numbers_setup_reads_an_investigation_failure_after_a_query(
 
     assert answer.number is None
     assert answer.provider_error is provider
+
+
+def test_an_incomplete_website_answer_records_why_it_stopped() -> None:
+    reason = (
+        "Investigation incomplete: the investigation time budget was exhausted. "
+        "No analytical conclusion has been established."
+    )
+    stopped = runner.read_website_answer(
+        200, _reply(status="incomplete", answer=reason, claims=[]), _question()
+    )
+    finished = runner.read_website_answer(200, _reply(), _question())
+
+    assert stopped.details["status"] == "incomplete"
+    assert stopped.details["incomplete_reason"] == reason
+    assert stopped.provider_error is False
+    assert finished.details["incomplete_reason"] is None

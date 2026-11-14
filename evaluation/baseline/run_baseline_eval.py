@@ -316,6 +316,12 @@ def read_website_answer(
             if check["status"] == "failed"
         ],
         "web_outcome": body.get("outcome"),
+        "status": body.get("status"),
+        # VeriSight writes this text itself when a run stops early, such as when
+        # the time budget runs out; a model's conclusion is never kept here.
+        "incomplete_reason": (
+            body.get("answer") if body.get("status") == "incomplete" else None
+        ),
         "rejected_as": (body.get("failure") or {}).get("validation_reason"),
         "violations": (body.get("assessment") or {}).get("violations"),
     }
