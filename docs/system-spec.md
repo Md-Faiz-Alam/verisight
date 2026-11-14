@@ -133,10 +133,10 @@ result existed. A *regression* target protects a result that was already known.
 | D2 | Regression | Ambiguous damage is rejected or flagged, never guessed | passed | [`test_damaged_files.py`](../tests/test_damaged_files.py) |
 | A1 | Regression | Missed mistakes: of the 31 frozen wrong queries, at least 75% are caught | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
 | A2 | Regression | False warnings: none on the 31 frozen correct queries | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
-| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#fifth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
-| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | passed | [`results.md`](results.md#fifth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
-| C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#fifth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
-| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#fifth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#sixth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | passed | [`results.md`](results.md#sixth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#sixth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#sixth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
 | R1 | Predeclared | Concurrency, expiry, eviction, restart and crash-recovery tests pass | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R2 | Predeclared | A failed mandatory check can never produce "Verified"; evidence already computed stays visible with its incomplete status | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R3 | Predeclared | A provider failure never produces a number that was not computed | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
@@ -151,7 +151,9 @@ failed C3 at 35%. A fourth comparison at `2608f9b`, which added the single-route
 rule, again showed no bad number prominently and passed C2 at exactly the limit, and
 failed C3 at 44%. A fifth comparison at `3cf71e1`, with two audit fixes, showed no bad
 number at all, delivered as many correct answers as plain Gemini, and failed C3 at
-32%. The status column shows the fifth comparison.
+32%. A sixth comparison at `f1bc439`, with the unit conversion fix, showed 1 bad number
+against plain Gemini's 10, delivered every answerable question, and failed C3 at 20%.
+The status column shows the sixth comparison.
 
 M1 was measured on this computer with scripted replies and generated data: five
 uploads of one 19.5 MB file with charts, two questions at once with second queries,

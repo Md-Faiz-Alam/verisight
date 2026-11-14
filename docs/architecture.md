@@ -220,6 +220,16 @@ is still reported, because 10 is not a factor between units of time. Replayed ov
 the saved queries of all five comparisons, this removes 16 flags, all in the fifth,
 and adds none; no flag is removed from any bad answer.
 
+A value the question names can be selected through a code that stands for it. When
+the table holding "Boston Red Sox" gives it exactly one franchise code, and no other
+name has that code, `franchID = 'BOS'` selects it as well as the name does. A league
+code shared by several franchises does not. Percentiles leave out missing values as
+the median does, so `PERCENTILE_CONT` answers a question about recorded values. A
+vague word inside a value the data holds, as "new" in "New York Yankees", is part of
+a name. These came from the sixth comparison; replayed over the saved queries of all
+six, they clear three warnings on correct answers and remove no warning from any bad
+answer.
+
 Expected SQL parsing and source-resolution errors, including duplicate aliases,
 become `QueryValidationError`. Relation analysis must succeed before execution;
 analysis failure does not bypass authorization. The built-in executor rejects

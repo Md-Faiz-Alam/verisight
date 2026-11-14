@@ -24,10 +24,10 @@ it can be trusted, and gives no number rather than a misleading one. The
 
 ## Next, in order
 
-1. **Fewer false warnings.** In the fifth comparison VeriSight warned on 6 of 19
-   correct answers (32%). Five came from unit conversions, fixed since; on the saved
-   answers 1 warning of 19 remains. A sixth comparison on new questions must confirm
-   C3. A second query that reaches a wrong number still warns on a correct answer,
+1. **Fewer false warnings.** In the sixth comparison VeriSight warned on 4 of 20
+   correct answers (20%), down from 32% in the fifth. Three came from audit readings
+   of codes, percentiles and names, fixed since; on the saved answers 1 warning of 20
+   remains. A seventh comparison on new questions must confirm C3. A second query that reaches a wrong number still warns on a correct answer,
    which is kept on purpose: the same disagreement has kept 6 bad numbers from being
    verified.
 2. **Ask about vague questions.** A question such as "how many count as high

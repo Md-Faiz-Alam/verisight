@@ -557,6 +557,76 @@ provider errors. Both were retried once and came back correct with a warning.
 
 These are one run of 30 questions prepared on the project's own side.
 
+### Sixth comparison with plain Gemini (30 new questions, 4 new files)
+
+Facebook post metrics for a cosmetics brand (CSV, 500 rows), breast tissue
+measurements (Excel, 106 rows), and a pair of related files from the Lahman baseball
+database: 3,614 team seasons joined to 203 franchises. None was used before. The
+questions were prepared outside the project session, with 20 answerable, 5 ambiguous
+and 5 unanswerable, and answers worked out separately. Fractional answers allow
+0.01.
+
+Questions, data and runner were frozen by hash at `f1bc439`, which adds the unit
+conversion fix from the fifth comparison and the recovery query for an answer that
+states a number no query cell holds.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 20 | 20 | 20 |
+| Wrong number, of 20 answerable | 0 | 0 | 0 |
+| No number, of 20 answerable | 0 | 0 | 0 |
+| Number given where none exists, of 10 | 10 | 1 | 1 |
+| Correctly gave no number, of 10 | 0 | 9 | 9 |
+| Bad numbers shown prominently | 10 | 1 | 1 |
+| Bad numbers visible anywhere | 10 | 1 | 1 |
+| Correct answers carrying a warning | 0 of 20 | 0 of 20 | 4 of 20 |
+| Gemini calls | 30 | 97 | 117 |
+| Median seconds per question | 14 | 23 | 21 |
+
+Against the targets, full VeriSight showed 1 bad number against plain Gemini's 10
+(C1 passed) and delivered every answerable question, as plain Gemini did (C2
+passed). It warned on 20% of its correct answers where 10% is allowed (C3 failed,
+down from 32%). Plain Gemini gave a number for all ten questions without a valid
+answer, such as unique visitors from an attendance total, or purchases from a
+column of post consumers.
+
+Full VeriSight's bad number answered "the median recorded home attendance per
+team-season over our reporting years". The files do not say which years those are,
+so no number should have been given. VeriSight used every year, and the second
+query did the same and agreed, so the answer was shown as verified. The other four
+questions that referred to something the files do not define were declined. No
+audit rule looks for such references: every question of this kind in the six
+comparisons was one written to be ambiguous, so a rule built from them would fit
+the way these questions are written rather than real ones.
+
+The four warnings on correct answers all came from audit rules misreading correct
+SQL:
+
+- **Two from codes.** The second query selected a franchise by its code, as
+  `franchID = 'BOS'`, and the audit wanted the name "Boston Red Sox". The franchise
+  file gives that name exactly one code, so both select the same rows.
+- **One from a percentile.** A question about "recorded" attendance asks for values
+  that are not missing. The audit accepted `MEDIAN` as leaving missing values out but
+  not `PERCENTILE_CONT`, which does the same.
+- **One from a second query that was really wrong.** It selected the Yankees by
+  `NYA`, a team code, where the franchise code is `NYY`, and found nothing. The audit
+  also read "new" in "New York Yankees" as a vague word.
+
+The code, percentile and name readings were fixed after the run in `9f42c71`.
+Replayed over the saved queries of all six comparisons, the fixes change the findings
+on six queries. Four are these warnings: three clear, and the Yankees one loses only
+the reading of "new", keeping its findings about `NYA`. The sixth is a bad answer in
+the fourth comparison that had been flagged for the percentile reason; it stays
+warned by its population check. No bad answer loses its warning. On this run's saved
+answers 1 warning of 20 remains. These questions found the flaws, so that is not a
+C3 result.
+
+The second query confirmed 19 correct answers, added no evidence on the Yankees
+question, and agreed with the one bad number. Gemini was steady: all 90 attempts ran
+on one day with no provider errors.
+
+These are one run of 30 questions prepared on the project's own side.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10
