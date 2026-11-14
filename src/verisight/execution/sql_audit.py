@@ -128,6 +128,17 @@ _PERSON_COLUMN_WORDS = frozenset(
 _MEASURED = (exp.Sum, exp.Avg, exp.Max, exp.Min, exp.Median)
 # Grading words that need a definition: "large" means nothing until a threshold
 # or a category is given. Superlatives such as "largest" are calculations instead.
+# Aggregates that leave out missing values by themselves.
+_SKIPS_MISSING = (
+    exp.Avg,
+    exp.Median,
+    exp.PercentileCont,
+    exp.PercentileDisc,
+    exp.Quantile,
+    exp.Sum,
+    exp.Max,
+    exp.Min,
+)
 _VAGUE_WORDS = frozenset(
     [
         "large",
@@ -367,7 +378,7 @@ def audit_sql(
             *_broad_match(question, tree, tables, categories),
             *_distinct_count(question, tree),
             *_measure_not_in_data(question, tree, used),
-            *_assumed_definition(question, tree),
+            *_assumed_definition(question, tree, categories),
             *_missing_comparison(question),
             *_invented_constants(question, tree),
             *_measure_not_named(question, tree),
@@ -716,10 +727,16 @@ def _named_value(
         for column, _, literal in _comparisons(tree, broad=True)
     ]
     names = _names(tree)
+    exact = [
+        (column.name.casefold(), literal.casefold())
+        for column, _, literal in _comparisons(tree)
+    ]
     for item, value in _mentions(question, tables, categories):
         column = item.column.casefold()
         wanted = value.casefold()
         if any(c == column and wanted in text for c, text in restricted):
+            continue
+        if _selected_by_code(tables.get(item.relation.casefold()), item, value, exact):
             continue
         # A column that is only grouped or displayed shows every value.
         if any(c == column for c, _ in restricted) or column not in names:
@@ -728,6 +745,38 @@ def _named_value(
                 f"The question asks about {value!r}, but the query does not "
                 f"select it in {item.column}.",
             )
+
+
+def _selected_by_code(
+    table: LoadedTable | None,
+    item: ObservedCategoryValues,
+    value: str,
+    exact: list[tuple[str, str]],
+) -> bool:
+    """Whether the query selects the value through a code that stands for it.
+
+    A code does so when, in the table that holds the value, every row with the
+    value has that code and every row with the code has the value, as an ID
+    column beside a name column.
+    """
+    if table is None or not _has_column(table, item.column):
+        return False
+    named = _rows_with(table.data[_actual_name(table, item.column)], value)
+    if not named.any():
+        return False
+    for column, literal in exact:
+        if column == item.column.casefold() or not _has_column(table, column):
+            continue
+        coded = _rows_with(table.data[_actual_name(table, column)], literal)
+        if coded.any() and coded.equals(named):
+            return True
+    return False
+
+
+def _rows_with(values: pd.Series, text: str) -> pd.Series:
+    """Mark the rows whose text equals ``text``, ignoring case and spaces."""
+    wanted = _normal(text)
+    return values.map(lambda v: isinstance(v, str) and _normal(v) == wanted)
 
 
 def _broad_match(
@@ -868,9 +917,25 @@ def _unit_factors(question: str, tree: exp.Expression) -> frozenset[float]:
     return frozenset().union(*(_UNIT_FACTORS[quantity] for quantity in named))
 
 
-def _assumed_definition(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
-    """Find a vague word the query defined by itself, as "large" = one category."""
-    words = set(re.findall(r"[a-z]+", question.casefold())) & _VAGUE_WORDS
+def _assumed_definition(
+    question: str,
+    tree: exp.Expression,
+    categories: Sequence[ObservedCategoryValues] = (),
+) -> Iterator[AuditFinding]:
+    """Find a vague word the query defined by itself, as "large" = one category.
+
+    A word inside a value the data holds, as "new" in "New York Yankees", is
+    part of a name, not a vague word.
+    """
+    plain = question.casefold()
+    for value in sorted(
+        {v for item in categories for v in item.observed_nonmissing_values},
+        key=len,
+        reverse=True,
+    ):
+        if len(value.split()) > 1:
+            plain = re.sub(rf"\b{re.escape(value.casefold())}\b", " ", plain)
+    words = set(re.findall(r"[a-z]+", plain)) & _VAGUE_WORDS
     if not words:
         return
     lowered = question.casefold()
@@ -1057,7 +1122,7 @@ def _missing_values(question: str, tree: exp.Expression) -> Iterator[AuditFindin
             )
     elif (
         _KNOWN_VALUE.search(question)
-        and tree.find(exp.Avg, exp.Median, exp.Sum, exp.Max, exp.Min) is None
+        and tree.find(*_SKIPS_MISSING) is None
         or (
             _KNOWN_VALUE.search(question)
             and any(isinstance(c.this, exp.Star) for c in tree.find_all(exp.Count))
