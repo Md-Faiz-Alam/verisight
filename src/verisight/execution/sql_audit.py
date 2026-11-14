@@ -126,8 +126,6 @@ _PERSON_COLUMN_WORDS = frozenset(
     ]
 )
 _MEASURED = (exp.Sum, exp.Avg, exp.Max, exp.Min, exp.Median)
-# Grading words that need a definition: "large" means nothing until a threshold
-# or a category is given. Superlatives such as "largest" are calculations instead.
 # Aggregates that leave out missing values by themselves.
 _SKIPS_MISSING = (
     exp.Avg,
@@ -139,6 +137,8 @@ _SKIPS_MISSING = (
     exp.Max,
     exp.Min,
 )
+# Grading words that need a definition: "large" means nothing until a threshold
+# or a category is given. Superlatives such as "largest" are calculations instead.
 _VAGUE_WORDS = frozenset(
     [
         "large",
@@ -844,6 +844,29 @@ def _holds_money(tables: dict[str, LoadedTable], name: str) -> bool:
     )
 
 
+def _money_only_selects(question: str, tree: exp.Expression) -> bool:
+    """Whether every money word names a column the query only filters on.
+
+    In "the mean rating at restaurants in the low price category", ``price`` picks
+    the rows and the rating is the measure, so no money is asked for. The column
+    counts only when the query compares it with a value the question names, as
+    ``price = 'low'``. A currency sign names no column, so it never counts.
+    """
+    asked = {match.group(0).casefold() for match in _MONEY_ASKED.finditer(question)}
+    lowered = question.casefold()
+    selecting = {
+        word
+        for column, _, literal in _comparisons(tree)
+        if column.find_ancestor(*_MEASURED) is None
+        and literal.strip()
+        and re.search(rf"\b{re.escape(literal.strip().casefold())}\b", lowered)
+        for word in _column_words(column.name)
+    }
+    return all(
+        word in selecting or word.removesuffix("s") in selecting for word in asked
+    )
+
+
 def _measure_not_in_data(
     question: str, tree: exp.Expression, used: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
@@ -863,6 +886,7 @@ def _measure_not_in_data(
         _MONEY_ASKED.search(question)
         and measured
         and not any(_holds_money(used, name) for name in measured)
+        and not _money_only_selects(question, tree)
     ):
         yield AuditFinding(
             "measure_not_in_data",

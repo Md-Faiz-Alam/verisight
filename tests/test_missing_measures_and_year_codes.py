@@ -113,6 +113,55 @@ def test_a_measure_the_data_does_not_hold_is_named(
     assert ("measure_not_in_data" in _codes(dataset, question, sql)) is found
 
 
+RESTAURANTS = "place,price,rating\np1,low,2\np2,low,1\np3,high,2\np4,medium,0\n"
+
+
+@pytest.mark.parametrize(
+    ("question", "sql", "found"),
+    [
+        (
+            "What is the mean rating at restaurants in the low price category?",
+            "SELECT AVG(rating) FROM data WHERE price = 'low'",
+            False,
+        ),
+        (
+            "What is the mean rating at low-price restaurants?",
+            "SELECT AVG(rating) FROM data WHERE LOWER(price) = 'low'",
+            False,
+        ),
+        # The question asks for a price; filtering on price does not answer it.
+        (
+            "What is the average price at restaurants rated 2?",
+            "SELECT AVG(rating) FROM data WHERE price = 'low'",
+            True,
+        ),
+        (
+            "What is the average cost at low price restaurants?",
+            "SELECT AVG(rating) FROM data WHERE price = 'low'",
+            True,
+        ),
+        (
+            "What is the mean rating in dollars at low price restaurants?",
+            "SELECT AVG(rating) FROM data WHERE price = 'low'",
+            True,
+        ),
+    ],
+    ids=[
+        "price-names-the-category",
+        "price-names-a-normalised-category",
+        "price-asked-but-only-filtered",
+        "cost-asked-beside-a-price-category",
+        "currency-asked-beside-a-price-category",
+    ],
+)
+def test_a_money_word_that_only_selects_rows_asks_for_no_money(
+    tmp_path: Path, question: str, sql: str, found: bool
+) -> None:
+    dataset = _load(tmp_path, RESTAURANTS)
+
+    assert ("measure_not_in_data" in _codes(dataset, question, sql)) is found
+
+
 def test_a_column_that_carried_currency_marks_holds_money(tmp_path: Path) -> None:
     dataset = _load(tmp_path, AMOUNTS)
     sql = "SELECT AVG(amt) FROM data"

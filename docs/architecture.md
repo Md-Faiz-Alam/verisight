@@ -230,6 +230,13 @@ a name. These came from the sixth comparison; replayed over the saved queries of
 six, they clear three warnings on correct answers and remove no warning from any bad
 answer.
 
+A money word such as "price" does not ask for money when it only picks the rows: in
+"the mean rating at restaurants in the low price category" the query compares
+`price` with `'low'`, a value the question names, and measures the rating. Any other
+money word, or a currency sign, still needs a measure that holds money. This came
+from the seventh comparison, where it blocked a correct answer; replayed over the
+saved queries of all seven, it changes findings on that question only.
+
 Expected SQL parsing and source-resolution errors, including duplicate aliases,
 become `QueryValidationError`. Relation analysis must succeed before execution;
 analysis failure does not bypass authorization. The built-in executor rejects
