@@ -24,22 +24,26 @@ it can be trusted, and gives no number rather than a misleading one. The
 
 ## Next, in order
 
-1. **Fewer false warnings.** In the sixth comparison VeriSight warned on 4 of 20
-   correct answers (20%), down from 32% in the fifth. Three came from audit readings
-   of codes, percentiles and names, fixed since; on the saved answers 1 warning of 20
-   remains. A seventh comparison on new questions must confirm C3. A second query that reaches a wrong number still warns on a correct answer,
-   which is kept on purpose: the same disagreement has kept 6 bad numbers from being
-   verified.
-2. **Ask about vague questions.** A question such as "how many count as high
+1. **Fewer false warnings.** In the seventh comparison VeriSight warned on 4 of 17
+   correct answers (24%). Three followed from one reviewer wrongly detected as a total
+   row, fixed since; that fix can only be measured on new questions, so an eighth
+   comparison must confirm C3. A second query that reaches a wrong number still warns
+   on a correct answer, which is kept on purpose: the same disagreement has kept 8 bad
+   numbers from being verified.
+2. **Names and words with more than one meaning.** In the seventh comparison "the
+   Vips branch" averaged several restaurants of that name and was shown as verified,
+   "average score" picked one of three score columns, and "low price category" was
+   read as a question about money.
+3. **Ask about vague questions.** A question such as "how many count as high
    quality?" should get a clarifying question, not an assumption or an empty result.
-3. **Read which row a grouped answer cites,** so that a correct answer read from one
+4. **Read which row a grouped answer cites,** so that a correct answer read from one
    row of a result grouped by year is not flagged.
-4. **Answer more plain questions without AI.** In user testing every question needed
+5. **Answer more plain questions without AI.** In user testing every question needed
    Gemini.
-5. **Outside users.** No one outside the project has used VeriSight yet.
-6. **Deployment.** Measure memory on the target container, then add accounts,
+6. **Outside users.** No one outside the project has used VeriSight yet.
+7. **Deployment.** Measure memory on the target container, then add accounts,
    monitoring and storage shared between server copies.
-7. **Confidential data** needs a paid or private model, because the free tier may
+8. **Confidential data** needs a paid or private model, because the free tier may
    use what is sent.
 
 ## How this work is done

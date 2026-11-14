@@ -627,6 +627,80 @@ on one day with no provider errors.
 
 These are one run of 30 questions prepared on the project's own side.
 
+### Seventh comparison with plain Gemini (30 new questions, 4 new files)
+
+Glass identification (Excel, 214 rows), airfoil self-noise (CSV, 1,503 rows), and a
+pair of related files from a restaurant recommender dataset: 1,161 ratings joined to
+130 restaurants. None was used before. The questions were prepared outside the
+project session, with 20 answerable, 5 ambiguous and 5 unanswerable, answers worked
+out separately, and ambiguous questions written in more varied ways than before.
+Fractional answers allow 0.01.
+
+Questions, data and runner were frozen by hash at `69043af`, which adds the audit
+fixes from the sixth comparison.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 18 | 18 | 17 |
+| Wrong number, of 20 answerable | 2 | 2 | 2 |
+| No number, of 20 answerable | 0 | 0 | 1 |
+| Number given where none exists, of 10 | 7 | 3 | 3 |
+| Correctly gave no number, of 10 | 3 | 7 | 7 |
+| Bad numbers shown prominently | 9 | 5 | 1 |
+| Bad numbers visible anywhere | 9 | 5 | 5 |
+| Correct answers carrying a warning | 0 of 18 | 0 of 18 | 4 of 17 |
+| Gemini calls | 30 | 115 | 141 |
+| Median seconds per question | 5 | 22 | 24 |
+
+Against the targets, full VeriSight showed 1 bad number prominently against plain
+Gemini's 9 (C1 passed) and delivered 85% of answerable questions against 90% (C2
+passed). It warned on 24% of its correct answers where 10% is allowed (C3 failed).
+Its two wrong numbers and two of its three numbers for questions without a valid
+answer carried a warning.
+
+Most of what went wrong had one cause, in all three setups. The total-row detector
+looks for a category value whose rows hold the sum of the other rows, such as a
+"Total" region in each month. Ratings in this file run from 0 to 2. Reviewer `U1074`
+rated three restaurants, and in each of them their service rating of 2 equalled the
+other reviewers' ratings added together, so the detector reported `U1074` as a total
+row. Every setup then left that reviewer out:
+
+- **Both of full VeriSight's wrong numbers.** A percentage of ratings and a sum of
+  food ratings, each without `U1074`. The second query kept the reviewer, disagreed,
+  and so both were warned. Plain Gemini's two wrong numbers, and both of number
+  checks', came the same way.
+- **Three of the four warnings on correct answers.** Two first queries compared
+  `U1074` with everyone else before answering, which the population check flagged;
+  in one average the second query disagreed by less than the 0.01 allowed.
+
+This was fixed after the run in `6ee453b`: a value must appear in at least half the
+groups it is checked in, as a real total does, to be reported. Across the 783
+tables in all saved evaluation data and test files, the only detection this changes
+is `U1074`. Unlike the audit fixes, this cannot be replayed on the saved answers,
+since the false hint changed the SQL Gemini wrote.
+
+The one missed answer had a different cause. It asked for the mean service rating
+at restaurants "in the low price category", and the audit read the word "price" as
+a request for money, which a rating column does not hold, so it blocked the number.
+The second query reached the expected 0.92. This rule is not fixed yet.
+
+The fourth warning came from a repeat. The second query wrote the same
+`COUNT(DISTINCT ...)` as the first, and a distinct count is kept out of the
+single-route rule on purpose: another route could test spellings of the same value.
+
+Of the three numbers full VeriSight gave where no valid answer exists, two were
+warned. The one shown as verified averaged the ratings of "the Vips branch", where
+several restaurants share that name; no rule checks that a name picks out one thing.
+One of the two warned answers, "the average score in this ratings file", was warned
+only because of the `U1074` disagreement. Three columns hold scores, and no rule
+caught that, so after the fix it would likely have been shown as verified.
+
+The second query confirmed 15 correct answers, caught both wrong ones and doubted
+one right one. Gemini was steady: all 90 attempts ran on one day with no provider
+errors.
+
+These are one run of 30 questions prepared on the project's own side.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10

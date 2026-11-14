@@ -256,7 +256,10 @@ line, and nested objects become columns such as `user.age`.
 Rows that hold the total of other rows, such as a `Total` region per month or an
 `All causes` entity per year, are detected when a category value's measure equals
 the sum of the other rows in nearly every group of rows sharing the remaining
-key columns. They are reported as a `total_row` warning, listed for SQL planning
+key columns. The value must also appear in at least half of those groups, as a
+real total does: one reviewer who rated three of 130 restaurants is not a total,
+even when their small ratings happen to equal the others' added together. They are
+reported as a `total_row` warning, listed for SQL planning
 so totals are not added to their own parts, and an aggregate that ignores them is
 marked for review.
 
