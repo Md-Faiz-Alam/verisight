@@ -201,6 +201,13 @@ word "race" in Formula 1 questions put a review warning on three correct answers
 Replayed over the saved queries of all four comparisons, the rule removes 21 audit or
 review flags, all in the fourth, and adds none.
 
+The join rule looks for measures that a join copies, such as an order amount summed
+once per item. A column that only decides which joined rows count, in the condition
+of a `CASE WHEN` or `IF`, is a filter like a `WHERE` clause, not a measure:
+`COUNT(CASE WHEN circuit.country = 'uk' THEN 1 END)` counts races. A copied column in
+the `THEN` or `ELSE` part is still a measure. Replayed over the saved queries of all
+four comparisons, this removes 7 flags, all on correct answers, and adds none.
+
 Expected SQL parsing and source-resolution errors, including duplicate aliases,
 become `QueryValidationError`. Relation analysis must succeed before execution;
 analysis failure does not bypass authorization. The built-in executor rejects

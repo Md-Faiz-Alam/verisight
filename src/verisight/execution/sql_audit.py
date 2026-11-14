@@ -381,12 +381,29 @@ def _repeats(
         return False
 
 
+def _only_a_condition(column: exp.Column, aggregate: exp.Expression) -> bool:
+    """True when the column only decides which rows count, as in ``CASE WHEN``.
+
+    ``COUNT(CASE WHEN c.country = 'uk' THEN 1 END)`` measures the joined rows
+    and filters them by ``c.country``, like a WHERE clause. A column in the
+    THEN or ELSE part is still a measure.
+    """
+    child: exp.Expression = column
+    parent = column.parent
+    while parent is not None and child is not aggregate:
+        if isinstance(parent, exp.If) and parent.this is child:
+            return True
+        child, parent = parent, parent.parent
+    return False
+
+
 def _aggregated_columns(tree: exp.Expression) -> Iterator[tuple[str, exp.Column]]:
     for node in tree.find_all(exp.Sum, exp.Avg, exp.Count):
         if isinstance(node.this, exp.Distinct):
             continue
         for column in node.find_all(exp.Column):
-            yield type(node).__name__.upper(), column
+            if not _only_a_condition(column, node):
+                yield type(node).__name__.upper(), column
 
 
 def _fan_out(

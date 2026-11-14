@@ -107,6 +107,16 @@ JOINED = "FROM orders o JOIN items i ON o.order_id = i.order_id"
             "join_fan_out",
         ),
         (f"SELECT COUNT(o.amount) AS t {JOINED}", "join_fan_out"),
+        # A copied column in the THEN part is still a measure.
+        (
+            f"SELECT SUM(CASE WHEN i.sku = 'a' THEN o.amount END) AS t {JOINED}",
+            "join_fan_out",
+        ),
+        (
+            f"SELECT SUM(CASE WHEN o.status = 'Open' THEN o.amount ELSE 0 END) "
+            f"AS t {JOINED}",
+            "join_fan_out",
+        ),
     ],
 )
 def test_measures_copied_by_a_join_are_found(
@@ -122,6 +132,11 @@ def test_measures_copied_by_a_join_are_found(
         f"SELECT COUNT(*) AS t {JOINED}",
         # The other side of the join is not copied.
         f"SELECT COUNT(i.sku) AS t {JOINED}",
+        # A copied column that only decides which joined rows count is a filter,
+        # like WHERE o.region = 'East'.
+        f"SELECT COUNT(CASE WHEN o.region = 'East' THEN 1 END) AS t {JOINED}",
+        f"SELECT SUM(CASE WHEN o.region = 'East' THEN 1 ELSE 0 END) AS t {JOINED}",
+        f"SELECT SUM(IF(o.region = 'East', 1, 0)) AS t {JOINED}",
         "SELECT SUM(o.amount) AS t FROM orders o JOIN customers c "
         "ON o.customer = c.customer",
         # A grouped subquery has one row per key.
