@@ -290,3 +290,28 @@ def test_category_mentions_include_regular_plurals(
     review = review_population(question, "SELECT COUNT(*) FROM t", context)
 
     assert (review.status == "review_required") is flagged
+
+
+def test_a_value_in_few_groups_is_not_a_total_by_chance() -> None:
+    # Ratings from 0 to 2: one reviewer's 2 equals two others' 1 + 1 in the only
+    # three places that reviewer rated, out of ten places.
+    rows = []
+    for place in range(10):
+        rows.extend([("U1", place, 1), ("U2", place, 1), ("U3", place, 0)])
+        if place < 3:
+            rows.append(("U9", place, 2))
+    data = pd.DataFrame(rows, columns=["user", "place", "rating"])
+
+    assert _find(data) == ()
+
+
+def test_a_total_missing_from_a_few_groups_is_still_found() -> None:
+    rows = []
+    for month in range(6):
+        parts = (month + 1, month + 2, month + 3)
+        rows.extend(zip(("North", "South", "East"), (month,) * 3, parts, strict=True))
+        if month < 5:
+            rows.append(("Total", month, sum(parts)))
+    data = pd.DataFrame(rows, columns=["region", "month", "sales"])
+
+    assert _find(data) == (TotalRow("region", "Total", ("sales",), ("month",), 5, 5),)

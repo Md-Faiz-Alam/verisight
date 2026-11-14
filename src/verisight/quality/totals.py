@@ -32,6 +32,9 @@ MIN_GROUP_PARTS = 2
 MIN_SINGLE_GROUP_PARTS = 3
 MIN_MATCHED_GROUPS = 2
 MIN_MATCHED_SHARE = 0.9
+# A total row sits in most groups, as a "Total" region in every month. A value in
+# a few groups only, such as one reviewer among many, matches sums by chance.
+MIN_GROUP_COVERAGE = 0.5
 RELATIVE_TOLERANCE = 1e-9
 # Rows examined across all checks of one table; larger work is skipped.
 MAX_ROW_CHECKS = 5_000_000
@@ -184,10 +187,13 @@ def _matches(
     checked_counts = {str(k): int(v) for k, v in names[checked].value_counts().items()}
     matched_counts = {str(k): int(v) for k, v in names[matched].value_counts().items()}
     required = 1 if single else MIN_MATCHED_GROUPS
+    eligible = frame.loc[size >= parts + 1, "group"].nunique()
     return {
         value: (int(count), int(checked_counts[value]))
         for value, count in matched_counts.items()
-        if count >= required and count >= MIN_MATCHED_SHARE * checked_counts[value]
+        if count >= required
+        and count >= MIN_MATCHED_SHARE * checked_counts[value]
+        and checked_counts[value] >= MIN_GROUP_COVERAGE * eligible
     }
 
 
