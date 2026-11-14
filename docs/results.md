@@ -421,6 +421,71 @@ On the third comparison's saved answers, the adopted version leaves 1 warning on
 correct answers, about 6%. These answers helped design the rule, so this is not a
 C3 result: that needs a fourth comparison on new questions.
 
+### Fourth comparison with plain Gemini (30 new questions, 4 new files)
+
+Employee absenteeism (legacy Excel `.xls`, 740 rows), yacht hydrodynamics (CSV, 308
+rows), and a pair of related Formula 1 files: 1,125 races joined to 77 circuits. None
+was used before. The questions were prepared outside the project session, with 20
+answerable, 5 ambiguous and 5 unanswerable, answers worked out separately, and
+wording kept away from the problems fixed so far, in particular from the new
+single-route rule. Fractional answers allow 0.01.
+
+Questions, data and runner were frozen by hash at `2608f9b`, which adds the
+single-route rule. The main purpose was target C3.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 20 | 20 | 18 |
+| Wrong number, of 20 answerable | 0 | 0 | 0 |
+| No number, of 20 answerable | 0 | 0 | 2 |
+| Number given where none exists, of 10 | 8 | 1 | 1 |
+| Correctly gave no number, of 10 | 2 | 9 | 9 |
+| Bad numbers shown prominently | 8 | 1 | 0 |
+| Bad numbers visible anywhere | 8 | 1 | 1 |
+| Correct answers carrying a warning | 0 of 20 | 0 of 20 | 8 of 18 |
+| Gemini calls | 30 | 97 | 111 |
+| Median seconds per question | 8 | 29 | 25 |
+
+Against the targets, full VeriSight showed no bad number prominently (C1 passed) and
+delivered 90% of answerable questions against plain Gemini's 100%, again exactly the
+10 points allowed (C2 passed). It warned on 44% of its correct answers where 10% is
+allowed (C3 failed, worse than the 35% of the third comparison). The single-route
+rule decided only one of the eight warnings.
+
+The eight warnings on correct answers, by cause:
+
+- **Three from one audit flaw.** The races file has a `circuitType` column holding
+  the label `RACE`. The audit and the population review read the ordinary word
+  "race" in a question as naming that label, and flagged every query that did not
+  filter on it. This was fixed after the run in `60813f2`: a value that is the subject
+  word of a loaded table is no longer read as a label. Replayed over the saved queries
+  of all four comparisons, the fix removes 21 flags, all in this one, and adds none.
+  On this run's saved answers it clears 3 of the 8 warnings. These questions found the
+  flaw, so that is not a C3 result.
+- **Three from a wrong second query.** The first answer was right each time. The second
+  query widened "Monza" to every Italian Grand Prix, added a filter on the Grand Prix
+  name to a count of races in Japan, and counted group sizes instead of groups.
+- **One from the join rule.** Counting races after joining them to circuits was flagged
+  as counting circuits more than once, though one count per race is what was asked.
+- **One repeat.** The second query wrote the same SQL as the first, on a query the
+  single-route rule does not cover.
+
+The single bad number answered an ambiguous question about "the period selected for
+our analysis" with the median over all races. Full VeriSight showed it with a warning;
+number checks showed it prominently.
+
+Both missed answers were on the absenteeism workbook. One query was right, counting
+different employee IDs, but the written answer was rejected on its claim shape. The
+other investigation ended after two model calls. Neither cause is established yet.
+
+Gemini failed often during this run. It took four passes over three days to finish:
+126 attempts in all, 36 of them lost to provider errors. Each pass retried only
+questions lost to provider errors, and no answered question was asked again. One
+pass was stopped from outside partway, with no error from the runner. The scores
+above use one answer per question per setup.
+
+These are one run of 30 questions prepared on the project's own side.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10

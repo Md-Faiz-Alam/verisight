@@ -24,11 +24,11 @@ it can be trusted, and gives no number rather than a misleading one. The
 
 ## Next, in order
 
-1. **Fewer false warnings.** In the third comparison VeriSight warned on 6 of 17
-   correct answers, 5 of them because the second query repeated the first on a
-   query with only one route. A repeat from a different model on such a query now
-   counts as agreement; replayed on the saved answers, 1 warning of 17 remains.
-   A fourth comparison on new questions must confirm C3.
+1. **Fewer false warnings.** In the fourth comparison VeriSight warned on 8 of 18
+   correct answers. Three came from reading the word "race" as a category label,
+   fixed since. Three came from a second query that got the wrong number, one from
+   the join rule, and one from a repeated query. A fifth comparison on new questions
+   must measure C3 again.
 2. **Ask about vague questions.** A question such as "how many count as high
    quality?" should get a clarifying question, not an assumption or an empty result.
 3. **Read which row a grouped answer cites,** so that a correct answer read from one
