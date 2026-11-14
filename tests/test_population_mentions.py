@@ -142,3 +142,26 @@ def test_the_word_in_raises_no_warning_about_a_code_column() -> None:
 )
 def test_blank_assignment_parts_never_match(column: str, value: str) -> None:
     assert not _question_assigns_category("flagged is no", column, value)
+
+
+@pytest.mark.parametrize(
+    ("question", "status"),
+    [
+        ("How many races were held in 2024?", "not_assessed"),
+        ("How many races where circuit type is RACE?", "review_required"),
+    ],
+)
+def test_the_tables_own_subject_word_raises_no_population_warning(
+    question: str, status: str
+) -> None:
+    context = QueryContext(
+        relations=(),
+        observed_categories=(
+            ObservedCategoryValues(
+                "f1db_races", "circuit_type", ("RACE", "ROAD", "STREET")
+            ),
+        ),
+    )
+    sql = "SELECT COUNT(*) FROM f1db_races WHERE year = 2024"
+
+    assert review_population(question, sql, context).status == status

@@ -1,6 +1,7 @@
 """Validation for VeriSight analytical SQL execution."""
 
 import re
+from collections.abc import Iterable
 
 import duckdb
 import sqlglot
@@ -362,6 +363,27 @@ def _question_mentions_category(question: str, value: str) -> bool:
     return not re.search(negative, question, re.IGNORECASE)
 
 
+def _names_every_row(
+    question: str, relations: Iterable[str], column: str, value: str
+) -> bool:
+    """A value that is a table's own subject word names every row, not a kind.
+
+    When a table is called ``races``, "how many races" counts its rows even if a
+    column of any loaded table holds the label ``RACE``. Saying "circuit type is
+    RACE" still names the label.
+    """
+    words = {
+        word.casefold()
+        for relation in relations
+        for word in re.findall(r"[A-Za-z]+", relation)
+    }
+    subjects = words | {word[:-1] for word in words if word.endswith("s")}
+    subjects |= {f"{word[:-3]}y" for word in words if word.endswith("ies")}
+    return value.strip().casefold() in subjects and not _question_assigns_category(
+        question, column, value
+    )
+
+
 def _plural_pattern(value: str) -> str:
     """Match a value or a regular English plural of its last word.
 
@@ -491,16 +513,20 @@ def _review_categories(
     table = source.this
     if table.args.get("db") or table.args.get("catalog"):
         return unknown
+    every = context.review_categories or context.observed_categories
+    subjects = {
+        *(relation.relation_name for relation in context.relations),
+        *(item.relation for item in every),
+    }
     categories = [
-        item
-        for item in context.review_categories or context.observed_categories
-        if item.relation.casefold() == table.name.casefold()
+        item for item in every if item.relation.casefold() == table.name.casefold()
     ]
     candidates = [
         (item, value)
         for item in categories
         for value in item.observed_nonmissing_values
         if _question_mentions_category(question, value)
+        and not _names_every_row(question, subjects, item.column, value)
     ]
     # One value shared by several columns is attributed only when the question
     # names exactly one of those columns for it, as in "housing is yes".

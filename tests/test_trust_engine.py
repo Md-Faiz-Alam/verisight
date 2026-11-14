@@ -973,3 +973,41 @@ def test_both_queries_behind_a_difference_are_audited(tmp_path: Path) -> None:
 
     assert report.level is TrustLevel.NEEDS_REVIEW
     assert "never contains" in report.checks[1].detail
+
+
+@pytest.mark.parametrize(
+    ("question", "sql", "flagged"),
+    [
+        # "races" names every row of the races table, not the label RACE.
+        ("How many races were there in 2024?", "WHERE year = 2024", False),
+        ("What is the median race distance?", "", False),
+        # Tied to its column, the label is still named.
+        ("How many races where circuit type is RACE?", "", True),
+        # Labels that are not the table's subject keep their review.
+        ("How many STREET races were there?", "", True),
+    ],
+)
+def test_the_tables_own_subject_word_is_not_a_label(
+    tmp_path: Path, question: str, sql: str, flagged: bool
+) -> None:
+    text = "year,circuit_type,distance\n2024,RACE,300\n2024,STREET,250\n2023,RACE,305\n"
+    data = _dataset(tmp_path, races=text)
+    query = f"SELECT COUNT(*) AS n FROM races {sql}"
+
+    assert ("named_value_not_selected" in _codes(data, question, query)) is flagged
+
+
+def test_a_subject_word_counts_against_every_loaded_table(tmp_path: Path) -> None:
+    data = _dataset(
+        tmp_path,
+        races="id,circuit_id,year\n1,1,2024\n2,2,2024\n3,1,2023\n",
+        circuits="id,country,type\n1,japan,RACE\n2,italy,STREET\n",
+    )
+    sql = (
+        "SELECT COUNT(r.id) AS n FROM races AS r JOIN circuits AS c "
+        "ON r.circuit_id = c.id WHERE c.country = 'japan'"
+    )
+
+    assert "named_value_not_selected" not in _codes(
+        data, "How many races were held in japan?", sql
+    )

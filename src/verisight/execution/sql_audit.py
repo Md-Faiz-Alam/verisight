@@ -19,6 +19,7 @@ from sqlglot.errors import SqlglotError
 from verisight.execution.context import ObservedCategoryValues, ObservedTotalRows
 from verisight.execution.models import QueryResult
 from verisight.execution.validation import (
+    _names_every_row,
     _population_terms,
     _question_assigns_category,
     _question_mentions_category,
@@ -274,8 +275,8 @@ def audit_sql(
             *_fan_out(tree, used),
             *_uncounted_total_rows(tree, used, total_rows),
             *_filter_values(tree, used),
-            *_named_value(question, tree, categories),
-            *_broad_match(question, tree, categories),
+            *_named_value(question, tree, tables, categories),
+            *_broad_match(question, tree, tables, categories),
             *_distinct_count(question, tree),
             *_measure_not_in_data(question, tree, used),
             *_assumed_definition(question, tree),
@@ -562,7 +563,9 @@ def _filter_values(
 
 
 def _mentions(
-    question: str, categories: Sequence[ObservedCategoryValues]
+    question: str,
+    tables: dict[str, LoadedTable],
+    categories: Sequence[ObservedCategoryValues],
 ) -> list[tuple[ObservedCategoryValues, str]]:
     """Name each value the question uses and the one column it belongs to.
 
@@ -570,12 +573,17 @@ def _mentions(
     one, as in "housing is yes". Short lower-case words are too common to read.
     """
     by_value: dict[str, list[tuple[ObservedCategoryValues, str]]] = {}
+    subjects = {*tables, *(item.relation for item in categories)}
     for item in categories:
         for value in item.observed_nonmissing_values:
             long_enough = (
                 len(value.strip()) >= _MIN_NAMED_VALUE_LENGTH or value.isupper()
             )
-            if long_enough and _question_mentions_category(question, value):
+            if (
+                long_enough
+                and _question_mentions_category(question, value)
+                and not _names_every_row(question, subjects, item.column, value)
+            ):
                 by_value.setdefault(value.casefold(), []).append((item, value))
     found = []
     for pairs in by_value.values():
@@ -594,6 +602,7 @@ def _mentions(
 def _named_value(
     question: str,
     tree: exp.Expression,
+    tables: dict[str, LoadedTable],
     categories: Sequence[ObservedCategoryValues],
 ) -> Iterator[AuditFinding]:
     """Find values the question names that the query never selects."""
@@ -602,7 +611,7 @@ def _named_value(
         for column, _, literal in _comparisons(tree, broad=True)
     ]
     names = _names(tree)
-    for item, value in _mentions(question, categories):
+    for item, value in _mentions(question, tables, categories):
         column = item.column.casefold()
         wanted = value.casefold()
         if any(c == column and wanted in text for c, text in restricted):
@@ -619,12 +628,13 @@ def _named_value(
 def _broad_match(
     question: str,
     tree: exp.Expression,
+    tables: dict[str, LoadedTable],
     categories: Sequence[ObservedCategoryValues],
 ) -> Iterator[AuditFinding]:
     """Find a LIKE that also takes in values the question did not name."""
     if _PARTIAL_MATCH_WANTED.search(question):
         return
-    for item, value in _mentions(question, categories):
+    for item, value in _mentions(question, tables, categories):
         for column, _, literal in _comparisons(tree, broad=True):
             if column.name.casefold() != item.column.casefold() or "%" not in literal:
                 continue
@@ -1108,7 +1118,7 @@ def _subtraction_order(
     if not _ORDERED.search(question):
         return
     lowered = question.casefold()
-    named = {value.casefold() for _, value in _mentions(question, categories)}
+    named = {value.casefold() for _, value in _mentions(question, tables, categories)}
     stated = _MINUS.search(question)
     if stated is not None:
         yield from _stated_order(stated, tree, tables, named)

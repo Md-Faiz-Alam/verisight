@@ -192,6 +192,15 @@ For a relation that is not registered, that category names the problem and says
 to use a RELATION identifier, without repeating the model-written name. Before,
 it read only "SQL execution failed.", so repairs kept the same wrong name.
 
+The SQL audit and the population review both read category values named in the
+question. A value that is the subject word of any loaded table is not read as a
+label: with a table called `races`, "how many races" counts its rows even though a
+`circuitType` column holds `RACE`. Tying the value to its column, as in "circuit
+type is RACE", still names it. This was found in the fourth comparison, where the
+word "race" in Formula 1 questions put a review warning on three correct answers.
+Replayed over the saved queries of all four comparisons, the rule removes 21 audit or
+review flags, all in the fourth, and adds none.
+
 Expected SQL parsing and source-resolution errors, including duplicate aliases,
 become `QueryValidationError`. Relation analysis must succeed before execution;
 analysis failure does not bypass authorization. The built-in executor rejects
