@@ -176,6 +176,94 @@ _AGAINST = re.compile(r"\b(?:than|minus|compared|versus|vs)\b", re.IGNORECASE)
 _NUMBER_TEXT = re.compile(r"[0-9]+(?:\.[0-9]+)?")
 # Numbers a calculation may use without saying so: units, percentages, halves.
 _PLAIN_CONSTANTS = frozenset({0.0, 1.0, 2.0, 100.0, 1000.0})
+# Number words a question may use instead of digits, as in "longer than five
+# minutes". Only single words are read; "twenty five" gives 20 and 5.
+_NUMBER_WORDS = {
+    word: float(value)
+    for value, word in enumerate(
+        (
+            "zero",
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+            "ten",
+            "eleven",
+            "twelve",
+            "thirteen",
+            "fourteen",
+            "fifteen",
+            "sixteen",
+            "seventeen",
+            "eighteen",
+            "nineteen",
+        )  # fmt: skip
+    )
+} | {
+    "twenty": 20.0,
+    "thirty": 30.0,
+    "forty": 40.0,
+    "fifty": 50.0,
+    "sixty": 60.0,
+    "seventy": 70.0,
+    "eighty": 80.0,
+    "ninety": 90.0,
+    "hundred": 100.0,
+    "thousand": 1000.0,
+}
+# Units a column or question can name, and the quantity each one measures.
+_UNITS = {
+    "millisecond": "time",
+    "ms": "time",
+    "second": "time",
+    "sec": "time",
+    "minute": "time",
+    "min": "time",
+    "hour": "time",
+    "hr": "time",
+    "day": "time",
+    "week": "time",
+    "millimetre": "length",
+    "millimeter": "length",
+    "mm": "length",
+    "centimetre": "length",
+    "centimeter": "length",
+    "cm": "length",
+    "metre": "length",
+    "meter": "length",
+    "kilometre": "length",
+    "kilometer": "length",
+    "km": "length",
+    "gram": "mass",
+    "kilogram": "mass",
+    "kg": "mass",
+}
+# Plain words for the same quantities, as in "track duration" or "how long".
+_QUANTITY_WORDS = {
+    "duration": "time",
+    "time": "time",
+    "long": "time",
+    "elapsed": "time",
+    "length": "length",
+    "distance": "length",
+    "far": "length",
+    "weight": "mass",
+    "mass": "mass",
+    "heavy": "mass",
+}
+# Factors between the units of each quantity. Accepted only for a quantity the
+# question or a column names, so "ten times the average" over a column of hours
+# is still an invented rate: 10 converts lengths, not times.
+_UNIT_FACTORS = {
+    "time": frozenset({7.0, 24.0, 60.0, 1440.0, 3600.0, 60000.0, 86400.0, 3600000.0}),
+    "length": frozenset({10.0, 1e5, 1e6}),
+    "mass": frozenset({1e6}),
+}
 _MEASURE_PHRASE = re.compile(
     r"\b(?:average|mean|total|sum of|median|maximum|minimum|highest|lowest)\s+"
     r"(?:(?:of|the)\s+)*([a-z][a-z \-]{2,40})",
@@ -746,7 +834,38 @@ def _measure_not_in_data(
 
 
 def _question_numbers(question: str) -> set[float]:
-    return {float(text) for text in _NUMBER_TEXT.findall(question.replace(",", ""))}
+    digits = {float(text) for text in _NUMBER_TEXT.findall(question.replace(",", ""))}
+    words = {
+        _NUMBER_WORDS[word]
+        for word in re.findall(r"[a-z]+", question.casefold())
+        if word in _NUMBER_WORDS
+    }
+    return digits | words
+
+
+def _quantities(words: set[str]) -> set[str]:
+    """Quantities that words name, through a unit or a plain word for it."""
+    found = set()
+    for word in words:
+        singular = word.removesuffix("s")
+        found |= {_UNITS[w] for w in (word, singular) if w in _UNITS}
+        found |= {_QUANTITY_WORDS[w] for w in (word, singular) if w in _QUANTITY_WORDS}
+    return found
+
+
+def _unit_factors(question: str, tree: exp.Expression) -> frozenset[float]:
+    """Conversion factors for the quantities whose units the question or a
+    column names, such as minutes in the question or ``Milliseconds``."""
+    words = set(re.findall(r"[a-z]+", question.casefold()))
+    for column in tree.find_all(exp.Column):
+        words |= _column_words(column.name)
+    named = {
+        _UNITS[form]
+        for word in words
+        for form in (word, word.removesuffix("s"))
+        if form in _UNITS
+    }
+    return frozenset().union(*(_UNIT_FACTORS[quantity] for quantity in named))
 
 
 def _assumed_definition(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
@@ -785,8 +904,14 @@ def _missing_comparison(question: str) -> Iterator[AuditFinding]:
 
 
 def _invented_constants(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
-    """Find numbers in a calculation that come from neither question nor data."""
-    asked = _question_numbers(question) | _PLAIN_CONSTANTS
+    """Find numbers in a calculation that come from neither question nor data.
+
+    Factors between units, such as 60000 from milliseconds to minutes, are
+    allowed when the question or a column names a unit.
+    """
+    asked = (
+        _question_numbers(question) | _PLAIN_CONSTANTS | _unit_factors(question, tree)
+    )
     for node in tree.find_all(exp.Mul, exp.Div, exp.Add, exp.Sub):
         for side in (node.left, node.right):
             value = _numeric_literal(side)
@@ -812,11 +937,15 @@ def _measure_not_named(question: str, tree: exp.Expression) -> Iterator[AuditFin
         for column in node.find_all(exp.Column)
     }
     mentioned = wanted | set(re.findall(r"[a-z]+", lowered))
+    # A column named for a unit measures that unit's quantity: Milliseconds is a
+    # track's duration, whether the question says duration, seconds or minutes.
+    asked_quantities = _quantities(mentioned)
     unrelated = [
         name
         for name in sorted(measured)
         if (named := {w for w in _column_words(name) - _FILLER if _readable_word(w)})
         and not _related(named, mentioned)
+        and not _quantities(_column_words(name)) & asked_quantities
     ]
     if wanted and unrelated and len(unrelated) == len(measured):
         yield AuditFinding(

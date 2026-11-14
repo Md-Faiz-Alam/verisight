@@ -208,6 +208,18 @@ of a `CASE WHEN` or `IF`, is a filter like a `WHERE` clause, not a measure:
 the `THEN` or `ELSE` part is still a measure. Replayed over the saved queries of all
 four comparisons, this removes 7 flags, all on correct answers, and adds none.
 
+Two audit rules catch answers built from outside the data: a calculation constant
+that comes from neither the question nor the data, and a measured column the
+question never mentions. Unit conversions are not such answers. A column named for
+a unit, such as `Milliseconds`, measures that unit's quantity, so it answers a
+question about duration in seconds or minutes. A conversion factor, such as 60000
+from milliseconds to minutes, is accepted only for a quantity the question or a
+column names: 24, 60, 3600 and the like for time, 10 for length. Number words such
+as "five" count as numbers the question gave. Ten times an average number of hours
+is still reported, because 10 is not a factor between units of time. Replayed over
+the saved queries of all five comparisons, this removes 16 flags, all in the fifth,
+and adds none; no flag is removed from any bad answer.
+
 Expected SQL parsing and source-resolution errors, including duplicate aliases,
 become `QueryValidationError`. Relation analysis must succeed before execution;
 analysis failure does not bypass authorization. The built-in executor rejects

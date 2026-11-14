@@ -216,3 +216,88 @@ def test_the_website_shows_no_number_for_an_undefined_word(tmp_path: Path) -> No
     assert reply["failure"] == {"kind": "undefined_in_question"}
     assert reply["answer"].startswith("No number is shown. The question does not say")
     assert "There are 2" not in reply["answer"]
+
+
+TRACKS = (
+    "name,milliseconds,absence_hours,price\n"
+    "A,200000,2,0.99\nB,400000,9,0.99\nC,310000,4,1.99\n"
+)
+
+
+@pytest.fixture(scope="module")
+def tracks(tmp_path_factory: pytest.TempPathFactory) -> LoadedDataset:
+    path: Path = tmp_path_factory.mktemp("units") / "tracks.csv"
+    path.write_text(TRACKS, encoding="utf-8")
+    return DatasetLoader(SETTINGS).load([path])
+
+
+@pytest.mark.parametrize(
+    ("question", "sql", "code", "found"),
+    [
+        # A column named for a unit measures that unit's quantity.
+        (
+            "What is the average track duration in seconds?",
+            "SELECT AVG(milliseconds) / 1000.0 FROM tracks",
+            "measure_not_named",
+            False,
+        ),
+        (
+            "What is the average track length in minutes?",
+            "SELECT AVG(milliseconds) / 60000.0 FROM tracks",
+            "measure_not_named",
+            False,
+        ),
+        # A factor between time units, with a time unit named.
+        (
+            "How long are all tracks in minutes?",
+            "SELECT SUM(milliseconds) / 60000.0 FROM tracks",
+            "invented_constant",
+            False,
+        ),
+        # "Five" in words counts as a number the question gave.
+        (
+            "How many tracks are longer than five minutes?",
+            "SELECT SUM(CASE WHEN milliseconds > 5 * 60 * 1000 THEN 1 ELSE 0 END) "
+            "FROM tracks",
+            "invented_constant",
+            False,
+        ),
+        # A factor that belongs to no named quantity is still invented.
+        (
+            "How many tracks exceeded our absence limit?",
+            "SELECT COUNT(*) FROM tracks WHERE absence_hours > "
+            "(SELECT AVG(absence_hours) * 10 FROM tracks)",
+            "invented_constant",
+            True,
+        ),
+        # Without any unit named, a conversion factor is not assumed.
+        (
+            "What is the average price per track?",
+            "SELECT AVG(price) * 60 FROM tracks",
+            "invented_constant",
+            True,
+        ),
+        # A unit column does not answer a question about another quantity.
+        (
+            "What is the average weight of the tracks?",
+            "SELECT AVG(milliseconds) FROM tracks",
+            "measure_not_named",
+            True,
+        ),
+    ],
+    ids=[
+        "ms-for-seconds",
+        "ms-for-minutes",
+        "minutes-factor",
+        "number-word",
+        "invented-rate",
+        "no-unit-named",
+        "other-quantity",
+    ],
+)
+def test_unit_conversions_are_not_invented(
+    tracks: LoadedDataset, question: str, sql: str, code: str, found: bool
+) -> None:
+    audit = audit_sql(question=question, sql=sql, result=None, dataset=tracks)
+
+    assert (code in {finding.code for finding in audit.findings}) is found
