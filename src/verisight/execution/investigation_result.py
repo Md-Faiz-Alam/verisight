@@ -148,6 +148,7 @@ class SynthesisRecovery:
         "claim_value_mismatch",
         "empty_claims",
         "claim_output_contract_mismatch",
+        "unlinked_narrative_number",
     ]
     repair_attempted: bool | None
     query_succeeded: bool

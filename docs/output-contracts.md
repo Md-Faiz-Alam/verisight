@@ -108,9 +108,12 @@ that rounded number in another cell of the same row.
 In contract mode, a finished synthesis whose evidence lacks the requested final
 value gets one recovery query, if an analytical step remains. The triggers are a
 terminal `invalid_claim_reference` or `claim_value_mismatch` failure, a
-complete synthesis with empty claims, or a `claim_output_contract_mismatch`
+complete synthesis with empty claims, a `claim_output_contract_mismatch`
 failure, where the claims cite several cells because the answer is split over
-rows or over columns that hold only its parts.
+rows or over columns that hold only its parts, or an `unlinked_narrative_number`
+failure, where the answer states a number no cell holds, often a result converted
+to another unit in the answer's own words. The recovery query asks for the value in
+the unit and scale the question asks for.
 The recovery query plans the original
 question, asking for each value the claim needs as its own numeric result
 column. Synthesis then runs once more on all observations, without another

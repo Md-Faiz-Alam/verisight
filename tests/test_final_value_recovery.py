@@ -459,3 +459,41 @@ def test_difference_floating_point_rule_is_narrow(
     result = _difference(expected, left, right)
 
     assert result.status is VerificationStatus.CONTRADICTED
+
+
+def test_a_number_no_cell_holds_uses_the_recovery_query(tmp_path: Path) -> None:
+    # The answer cites the count it found, then states a percentage worked out
+    # in its own words, as an answer converting milliseconds to minutes would.
+    converted = json.dumps(
+        {
+            "conclusion": "2 results were yes, which is 50 percent.",
+            "claims": [
+                {
+                    "operation": "value",
+                    "expected": "2",
+                    "left": {
+                        "observation_index": 0,
+                        "row_index": 0,
+                        "column": "yes_count",
+                    },
+                    "right": None,
+                }
+            ],
+        }
+    )
+
+    result, _, planner, _ = _run(
+        tmp_path,
+        decide=[_decision("Count yes results and all results"), _decision(None)],
+        plan=[COUNT_SQL, PERCENT_SQL],
+        synth=[converted, converted, GOOD],
+    )
+
+    assert result.status is InvestigationStatus.COMPLETE
+    assert result.synthesis_recovery == SynthesisRecovery(
+        "unlinked_narrative_number", True, True
+    )
+    assert "in the unit and scale the question asks for" in planner.prompts[1]
+    assert [item.verification.actual for item in result.verified_claims] == [
+        Decimal("50.0")
+    ]

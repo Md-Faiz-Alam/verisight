@@ -855,6 +855,10 @@ def test_cli_contract_repairs_question_context_numbers(
     corrected = {**rejected, "conclusion": "The total is 930."}
     scripted[-1] = json.dumps(rejected)
     scripted.append(json.dumps(corrected if recover else rejected))
+    if not recover:
+        # A repaired answer that still states an unsupported number gets one
+        # recovery query, then a final synthesis and its repair.
+        scripted.extend([scripted[1], json.dumps(rejected), json.dumps(rejected)])
     with patch(
         "verisight.execution.gemini.GeminiTextGenerationClient.generate",
         side_effect=scripted,
@@ -871,7 +875,7 @@ def test_cli_contract_repairs_question_context_numbers(
             ]
         )
     report = json.loads(capsys.readouterr().out)
-    assert generate.call_count == 5
+    assert generate.call_count == (5 if recover else 8)
     assert code == (0 if recover else 1)
     assert report["claim_output_assessment"]["accepted"] is recover
     investigation = report["investigation"]
@@ -889,6 +893,11 @@ def test_cli_contract_repairs_question_context_numbers(
             == "unlinked_narrative_number"
         )
         assert investigation["synthesis_failure"]["repair_attempted"] is True
+        assert investigation["synthesis_recovery"] == {
+            "trigger": "unlinked_narrative_number",
+            "repair_attempted": True,
+            "query_succeeded": True,
+        }
 
 
 @pytest.mark.parametrize("command", ["profile", "preview"])

@@ -49,6 +49,7 @@ RecoveryTrigger = Literal[
     "claim_value_mismatch",
     "empty_claims",
     "claim_output_contract_mismatch",
+    "unlinked_narrative_number",
 ]
 
 _RECOVERY_INSTRUCTION = (
@@ -58,7 +59,9 @@ _RECOVERY_INSTRUCTION = (
     "counts or other components. For a difference, return the two numbers it "
     "subtracts as separate numeric columns in the same row as the difference. "
     "If the question asks for one overall number, return one row with that "
-    "number; do not split it into a row for each item in the group."
+    "number; do not split it into a row for each item in the group. Return it "
+    "in the unit and scale the question asks for, such as minutes rather than "
+    "milliseconds, so the answer can quote the cell unchanged."
 )
 
 
@@ -442,6 +445,10 @@ class InvestigationOrchestrator:
                 # answer is split over rows, or over columns that hold only its
                 # parts, such as a count and a total for a percentage.
                 return "claim_output_contract_mismatch"
+            if failure.validation_reason == "unlinked_narrative_number":
+                # The answer states a number no cell holds, often the result
+                # converted to another unit, such as milliseconds to minutes.
+                return "unlinked_narrative_number"
             return None
         if result.status is InvestigationStatus.COMPLETE and not (
             result.generated_claims

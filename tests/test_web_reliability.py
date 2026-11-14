@@ -347,12 +347,9 @@ FAILURES: dict[str, Failure] = {
         "plan": ["DROP TABLE data", "DROP TABLE data", "DROP TABLE data"],
     },
     "bad-answer": {"write": ["not json", "still not json"]},
+    # The repair fails, one recovery query runs, and its answer invents again.
     "invented-number": {
-        "write": [
-            json.dumps({"conclusion": "The total is 999.", "claims": []}),
-            json.dumps({"conclusion": "The total is 999.", "claims": []}),
-            json.dumps({"conclusion": "The total is 999.", "claims": []}),
-        ],
+        "write": [json.dumps({"conclusion": "The total is 999.", "claims": []})] * 4,
     },
 }
 
