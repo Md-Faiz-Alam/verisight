@@ -492,6 +492,71 @@ above use one answer per question per setup.
 
 These are one run of 30 questions prepared on the project's own side.
 
+### Fifth comparison with plain Gemini (30 new questions, 4 new files)
+
+Building energy efficiency (Excel, 768 rows), abalone measurements (CSV, 4,177
+rows), and a pair of related files from a music store sample database: 3,503 tracks
+joined to 347 albums. None was used before. The questions were prepared outside the
+project session, with 20 answerable, 5 ambiguous and 5 unanswerable, answers worked
+out separately and wording kept away from the problems fixed so far, including the
+two audit fixes this round was meant to measure. Fractional answers allow 0.01.
+
+Questions, data and runner were frozen by hash at `3cf71e1`, which adds those two
+fixes: a table's own subject word is not read as a category label, and a joined
+column used only in a `CASE WHEN` condition is not read as a copied measure.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 19 | 19 | 19 |
+| Wrong number, of 20 answerable | 0 | 0 | 0 |
+| No number, of 20 answerable | 1 | 1 | 1 |
+| Number given where none exists, of 10 | 3 | 0 | 0 |
+| Correctly gave no number, of 10 | 7 | 10 | 10 |
+| Bad numbers shown prominently | 3 | 0 | 0 |
+| Bad numbers visible anywhere | 3 | 0 | 0 |
+| Correct answers carrying a warning | 0 of 19 | 0 of 19 | 6 of 19 |
+| Gemini calls | 30 | 91 | 114 |
+| Median seconds per question | 3 | 10 | 15 |
+
+Against the targets, full VeriSight showed no bad number at all (C1 passed) and
+delivered 95% of answerable questions, the same as plain Gemini (C2 passed, with
+the whole 10-point margin to spare for the first time). It warned on 32% of its
+correct answers where 10% is allowed (C3 failed, down from 44%). Plain Gemini's
+three bad numbers all answered ambiguous questions about a limit or selection the
+question never defined; full VeriSight declined all ten questions without a valid
+answer. The second query did not disagree with any correct answer.
+
+The six warnings on correct answers, by cause:
+
+- **Five from unit conversions,** all on the tracks file, whose length column is
+  `Milliseconds`. Three were "measure not named": the question asked for a duration
+  in seconds and the audit did not see that milliseconds measure duration. Two were
+  "invented constant": dividing by 60000 to get minutes, and a second query that
+  wrote "five minutes" as `5 * 60 * 1000` when the question said "five" in words.
+  This was fixed after the run in `8d632e2`: a column named for a unit measures its
+  quantity, a conversion factor is accepted only for a quantity the question or a
+  column names, and number words count. Replayed over the saved queries of all five
+  comparisons, the fix removes 16 flags, all in this one, adds none and removes no
+  flag from any bad answer. On this run's saved answers it leaves 1 warning of 19.
+  These questions found the flaw, so that is not a C3 result.
+- **One repeat.** A median with one filter, where the second query wrote the same
+  SQL as the first.
+
+The one missed answer asked for the total play time of every track in minutes. The
+SQL summed the milliseconds correctly, but the written answer stated the minutes
+figure, which no query cell held, so VeriSight rejected it. That rejection does not
+trigger the recovery query that asks for the final value as its own cell. Number
+checks missed it the same way; plain Gemini divided in its SQL and was right. Plain
+Gemini's own miss was a percentage whose query failed. After the run, an answer that
+states a number no cell holds was added to the triggers for the recovery query,
+which now also asks for the value in the unit the question uses. That is tested
+offline only.
+
+Gemini was steady this time: all 92 attempts ran on one day, and only 2 were lost to
+provider errors. Both were retried once and came back correct with a warning.
+
+These are one run of 30 questions prepared on the project's own side.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10

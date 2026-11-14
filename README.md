@@ -104,6 +104,10 @@ Every live run is published in [Live results](docs/results.md), failures include
 - **A fourth comparison**, on 30 new questions and 4 new files: VeriSight showed no
   bad number prominently, against Gemini's 8, and delivered 18 correct answers against
   Gemini's 20. It warned on 8 of them, so false warnings remain the main weakness.
+- **A fifth comparison**, on 30 new questions and 4 new files: VeriSight showed no bad
+  number at all, against Gemini's 3, gave no number on all 10 questions without a
+  valid answer, and delivered 19 correct answers, the same as Gemini. It warned on 6
+  of them, 5 from unit conversions the audit has since learned to accept.
 - **Earlier runs:** 150 development attempts gave 85 accepted answers, all correct.
   Held-out sets on unseen data first exposed 3 wrong accepted answers, which led to
   the SQL audit.
