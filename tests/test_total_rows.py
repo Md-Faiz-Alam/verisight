@@ -306,7 +306,7 @@ def test_a_value_in_few_groups_is_not_a_total_by_chance() -> None:
 
 
 def test_a_total_missing_from_a_few_groups_is_still_found() -> None:
-    rows = []
+    rows: list[tuple[str, int, int]] = []
     for month in range(6):
         parts = (month + 1, month + 2, month + 3)
         rows.extend(zip(("North", "South", "East"), (month,) * 3, parts, strict=True))
