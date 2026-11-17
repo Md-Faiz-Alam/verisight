@@ -32,6 +32,13 @@ _NO_VALUE = re.compile(
     r"\b(?:no recorded|missing|without (?:a |any )?recorded)\b", re.IGNORECASE
 )
 _KNOWN_VALUE = re.compile(r"\b(?:recorded|known)\b(?! as\b)", re.IGNORECASE)
+# "Ignoring missing dates" leaves missing values out; it does not ask about them.
+_IGNORE_MISSING = re.compile(
+    r"\b(?:ignor(?:e|es|ed|ing)|exclud(?:e|es|ed|ing)|skip(?:s|ped|ping)?|"
+    r"drop(?:s|ped|ping)?|omit(?:s|ted|ting)?|leav(?:e|es|ing) out|not counting)"
+    r"\s+(?:the\s+|any\s+|all\s+)?missing\b",
+    re.IGNORECASE,
+)
 _AS_ZERO = re.compile(r"\bas (?:zero|0)\b", re.IGNORECASE)
 _YEAR = re.compile(r"\b(?:1[5-9][0-9]{2}|20[0-9]{2})\b")
 _AT_LEAST = re.compile(r"\bat least ([0-9][0-9,]*(?:\.[0-9]+)?)", re.IGNORECASE)
@@ -385,7 +392,7 @@ def audit_sql(
             *_calculation(question, tree, tables),
             *_median(question, tree),
             *_missing_as_zero(question, tree, used),
-            *_missing_values(question, tree),
+            *_missing_values(question, tree, used),
             *_period(question, tree, tables),
             *_thresholds(question, tree),
             *_range_ends(question, tree),
@@ -1132,9 +1139,13 @@ def _known_column_compared(question: str, tree: exp.Expression) -> bool:
     )
 
 
-def _missing_values(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+def _missing_values(
+    question: str, tree: exp.Expression, used: dict[str, LoadedTable]
+) -> Iterator[AuditFinding]:
     """Compare a question about missing or known values with the query's filters."""
-    if _NO_VALUE.search(question):
+    ignores = _IGNORE_MISSING.search(question) is not None
+    known = ignores or _KNOWN_VALUE.search(question) is not None
+    if _NO_VALUE.search(_IGNORE_MISSING.sub(" ", question)):
         if not any(
             isinstance(n.expression, exp.Null) and not isinstance(n.parent, exp.Not)
             for n in tree.find_all(exp.Is)
@@ -1145,21 +1156,57 @@ def _missing_values(question: str, tree: exp.Expression) -> Iterator[AuditFindin
                 "for them.",
             )
     elif (
-        _KNOWN_VALUE.search(question)
+        known
         and tree.find(*_SKIPS_MISSING) is None
         or (
-            _KNOWN_VALUE.search(question)
+            known
             and any(isinstance(c.this, exp.Star) for c in tree.find_all(exp.Count))
         )
     ) and (
         tree.find(exp.Is, exp.NEQ, exp.In, exp.Not) is None
         and not _known_column_compared(question, tree)
+        and not _missing_rows_filtered(tree, used)
     ):
         yield AuditFinding(
             "unknown_values_counted",
             "The question is limited to known values, but the query keeps rows "
             "where the value is missing or unknown.",
         )
+
+
+_KEEPS_KNOWN = (
+    exp.EQ,
+    exp.GT,
+    exp.GTE,
+    exp.LT,
+    exp.LTE,
+    exp.Between,
+    exp.Like,
+    exp.ILike,
+)
+
+
+def _missing_rows_filtered(tree: exp.Expression, used: dict[str, LoadedTable]) -> bool:
+    """Whether the WHERE clause already drops every row with a missing value.
+
+    A comparison such as ``date > length`` is never true for a missing date, so a
+    WHERE that compares every column holding missing values keeps known values
+    only, whichever column the question meant.
+    """
+    compared: set[str] = set()
+    for where in tree.find_all(exp.Where):
+        for term in _population_terms(where.this):
+            if isinstance(term, _KEEPS_KNOWN):
+                compared |= {c.name.casefold() for c in term.find_all(exp.Column)}
+    if not compared:
+        return False
+    holding = {
+        str(name).casefold()
+        for table in used.values()
+        for name in table.data.columns
+        if bool(table.data[name].isna().any())
+    }
+    return bool(holding) and holding <= compared
 
 
 def _literal_texts(tree: exp.Expression) -> list[str]:

@@ -388,3 +388,67 @@ def test_a_known_value_filter_must_cover_the_named_column(
     coded: LoadedDataset, question: str, sql: str, found: bool
 ) -> None:
     assert ("unknown_values_counted" in _codes(coded, question, sql)) is found
+
+
+@pytest.mark.parametrize(
+    ("question", "sql", "code", "found"),
+    [
+        # Leaving missing values out is not a question about them.
+        (
+            "What is the average price of orders with a note, ignoring missing notes?",
+            "SELECT AVG(price) FROM orders WHERE note IS NOT NULL",
+            "missing_values_ignored",
+            False,
+        ),
+        (
+            "How many orders are there, excluding missing notes?",
+            "SELECT COUNT(*) FROM orders",
+            "unknown_values_counted",
+            True,
+        ),
+        (
+            "How many orders are there, excluding missing notes?",
+            "SELECT COUNT(*) FROM orders WHERE note IS NOT NULL",
+            "unknown_values_counted",
+            False,
+        ),
+        (
+            "How many orders have a missing note?",
+            "SELECT COUNT(*) FROM orders WHERE note IS NOT NULL",
+            "missing_values_ignored",
+            True,
+        ),
+        # A comparison on the only column with missing values drops those rows.
+        (
+            "How many orders have a recorded remark after 'w'?",
+            "SELECT COUNT(*) FROM orders WHERE note > 'w'",
+            "unknown_values_counted",
+            False,
+        ),
+        (
+            "How many orders have a recorded remark?",
+            "SELECT COUNT(*) FROM orders WHERE price > 15",
+            "unknown_values_counted",
+            True,
+        ),
+        (
+            "How many orders have a recorded remark after 'w' or cost over 15?",
+            "SELECT COUNT(*) FROM orders WHERE note > 'w' OR price > 15",
+            "unknown_values_counted",
+            True,
+        ),
+    ],
+    ids=[
+        "ignoring-missing",
+        "excluding-missing-kept",
+        "excluding-missing-dropped",
+        "about-missing",
+        "compared-column-holds-the-gaps",
+        "compared-column-has-no-gaps",
+        "comparison-under-or",
+    ],
+)
+def test_missing_values_left_out_or_already_filtered(
+    shop: LoadedDataset, question: str, sql: str, code: str, found: bool
+) -> None:
+    assert (code in _codes(shop, question, sql)) is found

@@ -237,6 +237,15 @@ money word, or a currency sign, still needs a measure that holds money. This cam
 from the seventh comparison, where it blocked a correct answer; replayed over the
 saved queries of all seven, it changes findings on that question only.
 
+A question that says to ignore or exclude missing values, as "ignoring missing
+dates", asks for known values only, not about the missing ones, so `IS NOT NULL` or
+an aggregate that skips them answers it. A count limited to "recorded" values is
+also accepted when its WHERE already compares every column that holds missing
+values: `date > length` is never true for a missing date. A comparison under `OR`
+does not count. These came from the eighth comparison; replayed over the saved
+queries of all eight, they clear three warnings on correct answers and change
+nothing else.
+
 Expected SQL parsing and source-resolution errors, including duplicate aliases,
 become `QueryValidationError`. Relation analysis must succeed before execution;
 analysis failure does not bypass authorization. The built-in executor rejects
