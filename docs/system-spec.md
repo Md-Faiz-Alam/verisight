@@ -102,9 +102,9 @@ does not define. A declined question runs no query and gets "Not verified" with 
 number. The model's reason is shown only when it states no number.
 
 A second query that repeats the first counts as a completed check only for a
-single-route query: one table, one value built from aggregates, no join, grouping,
-subquery, distinct values or window, and no comparison or combination of two
-columns. It must also come from a different model than the first query. See the
+single-route query: one table, one value built from aggregates or looked up in the
+one row its conditions pick, no join, grouping, subquery, distinct values, window,
+order or limit, and no comparison or combination of two columns. It must also come from a different model than the first query. See the
 [guide](guide.md#independent-cross-check).
 
 The second query may refuse in the same two cases. A refusal counts as a failed
@@ -133,10 +133,10 @@ result existed. A *regression* target protects a result that was already known.
 | D2 | Regression | Ambiguous damage is rejected or flagged, never guessed | passed | [`test_damaged_files.py`](../tests/test_damaged_files.py) |
 | A1 | Regression | Missed mistakes: of the 31 frozen wrong queries, at least 75% are caught | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
 | A2 | Regression | False warnings: none on the 31 frozen correct queries | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
-| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#eighth-comparison-with-plain-gemini-30-new-questions-3-new-files) |
-| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | passed | [`results.md`](results.md#eighth-comparison-with-plain-gemini-30-new-questions-3-new-files) |
-| C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#eighth-comparison-with-plain-gemini-30-new-questions-3-new-files) |
-| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#eighth-comparison-with-plain-gemini-30-new-questions-3-new-files) |
+| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#ninth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | passed | [`results.md`](results.md#ninth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#ninth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#ninth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
 | R1 | Predeclared | Concurrency, expiry, eviction, restart and crash-recovery tests pass | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R2 | Predeclared | A failed mandatory check can never produce "Verified"; evidence already computed stays visible with its incomplete status | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R3 | Predeclared | A provider failure never produces a number that was not computed | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
@@ -157,8 +157,10 @@ A seventh comparison at `69043af`, with three audit fixes, showed 1 bad number
 prominently against plain Gemini's 9, delivered 85% of answerable questions against
 90%, and failed C3 at 24%, most of it from one false total-row detection. An eighth
 comparison at `799ffc9` showed 1 bad number prominently against plain Gemini's 10,
-delivered every answerable question, and failed C3 at 20%. The status column shows
-the eighth comparison.
+delivered every answerable question, and failed C3 at 20%. A ninth comparison at
+`12cf29e`, with the missing-value fixes, showed 1 bad number prominently against
+plain Gemini's 8, delivered 80% of answerable questions against 85%, and failed C3
+at 12.5%. The status column shows the ninth comparison.
 
 M1 was measured on this computer with scripted replies and generated data: five
 uploads of one 19.5 MB file with charts, two questions at once with second queries,

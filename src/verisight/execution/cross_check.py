@@ -120,8 +120,9 @@ class CrossCheck:
 
     ``single_route`` is recorded for a repeat only. It is true when the query
     reads one table with no join, grouping, subquery, distinct values or window,
-    so no other route could test anything beyond the same choice of rows, column
-    and calculation. ``separate_model`` is true when another model wrote the
+    and either aggregates or looks up one column in exactly one row, so no other
+    route could test anything beyond the same choice of rows, column and
+    calculation. ``separate_model`` is true when another model wrote the
     second query. A repeat counts as evidence only when both are true.
     """
 
@@ -177,7 +178,11 @@ class IndependentCrossChecker:
                 separate_model=self._separate_model,
             )
         identical = _canonical_sql(sql) == _canonical_sql(primary_sql)
-        single_route = _single_route(primary_sql) if identical else None
+        single_route = (
+            _single_route(primary_sql, one_row=len(execution.result.rows) == 1)
+            if identical
+            else None
+        )
         independent = _answer_cell(execution.result)
         if independent is None:
             return CrossCheck(
@@ -348,14 +353,16 @@ def _relates_columns(tree: exp.Select, projection: exp.Expression) -> bool:
     return len(measures) > 1
 
 
-def _single_route(sql: str) -> bool:
+def _single_route(sql: str, *, one_row: bool) -> bool:
     """Return whether no other route could test more than the same choices.
 
     The query must read one table in one SELECT, return one expression built
     from aggregates, use none of the structures above, and never relate two
     columns. Its row conditions may sit in WHERE or inside the aggregate;
-    either way they choose the same rows. This is decided from the SQL alone,
-    never from the question.
+    either way they choose the same rows. A lookup of one column also counts
+    when its conditions alone pick exactly one row (``one_row``), with no
+    ordering or limit to choose it. This is decided from the SQL and the row
+    count alone, never from the question.
     """
     tree = sqlglot.parse_one(sql, read="duckdb")
     if not isinstance(tree, exp.Select) or len(list(tree.find_all(exp.Select))) != 1:
@@ -366,11 +373,22 @@ def _single_route(sql: str) -> bool:
         return False
     projection = tree.expressions[0]
     if projection.find(exp.AggFunc) is None:
-        return False
+        return one_row and _lookup(tree, projection)
     if any(
         column.find_ancestor(exp.AggFunc) is None
         for column in projection.find_all(exp.Column)
     ):
+        return False
+    return not _relates_columns(tree, projection)
+
+
+def _lookup(tree: exp.Select, projection: exp.Expression) -> bool:
+    """Return whether the query reads one column as it is, rows chosen by WHERE."""
+    value = projection.this if isinstance(projection, exp.Alias) else projection
+    if not isinstance(value, exp.Column):
+        return False
+    # An order or a limit picks a row by rank, which another route could test.
+    if tree.args.get("order") is not None or tree.args.get("limit") is not None:
         return False
     return not _relates_columns(tree, projection)
 

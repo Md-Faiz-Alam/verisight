@@ -278,6 +278,37 @@ def test_a_later_run_only_asks_what_is_unanswered(tmp_path: Path) -> None:
     assert len(results.read_text("utf-8").splitlines()) == 4
 
 
+class _RefusingClient:
+    def post(self, url: str, **_: Any) -> Any:
+        class _Reply:
+            status_code = 413
+
+        return _Reply()
+
+
+def test_a_refused_upload_counts_for_no_one_and_is_asked_again(
+    tmp_path: Path,
+) -> None:
+    root = _root(tmp_path, "")
+    results = tmp_path / "full.jsonl"
+    unanswerable = runner.Question(
+        "q0", ("orders.csv",), "number", "?", None, "UNANSWERABLE", Decimal(0)
+    )
+    refused = runner.answer_on_website(
+        _RefusingClient(), unanswerable, root / "data", ""
+    )
+
+    assert runner.score(unanswerable, refused) == "upload_refused"
+    runner.run_setup([unanswerable], _asker([refused]), results)
+    ask = _asker([runner.Answer()])
+    runner.run_setup([unanswerable], ask, results)
+    assert ask.asked == ["q0"]
+
+    records = [json.loads(line) for line in results.read_text("utf-8").splitlines()]
+    summary = runner.summarize([unanswerable], records[:1])
+    assert (summary["attempted"], summary["not_attempted"]) == (0, 1)
+
+
 def test_the_summary_reports_every_number_the_targets_need() -> None:
     questions = [
         runner.Question("a", ("o",), "number", "?", Decimal(1), "number", Decimal(0)),

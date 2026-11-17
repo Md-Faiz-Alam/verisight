@@ -67,12 +67,17 @@ class Answer:
     number: Decimal | None = None
     visibility: str = NONE
     provider_error: bool = False
+    # The website refused the files, so the question never reached the model.
+    upload_refused: bool = False
     calls: int = 0
     seconds: float = 0.0
     details: dict[str, Any] = field(default_factory=dict)
 
 
 Ask = Callable[[Question], Answer]
+
+# Outcomes that say nothing about the answer; such a question is asked again.
+NOT_ANSWERED = ("provider_error", "upload_refused")
 
 
 def _problem(number: int, message: str) -> SystemExit:
@@ -138,6 +143,8 @@ def score(question: Question, answer: Answer) -> str:
     """Name the result of one attempt."""
     if answer.provider_error:
         return "provider_error"
+    if answer.upload_refused:
+        return "upload_refused"
     if question.expected is None:
         if answer.number is None:
             return "correct_refusal"
@@ -358,7 +365,9 @@ def answer_on_website(
     ]
     upload = client.post("/api/datasets", files=files)
     if upload.status_code != 201:
-        return Answer(details={"upload_status": upload.status_code})
+        return Answer(
+            upload_refused=True, details={"upload_status": upload.status_code}
+        )
     dataset_id = upload.json()["dataset_id"]
     started = time.perf_counter()
     try:
@@ -390,7 +399,7 @@ def run_setup(
     if results.exists():
         for line in results.read_text("utf-8").splitlines():
             record = json.loads(line)
-            if record["outcome"] != "provider_error":
+            if record["outcome"] not in NOT_ANSWERED:
                 finished.add(record["id"])
     results.parent.mkdir(parents=True, exist_ok=True)
     errors_in_a_row = 0
@@ -439,13 +448,13 @@ def summarize(
     warned_right = counts["correct_warned"]
     right = prominent_right + warned_right
     wrong = counts["wrong_prominent"] + counts["wrong_warned"]
-    errors = {i for i, r in latest.items() if r["outcome"] == "provider_error"}
+    errors = {i for i, r in latest.items() if r["outcome"] in NOT_ANSWERED}
     delivered_over = len(answerable - errors)
     shown = right + wrong + counts["unsafe_prominent"] + counts["unsafe_warned"]
     seconds = [r["seconds"] for r in latest.values() if r["seconds"]]
     return {
-        "attempted": len(latest),
-        "not_attempted": len(questions) - len(latest),
+        "attempted": len(latest) - counts["upload_refused"],
+        "not_attempted": len(questions) - len(latest) + counts["upload_refused"],
         "outcomes": dict(sorted(counts.items())),
         "correct_delivered_share": _share(right, delivered_over),
         "correct_among_shown_share": _share(right, shown),

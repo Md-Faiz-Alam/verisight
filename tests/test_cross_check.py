@@ -303,7 +303,15 @@ def test_repeated_formulation_is_recorded(sql: str, identical: bool) -> None:
         ("SELECT SUM(amount) OVER () FROM sales", False),
         ("SELECT arg_max(region, amount) FROM sales", False),
         ("SELECT SUM(amount) FROM sales UNION SELECT SUM(amount) FROM sales", False),
-        ("SELECT amount FROM sales", False),
+        # A lookup of one column, its one row chosen by WHERE alone.
+        ("SELECT amount FROM sales WHERE region = 'E' AND year = 2020", True),
+        ('SELECT "amount" AS "value" FROM "sales" WHERE "id" = 7', True),
+        ("SELECT amount FROM sales", True),
+        # A rank, arithmetic or a second column is a choice another route can test.
+        ("SELECT amount FROM sales ORDER BY amount DESC LIMIT 1", False),
+        ("SELECT amount FROM sales WHERE year = 2020 LIMIT 1", False),
+        ("SELECT amount * 2 FROM sales WHERE id = 7", False),
+        ("SELECT amount FROM sales WHERE shipped <= required", False),
         ("SELECT amount + SUM(amount) FROM sales", False),
         ("SELECT SUM(amount), COUNT(*) FROM sales", False),
         ("SELECT SUM(a.x) FROM sales AS a, sales AS b", False),
@@ -318,6 +326,19 @@ def test_single_route_is_recorded_for_a_repeat(primary: str, single: bool) -> No
     assert check.identical_sql is True
     assert check.single_route is single
     assert check.separate_model is True
+
+
+@pytest.mark.parametrize("rows", [((100,), (200,)), ()])
+def test_a_lookup_is_single_route_only_for_one_row(
+    rows: tuple[tuple[QueryScalar, ...], ...],
+) -> None:
+    lookup = "SELECT amount FROM sales WHERE region = 'E'"
+    checker = IndependentCrossChecker(_Runner(rows=rows, sql=lookup))
+
+    check = checker.check("How much?", ANSWER, lookup)
+
+    assert check.status is CrossCheckStatus.NOT_ASSESSED
+    assert check.single_route is False
 
 
 def test_single_route_is_not_recorded_when_the_queries_differ() -> None:

@@ -24,17 +24,21 @@ it can be trusted, and gives no number rather than a misleading one. The
 
 ## Next, in order
 
-1. **Fewer false warnings.** In the eighth comparison VeriSight warned on 4 of 20
-   correct answers (20%). Three came from missing-value readings, fixed since; on the
-   saved answers 1 warning of 20 remains. The fourth, a repeated distinct count, has
-   now come up twice. A ninth comparison must confirm C3. A second query that reaches
-   a wrong number still warns on a correct answer, which is kept on purpose: the same
-   disagreement has kept 8 bad numbers from being verified.
+1. **Fewer false warnings.** In the ninth comparison VeriSight warned on 2 of 16
+   correct answers (12.5%), against 20% in the eighth. Both were one-cell lookups
+   repeated by the second query, now counted as one route; no warning came from the
+   missing-value readings fixed after the eighth. A tenth comparison must confirm C3.
+   A repeated distinct count, warned twice before, is still kept out on purpose. A
+   second query that reaches a wrong number still warns on a correct answer, which is
+   kept on purpose too: the same disagreement has kept 9 bad numbers from being
+   verified.
 2. **Names and words with more than one meaning.** In the seventh comparison "the
    Vips branch" averaged several restaurants of that name and was shown as verified,
    "average score" picked one of three score columns, and "low price category" was
    read as a question about money (fixed since). In the eighth, "how many courses?"
-   counted offerings, not modules, and was shown as verified.
+   counted offerings, not modules, and was shown as verified. In the ninth, "the
+   highest reported CO2 emissions value" took the World row from a file that mixes
+   countries with World and regions, and was shown as verified.
 3. **Ask about vague questions.** A question such as "how many count as high
    quality?" should get a clarifying question, not an assumption or an empty result.
 4. **Read which row a grouped answer cites,** so that a correct answer read from one

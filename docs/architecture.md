@@ -719,8 +719,10 @@ can be trusted. The levels and their meaning are listed in the
    column the question never mentions.
 4. **Second query.** `execution/cross_check.py` plans a query from the question
    alone, told to reach the number by another route. A repeat of the first query,
-   apart from aliases and order, adds no evidence. When the question states decimal
-   places, both numbers are compared at those places.
+   apart from aliases and order, adds no evidence, unless the query has only one
+   route: one table and one aggregate, or one column looked up in the single row its
+   conditions pick. The ninth comparison found that such lookups were warned. When
+   the question states decimal places, both numbers are compared at those places.
 5. **Level.** `execution/trust_assessment.py` combines these: any failed check gives
    "Needs review", and only all passed checks give "Verified". A measure the data
    does not hold, a vague word the query defined by itself, or a comparison with

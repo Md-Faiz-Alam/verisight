@@ -767,6 +767,87 @@ Gemini was steady: all 90 attempts ran on one day with no provider errors.
 
 These are one run of 30 questions prepared on the project's own side.
 
+### Ninth comparison with plain Gemini (30 new questions, 4 new files)
+
+Four files from Our World in Data, none used before: CO2 and greenhouse gas
+emissions (56,269 rows, 21.1 MB), energy supply (11,280 rows), World Bank GDP per
+capita (7,444 rows) and population (58,823 rows). Each mixes countries with World,
+continent and income-group rows. Eleven questions use all four files at once. The
+questions were prepared outside the project session, with 20 answerable, 5 ambiguous
+and 5 unanswerable, and answers worked out separately.
+
+Questions, data and runner were frozen by hash at `12cf29e`, which adds the
+missing-value fixes from the eighth comparison.
+
+**The first full run was refused at upload.** The website accepts files up to 20 MB,
+and the CO2 file is 21.1 MB, so 20 of the 30 questions never reached Gemini. The
+runner scored those as 15 misses and 5 correct refusals. Those records are kept in
+`runs/full-upload-refused.jsonl`. The 20 questions were then asked again with the
+limit raised to 25 MB through `VERISIGHT_WEB_MAX_UPLOAD_MB`, with no code change,
+and the 10 answers from the first run were kept. The table uses those 30 answers.
+The runner now counts a refused upload as not attempted. The default stays at 20 MB:
+with 50 MB files, the memory workload of target M1 peaked at 1,666 MiB, over its
+1 GB limit, mostly while reading one upload of five such files.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 17 | 16 | 16 |
+| Wrong number, of 20 answerable | 3 | 3 | 3 |
+| No number, of 20 answerable | 0 | 1 | 1 |
+| Number given where none exists, of 10 | 5 | 1 | 1 |
+| Correctly gave no number, of 10 | 5 | 9 | 9 |
+| Bad numbers shown prominently | 8 | 4 | 1 |
+| Bad numbers visible anywhere | 8 | 4 | 4 |
+| Correct answers carrying a warning | 0 of 17 | 0 of 16 | 2 of 16 |
+| Gemini calls | 30 | 105 | 129 |
+| Median seconds per question | 14 | 20 | 20 |
+
+Against the targets, full VeriSight showed 1 bad number prominently against plain
+Gemini's 8 (C1 passed) and delivered 80% of answerable questions against 85% (C2
+passed). It warned on 12.5% of its correct answers where 10% is allowed (C3 failed,
+the closest so far). No warning came from missing values, the cause fixed after the
+eighth comparison. Plain Gemini gave a number for five of the questions without a
+valid answer, such as France's nuclear output in gigawatt-hours and net migration
+into Canada.
+
+The two warnings on correct answers had one cause. "What was India's GDP per capita
+in 2024?" and "What was China's total energy supply in 2023?" were answered by
+looking up one cell, `SELECT col WHERE Entity = … AND Year = …`. The second query
+wrote the same lookup, as it should, but a repeat counted only for a query built
+from aggregates, so it added no evidence.
+
+The three wrong numbers were the same in all three setups:
+
+- **"What was the highest reported CO2 emissions value in 2024?"** All three
+  answered 38,647, the World row, and full VeriSight showed it as verified. The
+  written answer, 12,401, is China's. The reference working asks which *country* was
+  highest, and the frozen wording lost that word, so the World row is a fair
+  literal reading. It is scored wrong, as frozen. The gap is real all the same:
+  nothing tells the user that the file mixes countries with World and regions.
+- **A mean and a median "excluding World and regional aggregates."** Gemini listed
+  aggregates by name, while the written answers keep only rows with a three-letter
+  country code. Full VeriSight warned on both. On the mean, the second query
+  reached another number; on the median, it shared the mistake, and its audit
+  failed.
+
+The one answerable question full VeriSight missed was "How many times was US GDP per
+capita compared with India's in 2024?". Gemini read it as a count of comparisons
+the data does not record, and declined. Plain Gemini read it as a ratio.
+
+Of the 10 questions without a valid answer, full VeriSight gave a number only for "a
+typical level of energy consumption per capita in Europe during the 2010s", with a
+warning. The second query confirmed 14 correct answers, caught one wrong answer and
+shared two mistakes.
+
+After the run, the single-route rule was extended: a lookup of one column whose
+WHERE alone picks exactly one row, with no order, limit or arithmetic, also counts
+as one route. Replayed over the saved queries of all nine comparisons, this clears
+the two warnings, changes no other answer, and removes no flag from any bad answer.
+On this run's saved answers no correct answer carries a warning. These questions
+found the flaw, so that is not a C3 result.
+
+All 90 answers in the table ran on one day with no provider errors.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10

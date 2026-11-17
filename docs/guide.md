@@ -517,7 +517,9 @@ The exception is a query with only one route, recorded as `single_route`: it rea
 one table, returns one value built from aggregates, has no join, grouping,
 subquery, distinct values, window or row-picking aggregate such as `arg_max`, and
 never compares or combines two columns. `AVG(area)` or `SUM(amount) WHERE region =
-'East'` qualify. `shipped <= required`, `price - cost` and `SUM(a) / SUM(b)` do
+'East'` qualify. So does a lookup of one column, such as `SELECT gdp WHERE country =
+'India' AND year = 2024`, when its conditions alone pick exactly one row, with no
+`ORDER BY` or `LIMIT` choosing it. `shipped <= required`, `price - cost` and `SUM(a) / SUM(b)` do
 not, because relating two columns defines a new concept, and two models can share
 the same wrong definition. For a single-route query, a blind repeat written by a
 different model, recorded as `separate_model`, still shows that both models chose

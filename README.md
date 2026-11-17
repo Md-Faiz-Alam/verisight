@@ -120,6 +120,11 @@ Every live run is published in [Live results](docs/results.md), failures include
   bad number prominently, against Gemini's 10, gave no number on 8 of the 10
   questions without a valid answer, and delivered all 20 correct answers, as Gemini
   did. It warned on 4 of them, 3 from missing-value readings fixed since.
+- **A ninth comparison**, on 30 new questions and 4 new files: VeriSight showed 1 bad
+  number prominently, against Gemini's 8, gave no number on 9 of the 10 questions
+  without a valid answer, and delivered 16 correct answers against Gemini's 17. It
+  warned on 2 of them, both one-cell lookups now counted as one route. Its first run
+  was refused at upload, because one file was over the 20 MB limit.
 - **Earlier runs:** 150 development attempts gave 85 accepted answers, all correct.
   Held-out sets on unseen data first exposed 3 wrong accepted answers, which led to
   the SQL audit.
