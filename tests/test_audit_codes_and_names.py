@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from verisight.config import Settings
-from verisight.execution.context import QueryContextBuilder
-from verisight.execution.sql_audit import audit_sql
+from verisight.execution.context import ObservedCategoryValues, QueryContextBuilder
+from verisight.execution.sql_audit import _selected_by_code, audit_sql
 from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.service import DatasetLoader
 
@@ -104,3 +104,17 @@ def test_a_vague_word_outside_a_name_is_still_vague(baseball: LoadedDataset) -> 
     question = "What is the average attendance for new franchises?"
     sql = "SELECT AVG(attendance) FROM teams WHERE franchise = 'NYY'"
     assert "assumed_definition" in _codes(baseball, question, sql)
+
+
+def test_a_code_cannot_stand_for_a_value_the_data_does_not_hold(
+    baseball: LoadedDataset,
+) -> None:
+    franchises = next(t for t in baseball.tables if t.relation_name == "franchises")
+    exact = [("franchise", "bos")]
+    named = ObservedCategoryValues("franchises", "franchise_name", ("Boston Red Sox",))
+    unloaded = ObservedCategoryValues("franchises", "nickname", ("Sox",))
+
+    assert _selected_by_code(franchises, named, "Boston Red Sox", exact)
+    assert not _selected_by_code(None, named, "Boston Red Sox", exact)
+    assert not _selected_by_code(franchises, unloaded, "Sox", exact)
+    assert not _selected_by_code(franchises, named, "Chicago Cubs", exact)
