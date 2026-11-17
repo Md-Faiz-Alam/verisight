@@ -116,6 +116,10 @@ Every live run is published in [Live results](docs/results.md), failures include
   number prominently, against Gemini's 9, and delivered 17 correct answers against
   Gemini's 18. It warned on 4 of them. A reviewer wrongly detected as a total row
   misled all three setups; that detection is fixed since.
+- **An eighth comparison**, on 30 new questions and 3 new files: VeriSight showed 1
+  bad number prominently, against Gemini's 10, gave no number on 8 of the 10
+  questions without a valid answer, and delivered all 20 correct answers, as Gemini
+  did. It warned on 4 of them, 3 from missing-value readings fixed since.
 - **Earlier runs:** 150 development attempts gave 85 accepted answers, all correct.
   Held-out sets on unseen data first exposed 3 wrong accepted answers, which led to
   the SQL audit.

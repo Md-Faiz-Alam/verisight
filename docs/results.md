@@ -701,6 +701,72 @@ errors.
 
 These are one run of 30 questions prepared on the project's own side.
 
+### Eighth comparison with plain Gemini (30 new questions, 3 new files)
+
+Combined-cycle power plant readings (Excel, 9,568 rows) and a pair of related files
+from the Open University learning analytics dataset: 206 assessments joined to 22
+course offerings by a two-column key. None was used before. The questions were
+prepared outside the project session, with 20 answerable, 5 ambiguous and 5
+unanswerable, answers worked out separately, and ambiguous questions written in
+varied ways. Fractional answers allow 0.01.
+
+Questions, data and runner were frozen by hash at `799ffc9`, which adds the
+total-row and money-word fixes from the seventh comparison. These files hold no
+total rows, so this round does not measure the first of them.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 20 | 20 | 20 |
+| Wrong number, of 20 answerable | 0 | 0 | 0 |
+| No number, of 20 answerable | 0 | 0 | 0 |
+| Number given where none exists, of 10 | 10 | 2 | 2 |
+| Correctly gave no number, of 10 | 0 | 8 | 8 |
+| Bad numbers shown prominently | 10 | 2 | 1 |
+| Bad numbers visible anywhere | 10 | 2 | 2 |
+| Correct answers carrying a warning | 0 of 20 | 0 of 20 | 4 of 20 |
+| Gemini calls | 30 | 103 | 123 |
+| Median seconds per question | 4 | 12 | 14 |
+
+Against the targets, full VeriSight showed 1 bad number prominently against plain
+Gemini's 10 (C1 passed) and delivered every answerable question, as plain Gemini did
+(C2 passed). It warned on 20% of its correct answers where 10% is allowed (C3
+failed). Plain Gemini gave a number for all ten questions without a valid answer,
+such as carbon dioxide emissions from an energy output column, or study hours from
+course lengths.
+
+Of full VeriSight's two numbers where none exists, "how long is the AAA course
+offering in days?" was warned: AAA has two offerings, of 268 and 269 days, and the
+second query picked the other one. "How many courses are there?" was shown as
+verified. It can mean 7 modules or 22 offerings, and VeriSight counted offerings
+without saying so. This is the same gap as the seventh comparison's "Vips branch":
+no rule checks that a word picks out one thing.
+
+The four warnings on correct answers, by cause:
+
+- **Two from "ignoring missing dates".** The audit read the phrase as a question
+  about missing values and wanted the query to test `IS NULL`, while both queries
+  rightly left missing dates out.
+- **One from a recorded value it could not name.** A count of assessments with "a
+  recorded deadline day" greater than the course length used `date > length`. The
+  audit could not tie "deadline day" to `date`, though the comparison already drops
+  every missing date.
+- **One repeat.** The second query wrote the same `COUNT(DISTINCT ...)` as the
+  first, as in the seventh comparison; a distinct count stays out of the
+  single-route rule on purpose.
+
+The first three were fixed after the run in `45cb2d9`. A question that says to
+ignore or exclude missing values now asks for known values, and a count of recorded
+values is accepted when its WHERE already compares every column that holds missing
+values. Replayed over the saved queries of all eight comparisons, the fix clears
+those three warnings, changes nothing else, and removes no flag from any bad answer.
+On this run's saved answers 1 warning of 20 remains. These questions found the
+flaws, so that is not a C3 result.
+
+The second query confirmed 19 correct answers and added no evidence on the repeat.
+Gemini was steady: all 90 attempts ran on one day with no provider errors.
+
+These are one run of 30 questions prepared on the project's own side.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10
