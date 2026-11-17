@@ -848,6 +848,81 @@ found the flaw, so that is not a C3 result.
 
 All 90 answers in the table ran on one day with no provider errors.
 
+### Tenth comparison with plain Gemini (30 new questions, 4 new files)
+
+Four files from TidyTuesday, none used before: Himalayan expeditions (10,364 rows)
+and peaks (468 rows), which share `peak_id`; coffee quality ratings (1,339 rows); and
+average US tuition by state (Excel, 50 states by 12 academic years, with columns
+named `2004-05` to `2015-16`). The files keep their real flaws, such as `NA` for
+missing values and one expedition ID used twice. The questions were prepared outside
+the project session, with 20 answerable, 5 ambiguous and 5 unanswerable, and the
+answers were worked out with Python's `csv`, `statistics` and `openpyxl`, not
+pandas or DuckDB.
+
+Questions, data and runner were frozen by hash at `31f5894`, which adds the
+one-row lookup rule and the upload scoring from the ninth comparison.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 20 | 15 | 16 |
+| Wrong number, of 20 answerable | 0 | 0 | 0 |
+| No number, of 20 answerable | 0 | 5 | 4 |
+| Number given where none exists, of 10 | 6 | 3 | 3 |
+| Correctly gave no number, of 10 | 4 | 7 | 7 |
+| Bad numbers shown prominently | 6 | 3 | 0 |
+| Bad numbers visible anywhere | 6 | 3 | 3 |
+| Correct answers carrying a warning | 0 of 20 | 0 of 15 | 3 of 16 |
+| Gemini calls | 30 | 131 | 144 |
+| Median seconds per question | 13 | 24 | 39 |
+
+Against the targets, full VeriSight showed no bad number prominently against plain
+Gemini's 6 (C1 passed). It delivered 80% of answerable questions against plain
+Gemini's 100% (C2 failed, 20 points apart where 10 are allowed) and warned on 19% of
+its correct answers where 10% is allowed (C3 failed). Plain Gemini answered every
+answerable question correctly, and gave a number for six of the ten without a valid
+answer, such as the moisture level that counts as "high" or how much tuition rose
+"during the recession years". Number checks lost one answer to a provider error and
+got it on the next attempt.
+
+**All four missed answers were on the tuition workbook.** The SQL was right each
+time, such as `AVG("2015-16")` for the average across states in 2015-16. The answer
+then failed when written: with a number required, every digit in the sentence must
+link to a claim, and "2015-16" was read as digits that link to nothing. The only
+tuition question answered, Arizona's rise from 2004-05 to 2015-16, was phrased in a
+way that passed. Number checks missed the same four and that one too.
+
+The three warnings on correct answers, by cause:
+
+- **"Recorded" read as "known values only".** "How many expeditions to Everest were
+  recorded in 2019?" asks what was logged, but the audit wanted the query to drop
+  rows with missing values.
+- **A calculation word inside a column name.** "The median mean altitude" names the
+  column `altitude_mean_meters`, but the audit read "mean altitude" as an average of
+  the `altitude` column, and flagged both queries.
+- **A repeated ID.** For expeditions to peaks above 8,000 metres, the second query
+  counted distinct expedition IDs and reached 5,796, against 5,797 rows.
+  `KANG10101` names two expeditions, in 1910 and 2010, so the two routes really
+  disagree. This warning is kept.
+
+Of the three numbers given where none exists, all were warned: deaths on Everest in
+2019, which may or may not include hired staff; expeditions to "Annapurna", a name
+the data holds only as "Annapurna I" and six other Annapurna peaks; and peaks first
+climbed by Japan, 43 for Japan alone or 105 counting joint ascents such as "Japan,
+Nepal".
+The second query confirmed 15 correct answers and doubted one, the repeated ID.
+
+Three general fixes followed the run. A column the query reads whose name holds
+digits, such as `2015-16`, now counts as a label when the answer repeats it, while
+every number in the answer must still link. "Was recorded" and "recorded in" no
+longer limit a question to known values, while "a recorded deadline" still does. A
+calculation word is no longer read as one when it belongs, with the words after it,
+to the name of a column the query reads. Replayed over the saved queries of all ten
+comparisons, the two audit fixes clear the first two warnings and one correct answer
+from the first comparison, and remove no flag from any bad answer; on this run's saved
+answers 1 warning of 16 remains. The first fix cannot be replayed, because a rejected
+answer's text is not saved; unit tests cover it on the same SQL and wording. These
+questions found the flaws, so none of this is a C2 or C3 result.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10

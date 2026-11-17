@@ -133,10 +133,10 @@ result existed. A *regression* target protects a result that was already known.
 | D2 | Regression | Ambiguous damage is rejected or flagged, never guessed | passed | [`test_damaged_files.py`](../tests/test_damaged_files.py) |
 | A1 | Regression | Missed mistakes: of the 31 frozen wrong queries, at least 75% are caught | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
 | A2 | Regression | False warnings: none on the 31 frozen correct queries | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
-| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#ninth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
-| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | passed | [`results.md`](results.md#ninth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
-| C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#ninth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
-| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#ninth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#tenth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | failed | [`results.md`](results.md#tenth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#tenth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#tenth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
 | R1 | Predeclared | Concurrency, expiry, eviction, restart and crash-recovery tests pass | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R2 | Predeclared | A failed mandatory check can never produce "Verified"; evidence already computed stays visible with its incomplete status | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R3 | Predeclared | A provider failure never produces a number that was not computed | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
@@ -160,7 +160,11 @@ comparison at `799ffc9` showed 1 bad number prominently against plain Gemini's 1
 delivered every answerable question, and failed C3 at 20%. A ninth comparison at
 `12cf29e`, with the missing-value fixes, showed 1 bad number prominently against
 plain Gemini's 8, delivered 80% of answerable questions against 85%, and failed C3
-at 12.5%. The status column shows the ninth comparison.
+at 12.5%. A tenth comparison at `31f5894` showed no bad number prominently against
+plain Gemini's 6, but delivered 80% of answerable questions against 100%, failing C2
+for the first time since the first comparison, and failed C3 at 19%. All four missed
+answers came from one workbook whose columns are named by academic year. The status
+column shows the tenth comparison.
 
 M1 was measured on this computer with scripted replies and generated data: five
 uploads of one 19.5 MB file with charts, two questions at once with second queries,

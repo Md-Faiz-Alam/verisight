@@ -246,6 +246,17 @@ does not count. These came from the eighth comparison; replayed over the saved
 queries of all eight, they clear three warnings on correct answers and change
 nothing else.
 
+"Recorded" as a verb, as in "expeditions were recorded in 2019" or "recorded by
+the station", says what was logged and does not limit a question to known values;
+"a recorded deadline" still does. A calculation word that belongs, with the words
+after it, to the name of a column the query reads asks for no calculation: "the
+median mean altitude" names `altitude_mean_meters`. The final answer check treats a
+column name with digits that the query reads, such as `2015-16` in a workbook
+named by academic year, as a label, while every number in the answer must still
+link to a claim. These came from the tenth comparison; replayed over the saved
+queries of all ten, the two audit changes clear two warnings there and one correct
+answer's finding in the first comparison, and remove no flag from any bad answer.
+
 Expected SQL parsing and source-resolution errors, including duplicate aliases,
 become `QueryValidationError`. Relation analysis must succeed before execution;
 analysis failure does not bypass authorization. The built-in executor rejects

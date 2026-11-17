@@ -26,6 +26,7 @@ from verisight.execution.narrative_audit import (
     find_narrative_numbers,
     label_words,
 )
+from verisight.execution.narrative_context import audit_conclusion
 from verisight.execution.observations import QueryObservation
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 from verisight.ingestion.schema import DatasetSchema
@@ -280,6 +281,38 @@ def test_hyphenated_labels_from_the_question_are_not_numbers(
 
 def test_digit_only_hyphen_ranges_are_never_labels() -> None:
     assert label_words(["Between 2010-2012 and 3-4 times"]) == frozenset()
+
+
+@pytest.mark.parametrize(
+    ("sql", "unparsed"),
+    [
+        # A column named by period, read by the query, is a label.
+        ('SELECT AVG("2015-16") AS avg_2015_16 FROM tuition', 0),
+        ('SELECT COUNT(*) FROM tuition WHERE "2015-16" > 10000', 0),
+        # The same text is a range when no query read such a column.
+        ("SELECT AVG(fees) AS avg_fees FROM tuition", 6),
+        ("SELECT AVG(", 6),
+    ],
+)
+def test_a_column_named_by_period_is_a_label(sql: str, unparsed: int) -> None:
+    observation = QueryObservation(
+        question="Measure",
+        sql=sql,
+        result=QueryResult(columns=("value",), rows=((9317.63,),)),
+    )
+    claim = NumericalClaim(
+        ClaimOperation.VALUE, Decimal("9317.63"), EvidenceReference(0, 0, "value")
+    )
+
+    audit = audit_conclusion(
+        "The average tuition in 2015-16 was 9317.63.",
+        (claim,),
+        (observation,),
+        "What was the average tuition in 2015-16?",
+    )
+
+    assert audit.coverage.unparsed_digit_count == unparsed
+    assert audit.unlinked == ()
 
 
 def test_digits_outside_labels_are_still_counted() -> None:

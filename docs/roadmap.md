@@ -24,14 +24,15 @@ it can be trusted, and gives no number rather than a misleading one. The
 
 ## Next, in order
 
-1. **Fewer false warnings.** In the ninth comparison VeriSight warned on 2 of 16
-   correct answers (12.5%), against 20% in the eighth. Both were one-cell lookups
-   repeated by the second query, now counted as one route; no warning came from the
-   missing-value readings fixed after the eighth. A tenth comparison must confirm C3.
-   A repeated distinct count, warned twice before, is still kept out on purpose. A
-   second query that reaches a wrong number still warns on a correct answer, which is
-   kept on purpose too: the same disagreement has kept 9 bad numbers from being
-   verified.
+1. **Answers on wide files, and fewer false warnings.** In the tenth comparison
+   VeriSight missed 4 of 20 answerable questions, all on a workbook whose columns are
+   named by academic year: the SQL was right, but "2015-16" in the answer was read as
+   unlinked digits. That is fixed since, along with two audit readings behind 2 of its
+   3 false warnings (19%). The third came from an ID the data uses twice, and is kept.
+   An eleventh comparison must confirm C2 and C3. A repeated distinct count is still
+   kept out of the single-route rule on purpose. A second query that reaches a wrong
+   number still warns on a correct answer, which is kept on purpose too: the same
+   disagreement has kept 9 bad numbers from being verified.
 2. **Names and words with more than one meaning.** In the seventh comparison "the
    Vips branch" averaged several restaurants of that name and was shown as verified,
    "average score" picked one of three score columns, and "low price category" was

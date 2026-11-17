@@ -3,6 +3,10 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
+import sqlglot
+import sqlglot.errors
+from sqlglot import exp
+
 from verisight.execution.claim_verification import (
     ClaimOperation,
     NumericalClaim,
@@ -76,7 +80,27 @@ def audit_conclusion(
         )
     expected = tuple(Decimal(str(claim.expected)) for claim in claims) + extra_values
     tokens = find_narrative_numbers(conclusion, expected, tuple(cited))
+    labels = label_words(texts) | _columns_read(observations)
     return NarrativeAudit(
-        tokens,
-        audit_narrative_digit_coverage(conclusion, tokens, label_words(texts)),
+        tokens, audit_narrative_digit_coverage(conclusion, tokens, labels)
     )
+
+
+def _columns_read(observations: tuple[QueryObservation, ...]) -> frozenset[str]:
+    """Name the data columns the queries read, such as a ``2015-16`` column.
+
+    A wide export often names columns by period. Repeating such a name only
+    says which column was read; any number in the conclusion still has to link.
+    """
+    names: set[str] = set()
+    for observation in observations:
+        try:
+            tree = sqlglot.parse_one(observation.sql, read="duckdb")
+        except sqlglot.errors.ParseError:
+            continue
+        names.update(
+            column.name.casefold()
+            for column in tree.find_all(exp.Column)
+            if any(character.isdigit() for character in column.name)
+        )
+    return frozenset(names)

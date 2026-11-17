@@ -404,6 +404,26 @@ def test_matching_calculations_pass(
     }
 
 
+def test_a_calculation_word_in_a_column_name_asks_for_no_calculation(
+    tmp_path: Path,
+) -> None:
+    data = _dataset(
+        tmp_path, coffee="altitude,altitude_mean_meters\n1500m,1500\nhigh,1800\n"
+    )
+    median = "SELECT MEDIAN(altitude_mean_meters) AS m FROM coffee"
+
+    assert "question_column_unused" not in _codes(
+        data, "What is the median mean altitude?", median
+    )
+    # The altitude column itself is still owed a mean when the query reads another.
+    assert "question_column_unused" in _codes(
+        data, "What is the mean altitude?", "SELECT COUNT(*) AS c FROM coffee"
+    )
+    assert "question_column_unused" not in _codes(
+        data, "What is the mean altitude in metres?", median
+    )
+
+
 def test_missing_values_counted_as_zero(shop: LoadedDataset) -> None:
     sql = "SELECT AVG(COALESCE(bonus, 0)) AS a FROM orders"
 

@@ -32,6 +32,13 @@ _NO_VALUE = re.compile(
     r"\b(?:no recorded|missing|without (?:a |any )?recorded)\b", re.IGNORECASE
 )
 _KNOWN_VALUE = re.compile(r"\b(?:recorded|known)\b(?! as\b)", re.IGNORECASE)
+# "Expeditions were recorded in 2019" says what was logged, not which values are
+# known; only a recorded value, as in "a recorded deadline", limits the rows.
+_LOGGED = re.compile(
+    r"\b(?:(?:is|are|was|were|be|been|being)\s+recorded|"
+    r"recorded\s+(?:in|on|at|by|for|during|between|from|since|before|after|over))\b",
+    re.IGNORECASE,
+)
 # "Ignoring missing dates" leaves missing values out; it does not ask about them.
 _IGNORE_MISSING = re.compile(
     r"\b(?:ignor(?:e|es|ed|ing)|exclud(?:e|es|ed|ing)|skip(?:s|ped|ping)?|"
@@ -1077,6 +1084,11 @@ def _calculation(
         if named is None:
             continue
         word = match[1].casefold()
+        # "median mean altitude" names the column altitude_mean_meters: the word
+        # belongs to a column the query reads, so it asks for no calculation.
+        phrase = _column_words(word) | _column_words(named)
+        if any(phrase <= _column_words(name) for name in referenced):
+            continue
         if named.casefold() not in referenced:
             yield AuditFinding(
                 "question_column_unused",
@@ -1144,7 +1156,7 @@ def _missing_values(
 ) -> Iterator[AuditFinding]:
     """Compare a question about missing or known values with the query's filters."""
     ignores = _IGNORE_MISSING.search(question) is not None
-    known = ignores or _KNOWN_VALUE.search(question) is not None
+    known = ignores or _KNOWN_VALUE.search(_LOGGED.sub(" ", question)) is not None
     if _NO_VALUE.search(_IGNORE_MISSING.sub(" ", question)):
         if not any(
             isinstance(n.expression, exp.Null) and not isinstance(n.parent, exp.Not)

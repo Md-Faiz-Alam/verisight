@@ -437,6 +437,25 @@ def test_a_known_value_filter_must_cover_the_named_column(
             "unknown_values_counted",
             True,
         ),
+        # "Recorded" as a verb says what was logged, not which values are known.
+        (
+            "How many orders were recorded with a price over 15?",
+            "SELECT COUNT(*) FROM orders WHERE price > 15",
+            "unknown_values_counted",
+            False,
+        ),
+        (
+            "How many orders recorded in the shop cost over 15?",
+            "SELECT COUNT(*) FROM orders WHERE price > 15",
+            "unknown_values_counted",
+            False,
+        ),
+        (
+            "How many orders were recorded, and how many have a recorded remark?",
+            "SELECT COUNT(*) FROM orders WHERE price > 15",
+            "unknown_values_counted",
+            True,
+        ),
     ],
     ids=[
         "ignoring-missing",
@@ -446,6 +465,9 @@ def test_a_known_value_filter_must_cover_the_named_column(
         "compared-column-holds-the-gaps",
         "compared-column-has-no-gaps",
         "comparison-under-or",
+        "were-recorded",
+        "recorded-in",
+        "verb-and-adjective",
     ],
 )
 def test_missing_values_left_out_or_already_filtered(
