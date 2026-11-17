@@ -53,7 +53,11 @@ jobs:
         run: python -m ruff check .
 
       - name: Check types
-        run: python -m mypy --strict src tests scripts
+        run: >-
+          python -m mypy --strict src tests scripts
+          evaluation/baseline/run_baseline_eval.py
+          evaluation/measure_memory.py
+          evaluation/rescore.py
 
       - name: Run offline tests with full coverage
         run: >-
@@ -63,8 +67,10 @@ jobs:
           --cov-report=term-missing
           --cov-fail-under=100
 
+      # Compared with the empty tree, so every committed file is checked; a plain
+      # "git diff --check" sees no changes in a fresh checkout.
       - name: Check whitespace
-        run: git diff --check
+        run: git diff --check 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD
 
   frontend:
     name: Frontend build
@@ -90,6 +96,16 @@ jobs:
 
       - name: Type-check and build
         run: npm run build
+
+      # The Python package serves and ships the committed build, so it must match.
+      - name: Check the committed build is current
+        run: |
+          changes="$(git status --porcelain -- ../src/verisight/web/static)"
+          if [ -n "$changes" ]; then
+            echo "$changes"
+            echo "Run npm run build in frontend and commit src/verisight/web/static."
+            exit 1
+          fi
 
       - name: Run unit tests
         run: npm test
@@ -160,7 +176,7 @@ jobs:
           & $env:SNAPSHOT_PYTHON -m ruff check .
           if ($LASTEXITCODE -ne 0) { throw "Snapshot lint failed." }
 
-          & $env:SNAPSHOT_PYTHON -m mypy --strict src tests scripts
+          & $env:SNAPSHOT_PYTHON -m mypy --strict src tests scripts evaluation/baseline/run_baseline_eval.py evaluation/measure_memory.py evaluation/rescore.py
           if ($LASTEXITCODE -ne 0) { throw "Snapshot type checking failed." }
 
       - name: Run snapshot offline tests with full coverage
