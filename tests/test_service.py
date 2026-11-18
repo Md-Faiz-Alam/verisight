@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
+from pydantic import SecretStr
 
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.config import Settings
@@ -421,7 +422,7 @@ def test_public_ask_preserves_safe_execution_validation(
 
 def test_verisight_builds_gemini_planner_from_settings() -> None:
     settings = Settings(
-        gemini_api_key="test-api-key",
+        gemini_api_key=SecretStr("test-api-key"),
         gemini_model="test-model",
         allow_llm_data_disclosure=True,
     )
@@ -447,7 +448,7 @@ def test_explicit_planner_takes_precedence_over_gemini_settings() -> None:
     planner = StubQueryPlanner()
 
     settings = Settings(
-        gemini_api_key="test-api-key",
+        gemini_api_key=SecretStr("test-api-key"),
         gemini_model="test-model",
     )
 
@@ -491,7 +492,7 @@ def test_default_gemini_planner_can_answer_question(
     )
 
     settings = Settings(
-        gemini_api_key="test-api-key",
+        gemini_api_key=SecretStr("test-api-key"),
         gemini_model="test-model",
         allow_llm_data_disclosure=True,
     )
@@ -834,7 +835,7 @@ def test_public_investigate_builds_default_gemini_components(
     )
 
     settings = Settings(
-        gemini_api_key="test-api-key",
+        gemini_api_key=SecretStr("test-api-key"),
         gemini_model="test-model",
         allow_llm_data_disclosure=True,
     )
@@ -951,7 +952,7 @@ def test_default_gemini_investigator_can_request_observe_and_synthesize(
     )
 
     settings = Settings(
-        gemini_api_key="test-api-key",
+        gemini_api_key=SecretStr("test-api-key"),
         gemini_model="test-model",
         allow_llm_data_disclosure=True,
     )
@@ -1040,7 +1041,7 @@ def test_default_gemini_synthesis_preserves_evidence_on_plain_text(
     ):
         result = VeriSight(
             settings=Settings(
-                gemini_api_key="test-api-key",
+                gemini_api_key=SecretStr("test-api-key"),
                 allow_llm_data_disclosure=True,
             ),
             planner=StubQueryPlanner(),
@@ -1186,7 +1187,7 @@ def test_public_ask_repairs_with_default_gemini_client(
     )
 
     settings = Settings(
-        gemini_api_key="test-api-key",
+        gemini_api_key=SecretStr("test-api-key"),
         gemini_model="test-model",
         allow_llm_data_disclosure=True,
     )
@@ -1275,7 +1276,7 @@ def test_lazy_gemini_repairer_reuses_initialized_client() -> None:
     """Repeated repairs reuse the existing generative repairer."""
 
     settings = Settings(
-        gemini_api_key="test-api-key",
+        gemini_api_key=SecretStr("test-api-key"),
         gemini_model="test-model",
         allow_llm_data_disclosure=True,
     )
@@ -1317,7 +1318,7 @@ def test_gemini_client_requires_explicit_data_disclosure_permission() -> None:
     """Configured credentials alone must not enable external generation."""
 
     settings = Settings(
-        gemini_api_key="test-api-key",
+        gemini_api_key=SecretStr("test-api-key"),
         allow_llm_data_disclosure=False,
     )
 
@@ -1338,7 +1339,7 @@ def test_lazy_gemini_repairer_requires_disclosure_permission() -> None:
     """Lazy SQL repair must not bypass the disclosure policy."""
 
     settings = Settings(
-        gemini_api_key="test-api-key",
+        gemini_api_key=SecretStr("test-api-key"),
         allow_llm_data_disclosure=False,
     )
 

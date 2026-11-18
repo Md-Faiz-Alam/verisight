@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from pydantic import SecretStr
 
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder, DatasetAnalysisResult
@@ -893,7 +894,9 @@ def test_scoped_investigation_enforces_population_and_preserves_provenance(
         ]
     )
     app = VeriSight(
-        settings=Settings(gemini_api_key="offline-key", allow_llm_data_disclosure=True)
+        settings=Settings(
+            gemini_api_key=SecretStr("offline-key"), allow_llm_data_disclosure=True
+        )
     )
     with patch(
         "verisight.execution.gemini.GeminiTextGenerationClient.generate",

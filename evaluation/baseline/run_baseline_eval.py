@@ -592,7 +592,7 @@ def run(root: Path, setups: list[str], pause: float) -> None:
     questions = load_questions(root)
     data = root / "data"
     settings = Settings(**_web_settings())
-    key = (settings.gemini_api_key or "").strip()
+    key = settings.gemini_key() or ""
     if not key:
         raise SystemExit("No Gemini key configured.")
     for setup in setups:

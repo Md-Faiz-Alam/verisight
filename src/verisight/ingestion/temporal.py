@@ -17,6 +17,10 @@ _ISO_BODY = (
 # deliberately excluded.
 _ISO_DATETIME = re.compile(_ISO_BODY)
 _ISO_WITH_ZONE = re.compile(_ISO_BODY + r"(?:Z|[+-][0-9]{2}:?[0-9]{2})")
+_UTC_ZONE = re.compile(r"(?:Z|[+-]00:?00)$")
+# A column converted from other time zones: a time near midnight can fall
+# on another day in UTC than where it was recorded. The audit reads this.
+UTC_SHIFT_DETAIL = "time zones converted to UTC; local dates can differ"
 _NUMERIC_DATE = re.compile(
     r"([0-9]{1,2})([/.-])([0-9]{1,2})\2([0-9]{4}|[0-9]{2})"
     r"( [0-9]{2}:[0-9]{2}(:[0-9]{2})?)?"
@@ -129,11 +133,12 @@ def parse_flexible_dates(values: pd.Series) -> tuple[pd.Series, str] | None:
             )
         except (ValueError, OverflowError):
             return None
+        shifted = not all(_UTC_ZONE.search(value) for value in present)
         return (
             pd.Series(
                 parsed.dt.tz_localize(None), index=values.index, name=values.name
             ),
-            "time zones converted to UTC",
+            UTC_SHIFT_DETAIL if shifted else "time zones converted to UTC",
         )
     matches = _numeric_matches(present)
     if matches is not None:

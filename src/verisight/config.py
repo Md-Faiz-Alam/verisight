@@ -1,7 +1,7 @@
 from threading import TIMEOUT_MAX
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -72,7 +72,8 @@ class Settings(BaseSettings):
         allow_inf_nan=False,
     )
 
-    gemini_api_key: str | None = Field(default=None, repr=False, exclude=True)
+    # A SecretStr prints as stars, so a log line or traceback never shows it.
+    gemini_api_key: SecretStr | None = Field(default=None, repr=False, exclude=True)
 
     allow_llm_data_disclosure: bool = False
 
@@ -108,3 +109,14 @@ class Settings(BaseSettings):
         gt=0,
         allow_inf_nan=False,
     )
+
+    def gemini_key(self) -> str | None:
+        """Return the key as text, or None when it is unset or blank.
+
+        ``model_copy`` skips validation, so a copied key may still be plain text.
+        """
+        value: object = self.gemini_api_key
+        text = value.get_secret_value() if isinstance(value, SecretStr) else value
+        if not isinstance(text, str) or not text.strip():
+            return None
+        return text.strip()

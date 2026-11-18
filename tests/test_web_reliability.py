@@ -24,7 +24,11 @@ from verisight.execution.structured_synthesis import StructuredInvestigationSynt
 from verisight.web import create_app
 from verisight.web.app import OWNER_TOKEN_HEADER
 from verisight.web.config import WebSettings
-from verisight.web.store import DatasetStore, remove_leftover_directories
+from verisight.web.store import (
+    UPLOAD_MARKER,
+    DatasetStore,
+    remove_leftover_directories,
+)
 
 CSV = b"region,amount\nEast,100\nEast,200\nWest,50\n"
 QUESTION = "How much came in altogether?"
@@ -291,10 +295,12 @@ def test_a_normal_shutdown_removes_every_upload(temporary: Path) -> None:
     assert _folders(temporary) == []
 
 
-def _old_folder(root: Path, name: str, age: float) -> Path:
+def _old_folder(root: Path, name: str, age: float, *, ours: bool = True) -> Path:
     folder = root / name
     folder.mkdir()
     (folder / "data.csv").write_bytes(CSV)
+    if ours:
+        (folder / UPLOAD_MARKER).touch()
     stamp = 2_000_000_000 - age
     os.utime(folder, (stamp, stamp))
     return folder
@@ -304,6 +310,8 @@ def test_a_restart_removes_only_folders_left_by_a_crash(temporary: Path) -> None
     left_behind = _old_folder(temporary, "verisight-crashed", 7200)
     recent = _old_folder(temporary, "verisight-recent", 10)
     unrelated = _old_folder(temporary, "another-program", 7200)
+    # Same name, but VeriSight did not make it.
+    lookalike = _old_folder(temporary, "verisight-other-tool", 7200, ours=False)
     file_with_the_name = temporary / "verisight-file"
     file_with_the_name.write_bytes(b"x")
     os.utime(file_with_the_name, (1, 1))
@@ -314,6 +322,7 @@ def test_a_restart_removes_only_folders_left_by_a_crash(temporary: Path) -> None
     assert not left_behind.exists()
     assert recent.exists()
     assert unrelated.exists()
+    assert lookalike.exists()
     assert file_with_the_name.exists()
 
 

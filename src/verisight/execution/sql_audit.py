@@ -25,6 +25,7 @@ from verisight.execution.question_terms import (
     question_mentions_category,
 )
 from verisight.ingestion.models import LoadedDataset, LoadedTable
+from verisight.ingestion.temporal import UTC_SHIFT_DETAIL
 
 _MIN_NAMED_VALUE_LENGTH = 3
 _MEDIAN = re.compile(r"\bmedian\b", re.IGNORECASE)
@@ -393,6 +394,7 @@ def audit_sql(
             *_identifier_aggregated(tree, used),
             *_text_ordered(tree, used),
             *_join_key_format(tree, used),
+            *_utc_dates(tree, used),
             *_named_value(question, tree, tables, categories),
             *_broad_match(question, tree, tables, categories),
             *_distinct_count(question, tree),
@@ -811,6 +813,73 @@ def _join_key_format(
                             "written differently, in case, spaces or leading "
                             f"zeros, so the join matches only {exact:.0%} of them.",
                         )
+
+
+# Wrappers that read a day, month or year out of a timestamp.
+_DATE_PARTS: tuple[type[exp.Expression], ...] = (
+    exp.TimestampTrunc,
+    exp.DateTrunc,
+    exp.Year,
+    exp.Month,
+    exp.Day,
+    exp.Quarter,
+    exp.Week,
+    exp.Extract,
+    exp.TimeToStr,
+    exp.DayOfWeek,
+    exp.DayOfMonth,
+    exp.DayOfYear,
+)
+_DATE_FUNCTIONS = frozenset({"date_part", "datepart", "dayname", "monthname"})
+_DAY_LITERAL = re.compile(r"[0-9]{4}-[0-9]{2}(?:-[0-9]{2})?")
+_ORDER_OR_EQUAL = (exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE, exp.Between)
+
+
+def _by_date(column: exp.Column) -> bool:
+    """Whether the query reads a calendar date from this timestamp column."""
+    parent = column.parent
+    while isinstance(parent, exp.Paren):
+        parent = parent.parent
+    if isinstance(parent, _DATE_PARTS):
+        return True
+    if isinstance(parent, exp.Anonymous):
+        return parent.name.casefold() in _DATE_FUNCTIONS
+    if isinstance(parent, exp.Cast | exp.TryCast):
+        return parent.to.is_type(exp.DataType.Type.DATE)
+    if isinstance(parent, _ORDER_OR_EQUAL):
+        return any(
+            literal.is_string and _DAY_LITERAL.fullmatch(literal.this) is not None
+            for literal in parent.find_all(exp.Literal)
+        )
+    return False
+
+
+def _utc_dates(
+    tree: exp.Expression, used: dict[str, LoadedTable]
+) -> Iterator[AuditFinding]:
+    """Find days or months read from times converted from other time zones.
+
+    Loading stores such times in UTC, so 01:00 at +05:30 on 2 January becomes
+    19:30 on 1 January. A count per day, or a filter on a date, then uses UTC
+    days, which can differ from the dates where the times were recorded.
+    """
+    shifted = {
+        note.column.casefold()
+        for table in used.values()
+        for note in table.value_notes
+        if note.rule == "date_format" and note.detail == UTC_SHIFT_DETAIL
+    }
+    seen: set[str] = set()
+    for column in tree.find_all(exp.Column):
+        name = column.name.casefold()
+        if name in shifted and name not in seen and _by_date(column):
+            seen.add(name)
+            yield AuditFinding(
+                "utc_dates",
+                f"{column.name} was recorded in several time zones and is "
+                "stored in UTC, so its dates here are UTC dates, which can "
+                "differ from the local dates.",
+            )
 
 
 def _filter_values(

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from google.genai import errors
+from pydantic import SecretStr
 from scripts.live_evaluation import CASES, run_case
 
 from verisight.analysis.models import DatasetAnalysis
@@ -312,7 +313,7 @@ def test_settings_pass_sampling_to_every_client() -> None:
 
     settings = Settings(
         _env_file=None,  # type: ignore[call-arg]
-        gemini_api_key="k",
+        gemini_api_key=SecretStr("k"),
         allow_llm_data_disclosure=True,
         gemini_temperature=0.2,
         gemini_seed=11,

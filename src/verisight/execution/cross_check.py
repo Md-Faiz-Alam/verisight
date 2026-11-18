@@ -8,6 +8,7 @@ more so when one model writes both.
 """
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal, DecimalException
 from enum import StrEnum
@@ -153,12 +154,19 @@ class IndependentCrossChecker:
         self._runner = runner
         self._separate_model = separate_model
 
-    def check(self, question: str, answer: Decimal, primary_sql: str) -> CrossCheck:
+    def check(
+        self, question: str, answer: Decimal, primary_sql: str | Sequence[str]
+    ) -> CrossCheck:
         """Compare ``answer`` with a query planned from ``question`` alone.
 
         ``primary_sql`` is used only after the second query has run, to record
-        whether the two are the same. It never reaches the planner.
+        whether the two are the same. It never reaches the planner. A
+        difference of cells from two queries passes both; their choices
+        together are what a second query would repeat.
         """
+        primaries = (
+            (primary_sql,) if isinstance(primary_sql, str) else tuple(primary_sql)
+        )
         try:
             execution = self._runner.run(
                 f"{question}\n\n{CROSS_CHECK_INSTRUCTION}", original_question=question
@@ -186,10 +194,13 @@ class IndependentCrossChecker:
                 separate_model=self._separate_model,
                 same_choices=False,
             )
-        identical = _canonical_sql(sql) == _canonical_sql(primary_sql)
-        same = identical or _choices(sql) == _choices(primary_sql)
+        identical = len(primaries) == 1 and _canonical_sql(sql) == _canonical_sql(
+            primaries[0]
+        )
+        same = identical or _choices(sql) == _merged_choices(primaries)
+        one_row = len(execution.result.rows) == 1
         single_route = (
-            _single_route(primary_sql, one_row=len(execution.result.rows) == 1)
+            all(_single_route(primary, one_row=one_row) for primary in primaries)
             if same
             else None
         )
@@ -520,6 +531,17 @@ def _within(node: exp.Expression, ancestor: exp.Expression) -> bool:
             return True
         parent = parent.parent
     return False
+
+
+def _merged_choices(sqls: Sequence[str]) -> _Choices:
+    """The choices of several queries read as one, for a split difference."""
+    parts = [_choices(sql) for sql in sqls]
+    return _Choices(
+        tables=frozenset().union(*(part.tables for part in parts)),
+        conditions=frozenset().union(*(part.conditions for part in parts)),
+        measures=frozenset().union(*(part.measures for part in parts)),
+        structures=frozenset().union(*(part.structures for part in parts)),
+    )
 
 
 def _measures(tree: exp.Expression) -> frozenset[str]:

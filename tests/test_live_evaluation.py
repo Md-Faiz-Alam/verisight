@@ -10,6 +10,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from pydantic import SecretStr
 from scripts.live_evaluation import (
     CASES,
     CHALLENGE_CASES,
@@ -196,7 +197,7 @@ def test_main_reports_all_cases_without_secrets(
         patch("sys.argv", ["live_evaluation", "--live", "--case", selected]),
         patch(
             "scripts.live_evaluation.Settings",
-            return_value=Settings(gemini_api_key="private-secret"),
+            return_value=Settings(gemini_api_key=SecretStr("private-secret")),
         ),
         patch(
             "scripts.live_evaluation.run_case", return_value={"outcome": outcome}
@@ -322,7 +323,7 @@ def test_main_includes_audit_summary_without_changing_numeric_exit_status(
         patch("sys.argv", ["live_evaluation", "--live", "--case", "all"]),
         patch(
             "scripts.live_evaluation.Settings",
-            return_value=Settings(gemini_api_key="private-secret"),
+            return_value=Settings(gemini_api_key=SecretStr("private-secret")),
         ),
         patch("scripts.live_evaluation.run_case", side_effect=reports),
     ):
@@ -454,7 +455,7 @@ def test_saved_report_retains_failures_settings_revision_and_timings(
 ) -> None:
     path = tmp_path / "evaluation.json"
     settings = Settings(
-        gemini_api_key="private-secret",
+        gemini_api_key=SecretStr("private-secret"),
         allow_llm_data_disclosure=True,
         gemini_request_timeout_seconds=17,
         gemini_max_retries=1,
@@ -547,7 +548,7 @@ def test_report_save_failure_after_preflight_preserves_stdout(
         patch("sys.argv", ["live_evaluation", "--live", "--output", str(path)]),
         patch(
             "scripts.live_evaluation.Settings",
-            return_value=Settings(gemini_api_key="private-secret"),
+            return_value=Settings(gemini_api_key=SecretStr("private-secret")),
         ),
         patch(
             "scripts.live_evaluation.run_case",
@@ -590,7 +591,7 @@ def test_cli_provider_controls_reach_settings_cases_and_report(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     def configured_settings(**kwargs: Any) -> Settings:
-        return Settings(gemini_api_key="private-secret", **kwargs)
+        return Settings(gemini_api_key=SecretStr("private-secret"), **kwargs)
 
     with (
         patch("sys.argv", ["live_evaluation", "--live", *arguments]),
@@ -904,7 +905,10 @@ def test_percentage_scale_uses_real_sql_and_keeps_strict_scoring(
     ) as generate:
         report = run_case(
             case,
-            Settings(gemini_api_key="offline-stub-key", allow_llm_data_disclosure=True),
+            Settings(
+                gemini_api_key=SecretStr("offline-stub-key"),
+                allow_llm_data_disclosure=True,
+            ),
         )
     assert generate.call_count == 4
     for call in generate.call_args_list:
@@ -1092,7 +1096,10 @@ def test_investigation_keeps_original_scope_when_subquestion_loses_inclusion(
     ) as generate:
         report = run_case(
             case,
-            Settings(gemini_api_key="offline-stub-key", allow_llm_data_disclosure=True),
+            Settings(
+                gemini_api_key=SecretStr("offline-stub-key"),
+                allow_llm_data_disclosure=True,
+            ),
         )
     assert generate.call_count == 4 + int(repair)
     assert report["outcome"] == "correct_numeric"
@@ -1162,7 +1169,7 @@ def test_artifact_batch_retains_every_case_and_manifest_before_generation(
         assert manifest["interface"] == "VeriSight.investigate"
         assert len(manifest["cases"]) == 5
         assert (artifact_directory / "started.json").is_file()
-        assert settings.gemini_api_key == "private-secret"
+        assert settings.gemini_key() == "private-secret"
         return {"outcome": outcome}
 
     with (
@@ -1179,7 +1186,7 @@ def test_artifact_batch_retains_every_case_and_manifest_before_generation(
         ),
         patch(
             "scripts.live_evaluation.Settings",
-            return_value=Settings(gemini_api_key="private-secret"),
+            return_value=Settings(gemini_api_key=SecretStr("private-secret")),
         ),
         patch("scripts.live_evaluation.run_case", side_effect=evaluate) as run,
     ):
@@ -1312,7 +1319,7 @@ def test_artifact_batch_requires_known_clean_revision(
         patch("sys.argv", ["live_evaluation", "--live", "--artifacts", str(directory)]),
         patch(
             "scripts.live_evaluation.Settings",
-            return_value=Settings(gemini_api_key="synthetic"),
+            return_value=Settings(gemini_api_key=SecretStr("synthetic")),
         ),
         patch("scripts.live_evaluation.repository_metadata", return_value=revision),
         patch("scripts.live_evaluation.run_case") as run,
@@ -1340,7 +1347,7 @@ def test_artifact_write_failure_stops_without_additional_cases(
         patch("sys.argv", ["live_evaluation", "--live", "--artifacts", str(directory)]),
         patch(
             "scripts.live_evaluation.Settings",
-            return_value=Settings(gemini_api_key="synthetic"),
+            return_value=Settings(gemini_api_key=SecretStr("synthetic")),
         ),
         patch("scripts.live_evaluation._save_json", side_effect=save),
         patch(
@@ -1358,7 +1365,7 @@ def test_interrupted_artifact_batch_preserves_started_record(tmp_path: Path) -> 
         patch("sys.argv", ["live_evaluation", "--live", "--artifacts", str(directory)]),
         patch(
             "scripts.live_evaluation.Settings",
-            return_value=Settings(gemini_api_key="synthetic"),
+            return_value=Settings(gemini_api_key=SecretStr("synthetic")),
         ),
         patch("scripts.live_evaluation.run_case", side_effect=KeyboardInterrupt),
         pytest.raises(KeyboardInterrupt),

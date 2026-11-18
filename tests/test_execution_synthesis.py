@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import SecretStr
 
 from verisight import VeriSight
 from verisight.analysis.models import DatasetAnalysis
@@ -250,7 +251,10 @@ def test_structured_factory_requires_permission_and_credentials(
 ) -> None:
     with pytest.raises(ConfigurationError):
         StructuredInvestigationSynthesizer.from_settings(
-            Settings(allow_llm_data_disclosure=permission, gemini_api_key=key)
+            Settings(
+                allow_llm_data_disclosure=permission,
+                gemini_api_key=None if key is None else SecretStr(key),
+            )
         )
 
 
@@ -270,7 +274,7 @@ def test_structured_factory_configures_gemini_schema(
     synthesizer = StructuredInvestigationSynthesizer.from_settings(
         Settings(
             allow_llm_data_disclosure=True,
-            gemini_api_key="synthetic",
+            gemini_api_key=SecretStr("synthetic"),
             gemini_model="test-model",
         )
     )
@@ -723,7 +727,7 @@ def test_compact_generation_schema_does_not_relax_local_validation(
         lambda **kwargs: client,
     )
     synthesizer = StructuredInvestigationSynthesizer.from_settings(
-        Settings(allow_llm_data_disclosure=True, gemini_api_key="synthetic")
+        Settings(allow_llm_data_disclosure=True, gemini_api_key=SecretStr("synthetic"))
     )
 
     with pytest.raises(InvestigationError, match="response is invalid"):

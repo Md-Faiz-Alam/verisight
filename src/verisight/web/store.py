@@ -19,6 +19,10 @@ from typing import TypeVar, cast
 T = TypeVar("T")
 ALLOWED_SUFFIXES = (".csv", ".tsv", ".json", ".jsonl", ".ndjson", ".xlsx", ".xls")
 _UNSAFE = re.compile(r"[^\w.-]+")
+# Written into every upload folder, so cleanup never touches another
+# program's folder that happens to share the name. Uploaded names never
+# start with a dot, so no upload can take this name.
+UPLOAD_MARKER = ".verisight-upload"
 
 
 def safe_file_name(name: str, taken: set[str]) -> str:
@@ -76,12 +80,15 @@ def remove_leftover_directories(
     """Delete upload folders that a crash or power loss left behind.
 
     Only folders older than an upload may live are touched, so a second copy of
-    the server running on the same computer keeps its uploads.
+    the server running on the same computer keeps its uploads, and only
+    folders holding ``UPLOAD_MARKER``, so other programs' folders are kept.
     """
     removed = 0
     for folder in Path(tempfile.gettempdir()).glob("verisight-*"):
         try:
-            stale = folder.is_dir() and clock() - folder.stat().st_mtime > ttl_seconds
+            stale = (
+                folder / UPLOAD_MARKER
+            ).is_file() and clock() - folder.stat().st_mtime > ttl_seconds
         except OSError:
             continue
         if stale:
@@ -137,6 +144,7 @@ class DatasetStore:
                 raise StoreFullError
             dataset_id = uuid.uuid4().hex
             directory = Path(tempfile.mkdtemp(prefix="verisight-"))
+            (directory / UPLOAD_MARKER).touch()
             self._pending[dataset_id] = directory
         return dataset_id, directory
 

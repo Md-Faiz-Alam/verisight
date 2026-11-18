@@ -562,7 +562,7 @@ def main() -> int:
             max_query_execution_seconds=5.0,
             max_query_result_rows=20,
         )
-        if settings.gemini_api_key is None or not settings.gemini_api_key.strip():
+        if settings.gemini_key() is None:
             raise ConfigurationError("An API key is required.")
     except Exception as error:
         print(json.dumps(failure_report(error), indent=2))

@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from pydantic import SecretStr
 from scripts.live_evaluation import score_result, summarize_number_audits
 
 from verisight import VeriSight
@@ -184,7 +185,7 @@ def test_known_answer_investigation_pipeline(
     ) as provider:
         result = VeriSight(
             settings=Settings(
-                gemini_api_key="synthetic-benchmark-key",
+                gemini_api_key=SecretStr("synthetic-benchmark-key"),
                 allow_llm_data_disclosure=True,
             ),
             planner=planner,
@@ -303,7 +304,7 @@ def test_numeric_support_does_not_establish_analytical_correctness(
     ) as provider:
         result = VeriSight(
             settings=Settings(
-                gemini_api_key="synthetic-benchmark-key",
+                gemini_api_key=SecretStr("synthetic-benchmark-key"),
                 allow_llm_data_disclosure=True,
             ),
             planner=planner,

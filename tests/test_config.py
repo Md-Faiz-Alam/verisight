@@ -3,7 +3,7 @@ from threading import TIMEOUT_MAX
 from typing import Literal
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 from pydantic_settings import SettingsConfigDict
 
 from verisight.config import Settings
@@ -85,7 +85,7 @@ def test_settings_load_prefixed_environment_variables(
     assert settings.max_query_memory_mb == 768
     assert settings.max_query_execution_seconds == 45.5
     assert settings.max_query_temp_storage_mb == 256
-    assert settings.gemini_api_key == "test-api-key"
+    assert settings.gemini_key() == "test-api-key"
     assert settings.allow_llm_data_disclosure is True
     assert settings.gemini_model == "test-model"
 
@@ -256,10 +256,10 @@ def test_gemini_api_key_is_hidden_from_settings_repr() -> None:
     secret = "synthetic-gemini-secret-123456"
 
     settings = SettingsWithoutEnvFile(
-        gemini_api_key=secret,
+        gemini_api_key=SecretStr(secret),
     )
 
-    assert settings.gemini_api_key == secret
+    assert settings.gemini_key() == secret
     assert secret not in repr(settings)
     assert "gemini_api_key=" not in repr(settings)
 
@@ -284,7 +284,7 @@ def test_gemini_api_key_is_excluded_from_model_dump(
 ) -> None:
     secret = "synthetic-serialization-secret"
     settings = SettingsWithoutEnvFile(
-        gemini_api_key=secret,
+        gemini_api_key=SecretStr(secret),
         gemini_model="test-model",
     )
 
@@ -293,13 +293,13 @@ def test_gemini_api_key_is_excluded_from_model_dump(
     assert "gemini_api_key" not in dumped
     assert secret not in repr(dumped)
     assert dumped["gemini_model"] == "test-model"
-    assert settings.gemini_api_key == secret
+    assert settings.gemini_key() == secret
 
 
 def test_gemini_api_key_is_excluded_from_json_serialization() -> None:
     secret = "synthetic-json-secret"
     settings = SettingsWithoutEnvFile(
-        gemini_api_key=secret,
+        gemini_api_key=SecretStr(secret),
         gemini_model="test-model",
     )
 
@@ -312,7 +312,9 @@ def test_gemini_api_key_is_excluded_from_json_serialization() -> None:
 
 
 def test_explicit_serialization_include_does_not_expose_gemini_api_key() -> None:
-    settings = SettingsWithoutEnvFile(gemini_api_key="synthetic-include-secret")
+    settings = SettingsWithoutEnvFile(
+        gemini_api_key=SecretStr("synthetic-include-secret")
+    )
 
     assert settings.model_dump(include={"gemini_api_key"}) == {}
     assert json.loads(settings.model_dump_json(include={"gemini_api_key"})) == {}
@@ -326,6 +328,25 @@ def test_environment_api_key_remains_usable_but_is_not_serialized(
 
     settings = SettingsWithoutEnvFile()
 
-    assert settings.gemini_api_key == secret
+    assert settings.gemini_key() == secret
     assert "gemini_api_key" not in settings.model_dump()
     assert secret not in settings.model_dump_json()
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        ({}, None),
+        ({"gemini_api_key": SecretStr("  ")}, None),
+        ({"gemini_api_key": SecretStr(" key ")}, "key"),
+        # model_copy does not validate, so a copied key can still be plain text.
+        ({"gemini_api_key": " copied "}, "copied"),
+        ({"gemini_api_key": ""}, None),
+    ],
+)
+def test_the_key_is_read_as_text_only_through_its_accessor(
+    update: dict[str, object], expected: str | None
+) -> None:
+    settings = SettingsWithoutEnvFile().model_copy(update=update)
+
+    assert settings.gemini_key() == expected

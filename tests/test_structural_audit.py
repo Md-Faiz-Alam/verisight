@@ -13,7 +13,12 @@ from verisight.execution.sql_audit import audit_sql
 from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.service import DatasetLoader
 
-STRUCTURAL = {"identifier_aggregated", "text_ordered", "join_key_format"}
+STRUCTURAL = {
+    "identifier_aggregated",
+    "text_ordered",
+    "join_key_format",
+    "utc_dates",
+}
 # Questions in other languages: these checks never read the wording.
 QUESTIONS = ("¿Cuál es el total?", "Quelle est la somme ?", "合計はいくらですか?")
 
@@ -211,3 +216,46 @@ def test_no_structural_check_fires_on_the_public_benchmark(tmp_path: Path) -> No
         )
         found = _codes(dataset, question.control_sql, question.text)
         assert found == set(), question.question_id
+
+
+ZONED = "event_id,ts\n1,2024-01-02T01:00:00+05:30\n2,2024-01-02T10:00:00+00:00\n"
+UTC_ONLY = "event_id,ts\n1,2024-01-02T01:00:00Z\n2,2024-01-02T10:00:00+00:00\n"
+
+
+@pytest.mark.parametrize(
+    ("sql", "flagged"),
+    [
+        (
+            "SELECT COUNT(*) FROM events WHERE CAST(ts AS DATE) = DATE '2024-01-02'",
+            True,
+        ),
+        ("SELECT DATE_TRUNC('month', ts), COUNT(*) FROM events GROUP BY 1", True),
+        ("SELECT YEAR(ts) FROM events", True),
+        ("SELECT date_part('day', ts) FROM events", True),
+        ("SELECT COUNT(*) FROM events WHERE ts >= '2024-01-02'", True),
+        (
+            "SELECT COUNT(*) FROM events "
+            "WHERE (ts) BETWEEN '2024-01-01' AND '2024-01-31'",
+            True,
+        ),
+        # Exact instants, and times compared as times, are the same in any zone.
+        ("SELECT MAX(ts) FROM events", False),
+        ("SELECT COUNT(*) FROM events WHERE ts >= '2024-01-02 05:00:00'", False),
+        ("SELECT CAST(ts AS VARCHAR) FROM events", False),
+        ("SELECT upper(CAST(ts AS VARCHAR)) FROM events", False),
+    ],
+)
+def test_dates_read_from_times_moved_to_utc_are_flagged(
+    tmp_path: Path, sql: str, flagged: bool
+) -> None:
+    dataset = _load(tmp_path, {"events.csv": ZONED})
+
+    assert ("utc_dates" in _codes(dataset, sql)) is flagged
+
+
+def test_times_already_in_utc_move_no_date(tmp_path: Path) -> None:
+    dataset = _load(tmp_path, {"events.csv": UTC_ONLY})
+    sql = "SELECT COUNT(*) FROM events WHERE CAST(ts AS DATE) = DATE '2024-01-02'"
+
+    assert _codes(dataset, sql) == set()
+    assert dataset.tables[0].value_notes[0].detail == "time zones converted to UTC"

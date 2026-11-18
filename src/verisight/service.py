@@ -110,12 +110,8 @@ class VeriSight:
     def _build_generation_available(settings: Settings) -> bool:
         """Check whether Gemini credentials and disclosure permission exist."""
 
-        api_key = settings.gemini_api_key
-
-        return (
-            settings.allow_llm_data_disclosure
-            and api_key is not None
-            and bool(api_key.strip())
+        return settings.allow_llm_data_disclosure and (
+            settings.gemini_key() is not None
         )
 
     @staticmethod
@@ -129,7 +125,7 @@ class VeriSight:
         if not VeriSight._build_generation_available(settings):
             return None
 
-        api_key = settings.gemini_api_key
+        api_key = settings.gemini_key()
         assert api_key is not None
 
         return GeminiTextGenerationClient(
@@ -329,7 +325,12 @@ class VeriSight:
         *,
         population: tuple[PopulationFilter, ...] = (),
     ) -> QueryResult:
-        """Answer a natural-language analytical question against dataset files."""
+        """Run model-written SQL for a question and return its result as it is.
+
+        Nothing here checks that the SQL answers the question: there is no
+        claim check, SQL audit or second query. For a checked answer with a
+        trust level, use ``investigate(..., cross_check=True)``.
+        """
 
         dataset = self._load_dataset(paths)
 
@@ -357,6 +358,8 @@ class VeriSight:
         With ``cross_check``, an answer that passes every other check is
         recalculated by a second query planned without seeing the first, at
         the cost of at least one more model call. See ``result.cross_check``.
+        Without it, ``result.trust`` is ``None``: numbers are matched to SQL
+        cells, but the SQL audit and the second query do not run.
         """
 
         dataset = self._load_dataset(paths)

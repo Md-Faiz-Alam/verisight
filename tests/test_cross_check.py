@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 
 from verisight import VeriSight
 from verisight.config import Settings
@@ -719,7 +720,7 @@ def test_several_claims_are_not_assessed(tmp_path: Path) -> None:
 def test_configured_model_plans_the_cross_check() -> None:
     settings = Settings(
         _env_file=None,  # type: ignore[call-arg]
-        gemini_api_key="key",
+        gemini_api_key=SecretStr("key"),
         allow_llm_data_disclosure=True,
         gemini_cross_check_model="other-model",
     )
@@ -749,3 +750,35 @@ def test_choices_read_unions_and_stop_on_alias_cycles() -> None:
 
     assert union.measures == {"a", "b"}
     assert cycle.tables == {"t"}
+
+
+EAST = "SELECT SUM(amount) AS east FROM sales WHERE region = 'E'"
+WEST = "SELECT SUM(amount) AS west FROM sales WHERE region = 'W'"
+
+
+@pytest.mark.parametrize(
+    ("second", "same"),
+    [
+        # One query that makes both choices repeats the two primaries together.
+        (
+            "SELECT SUM(CASE WHEN region = 'E' THEN amount END) "
+            "- SUM(CASE WHEN region = 'W' THEN amount END) FROM sales",
+            True,
+        ),
+        (
+            "SELECT SUM(t) FROM (SELECT region, SUM(amount) AS t FROM sales "
+            "WHERE region IN ('E', 'W') GROUP BY region) AS g",
+            False,
+        ),
+    ],
+)
+def test_a_difference_from_two_queries_is_compared_with_both(
+    second: str, same: bool
+) -> None:
+    checker = IndependentCrossChecker(_Runner(sql=second), separate_model=True)
+
+    check = checker.check("How much more in E than W?", ANSWER, [EAST, WEST])
+
+    assert check.identical_sql is False
+    assert check.same_choices is same
+    assert check.single_route is (True if same else None)

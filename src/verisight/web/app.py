@@ -24,7 +24,7 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from verisight import __version__
 from verisight.analysis.result import DatasetAnalysisResult
@@ -518,7 +518,7 @@ def create_app(
     upload_slots = upload_reads or threading.BoundedSemaphore(
         limits.max_concurrent_uploads
     )
-    server_key = (core.gemini_api_key or "").strip()
+    server_key = core.gemini_key() or ""
 
     async def remove_expired() -> None:
         # Uploads expire on time even when no request arrives to trigger it.
@@ -927,7 +927,7 @@ def create_app(
         engine = factory(
             core.model_copy(
                 update={
-                    "gemini_api_key": key,
+                    "gemini_api_key": SecretStr(key),
                     "allow_llm_data_disclosure": True,
                     "max_investigation_seconds": limits.max_investigation_seconds,
                     "gemini_max_retries": limits.provider_retries,

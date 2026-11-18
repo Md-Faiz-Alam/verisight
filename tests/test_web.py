@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from verisight.analytics.dashboard import DashboardBuilder
 from verisight.config import Settings
@@ -50,7 +51,10 @@ class Clock:
 
 
 def _settings(key: str | None = None) -> Settings:
-    return Settings(gemini_api_key=key, allow_llm_data_disclosure=False)
+    return Settings(
+        gemini_api_key=None if key is None else SecretStr(key),
+        allow_llm_data_disclosure=False,
+    )
 
 
 def _client(**web: Any) -> TestClient:
@@ -384,7 +388,7 @@ def test_a_repeated_single_route_query_counts_only_from_another_model(
     second_model: str | None, outcome: str, level: str
 ) -> None:
     settings = Settings(
-        gemini_api_key="server-key",
+        gemini_api_key=SecretStr("server-key"),
         allow_llm_data_disclosure=False,
         gemini_model="gemini-3.1-flash-lite",
         gemini_cross_check_model=second_model,

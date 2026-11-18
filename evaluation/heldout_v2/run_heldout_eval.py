@@ -517,7 +517,7 @@ def _client(base_url: str | None) -> Any:
 def _api_key() -> str:
     from verisight.config import Settings
 
-    key = (Settings().gemini_api_key or "").strip()
+    key = Settings().gemini_key() or ""
     if not key:
         raise SystemExit(
             "Set VERISIGHT_GEMINI_API_KEY (or add it to .env) before a live run."

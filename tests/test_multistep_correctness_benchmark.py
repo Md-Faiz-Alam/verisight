@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from pydantic import SecretStr
 
 from verisight import VeriSight
 from verisight.config import Settings
@@ -219,7 +220,8 @@ def test_cross_observation_claims_and_independent_change_oracle(
     ):
         result = VeriSight(
             settings=Settings(
-                gemini_api_key="synthetic-key", allow_llm_data_disclosure=True
+                gemini_api_key=SecretStr("synthetic-key"),
+                allow_llm_data_disclosure=True,
             ),
             planner=planner,
             investigator=investigator,
@@ -312,7 +314,8 @@ def test_later_failures_and_step_limits_preserve_ordered_evidence(
     ):
         result = VeriSight(
             settings=Settings(
-                gemini_api_key="synthetic-key", allow_llm_data_disclosure=True
+                gemini_api_key=SecretStr("synthetic-key"),
+                allow_llm_data_disclosure=True,
             ),
             planner=planner,
             investigator=investigator,

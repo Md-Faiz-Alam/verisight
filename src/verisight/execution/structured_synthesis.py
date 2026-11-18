@@ -139,8 +139,8 @@ class StructuredInvestigationSynthesizer:
     @classmethod
     def from_settings(cls, settings: Settings) -> "StructuredInvestigationSynthesizer":
         """Create a schema-configured Gemini client with disclosure permission."""
-        key = settings.gemini_api_key
-        if not settings.allow_llm_data_disclosure or key is None or not key.strip():
+        key = settings.gemini_key()
+        if not settings.allow_llm_data_disclosure or key is None:
             raise ConfigurationError(
                 "Structured synthesis requires an API key "
                 "and LLM disclosure permission."

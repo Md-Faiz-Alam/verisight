@@ -90,7 +90,8 @@ def configure_logging(settings: Settings) -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(settings.log_level)
 
-    secrets = (settings.gemini_api_key,) if settings.gemini_api_key else ()
+    key = settings.gemini_key()
+    secrets = (key,) if key else ()
 
     handler.setFormatter(SecretRedactingFormatter(secrets=secrets))
 

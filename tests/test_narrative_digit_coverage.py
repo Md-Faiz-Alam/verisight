@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from pydantic import SecretStr
 from scripts.live_evaluation import main, score_result
 
 from verisight.analysis.models import DatasetAnalysis
@@ -176,7 +177,7 @@ def test_saved_evaluation_keeps_digit_coverage_without_raw_narrative(
         ),
         patch(
             "scripts.live_evaluation.Settings",
-            return_value=Settings(gemini_api_key="synthetic-key"),
+            return_value=Settings(gemini_api_key=SecretStr("synthetic-key")),
         ),
         patch(
             "scripts.live_evaluation.run_case", return_value=score_result(result, "30")

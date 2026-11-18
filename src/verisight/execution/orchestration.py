@@ -166,13 +166,19 @@ class InvestigationOrchestrator:
                 ),
             )
         claim = claims[0]
-        # A supported verdict guarantees the value and its observation exist.
+        # A supported verdict guarantees the value and its observations exist.
+        # A difference may take its two cells from two queries; pass both.
+        cited = dict.fromkeys(
+            reference.observation_index
+            for reference in (claim.claim.left, claim.claim.right)
+            if reference is not None
+        )
         return replace(
             result,
             cross_check=checker.check(
                 result.question,
                 cast(Decimal, claim.verification.actual),
-                result.observations[claim.claim.left.observation_index].sql,
+                [result.observations[index].sql for index in cited],
             ),
         )
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from pydantic import SecretStr
 from scripts.live_evaluation import score_result
 
 from verisight import VeriSight
@@ -268,7 +269,7 @@ def test_independent_answer_separates_numeric_support_from_correctness(
     ) as provider:
         result = VeriSight(
             settings=Settings(
-                gemini_api_key="synthetic-benchmark-key",
+                gemini_api_key=SecretStr("synthetic-benchmark-key"),
                 allow_llm_data_disclosure=True,
             ),
             planner=planner,

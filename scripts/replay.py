@@ -30,6 +30,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from pydantic import SecretStr
+
 from verisight import VeriSight
 from verisight.config import Settings
 from verisight.execution.claim_verification import ClaimOperation
@@ -142,7 +144,7 @@ def _replay_settings() -> Settings:
     # No request leaves the process: every call is answered from the file.
     return Settings(
         _env_file=None,  # type: ignore[call-arg]
-        gemini_api_key="replay",
+        gemini_api_key=SecretStr("replay"),
         allow_llm_data_disclosure=True,
     )
 
@@ -233,7 +235,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Recording sends data to Gemini; add --allow-llm-data-disclosure.")
         return 2
     settings = Settings().model_copy(update={"allow_llm_data_disclosure": True})
-    if not (settings.gemini_api_key or "").strip():
+    if settings.gemini_key() is None:
         print("Set VERISIGHT_GEMINI_API_KEY to record.")
         return 2
     case = Case(

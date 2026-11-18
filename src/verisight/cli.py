@@ -58,7 +58,11 @@ def _nonnegative_int(value: str) -> int:
 
 _TRUST_NOT_RUN = {
     "level": "not_run",
-    "reason": "The SQL audit and second query run only with --cross-check.",
+    "reason": (
+        "Numbers were matched to SQL cells only. The SQL audit and the "
+        "independent second query run only with --cross-check, so this "
+        "answer may not mean what the question asked."
+    ),
 }
 _FAILED_TRUST = (TrustLevel.NEEDS_REVIEW, TrustLevel.NOT_VERIFIED)
 
@@ -388,7 +392,7 @@ def _run(
         direct = app.dashboard_builder(args.paths).answerer.answer(args.question)
         if direct is not None:
             return _direct_report(request, direct)
-    if settings.gemini_api_key is None or not settings.gemini_api_key.strip():
+    if settings.gemini_key() is None:
         raise ConfigurationError("Investigation requires a configured model key.")
     # This is a preliminary inspection: the facade reloads paths for investigation.
     # The final report uses the analysis attached to the executed investigation.
@@ -527,6 +531,13 @@ def main(argv: list[str] | None = None) -> int:
     }
     serialized = json.dumps(to_jsonable(report), indent=2, allow_nan=False)
     print(serialized)
+    if payload.get("trust") is _TRUST_NOT_RUN:
+        # Beside the JSON, not in it, so a reader of the terminal sees it too.
+        print(
+            "Note: this answer is not verified. Add --cross-check to run the SQL "
+            "audit and an independent second query.",
+            file=sys.stderr,
+        )
     if args.output is not None:
         try:
             with args.output.open("x", encoding="utf-8") as destination:

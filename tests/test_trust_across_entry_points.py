@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -153,13 +154,23 @@ def test_a_skipped_check_is_never_silent(
         "--allow-llm-data-disclosure",
     ]
 
-    code, report = _command(monkeypatch, capsys, arguments)
+    monkeypatch.setenv("VERISIGHT_GEMINI_API_KEY", "offline-key")
+    monkeypatch.setattr(
+        "verisight.cli.VeriSight",
+        lambda settings, csv_options: _engine(settings, FIRST, csv_options),
+    )
+
+    code = main(arguments)
+    printed = capsys.readouterr()
+    report = json.loads(printed.out)
 
     assert code == 0
-    assert report["trust"] == {
-        "level": "not_run",
-        "reason": "The SQL audit and second query run only with --cross-check.",
-    }
+    trust = cast(dict[str, str], report["trust"])
+    assert trust["level"] == "not_run"
+    assert "may not mean what the question asked" in trust["reason"]
+    # Said beside the JSON too, for someone reading the terminal.
+    assert "this answer is not verified" in printed.err
+    assert "--cross-check" in printed.err
 
 
 def test_an_exact_question_needs_no_model(

@@ -1,6 +1,7 @@
 import logging
 
 from _pytest.capture import CaptureFixture
+from pydantic import SecretStr
 
 from verisight.config import Settings
 from verisight.logging import (
@@ -70,7 +71,7 @@ def test_redacts_configured_api_key_from_logs(
     configure_logging(
         Settings(
             log_level="INFO",
-            gemini_api_key=secret,
+            gemini_api_key=SecretStr(secret),
         )
     )
 
@@ -92,7 +93,7 @@ def test_redacts_api_key_from_exception_traceback(
     configure_logging(
         Settings(
             log_level="ERROR",
-            gemini_api_key=secret,
+            gemini_api_key=SecretStr(secret),
         )
     )
 
