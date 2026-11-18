@@ -23,9 +23,15 @@ function failureText(answer: Answer): string {
   return level ? TRUST[level].note : "This answer could not be checked.";
 }
 
+/** Claims computed from two cells; their exact result has many more digits than shown. */
+const DERIVED = new Set(["ratio", "percent", "percent_change"]);
+
 function headline(answer: Answer) {
-  const verification = answer.claims?.[0]?.verification;
-  return answer.outcome === "verified" && answer.claims?.length === 1 ? (verification?.actual ?? null) : null;
+  const claim = answer.claims?.[0];
+  if (answer.outcome !== "verified" || answer.claims?.length !== 1 || !claim) return null;
+  // A ratio or percentage was checked at the places the answer shows, so show those.
+  if (DERIVED.has(claim.claim.operation)) return claim.claim.expected;
+  return claim.verification.actual ?? null;
 }
 
 /** The cell that holds the answer; a result often lists the parts first. */

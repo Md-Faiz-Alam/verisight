@@ -696,7 +696,7 @@ def test_sql_uses_shared_budget_and_does_not_start_after_registration_expiry(
     register = DuckDBExecutor._register_table
 
     def register_then_expire(connection: object, table: LoadedTable) -> None:
-        register(connection, table)  # type: ignore[arg-type]
+        register(executor, connection, table)  # type: ignore[arg-type]
         clock[0] = 10
 
     with (

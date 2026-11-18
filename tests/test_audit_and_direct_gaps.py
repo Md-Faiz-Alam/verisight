@@ -10,8 +10,8 @@ from verisight.config import Settings
 from verisight.execution.context import QueryContextBuilder
 from verisight.execution.direct import Clarification, DirectAnswer, DirectAnswerer
 from verisight.execution.engine import DuckDBExecutor
+from verisight.execution.question_terms import question_mentions_category
 from verisight.execution.sql_audit import audit_sql
-from verisight.execution.validation import _question_mentions_category
 from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.service import DatasetLoader
 from verisight.logging import LOGGER_NAME, SecretRedactingFormatter
@@ -204,8 +204,8 @@ def test_a_than_question_still_checks_the_order(shop: LoadedDataset) -> None:
 
 
 def test_the_whole_set_is_not_a_kind_of_row() -> None:
-    assert not _question_mentions_category("How many of the deaths were late?", "Death")
-    assert _question_mentions_category("How many deaths were late?", "Death")
+    assert not question_mentions_category("How many of the deaths were late?", "Death")
+    assert question_mentions_category("How many deaths were late?", "Death")
 
 
 def _ask(dataset: LoadedDataset, question: str) -> object:

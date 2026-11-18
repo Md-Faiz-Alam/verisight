@@ -3,10 +3,10 @@
 import pytest
 
 from verisight.execution.context import ObservedCategoryValues, QueryContext
-from verisight.execution.validation import (
-    _question_assigns_category,
-    _question_mentions_category,
-    review_population,
+from verisight.execution.population_review import review_population
+from verisight.execution.question_terms import (
+    question_assigns_category,
+    question_mentions_category,
 )
 
 
@@ -36,13 +36,13 @@ def _status(question: str, sql: str) -> str:
     ],
 )
 def test_reporting_format_words_are_not_category_mentions(question: str) -> None:
-    assert not _question_mentions_category(question, "single")
+    assert not question_mentions_category(question, "single")
     assert _status(question, "SELECT AVG(amount) FROM readings") == "not_assessed"
 
 
 def test_category_before_the_format_complement_is_still_reviewed() -> None:
     question = "Mean amount of single readings. Report it as a single number."
-    assert _question_mentions_category(question, "single")
+    assert question_mentions_category(question, "single")
     unfiltered = review_population(
         question, "SELECT AVG(amount) FROM readings", _context()
     )
@@ -55,7 +55,7 @@ def test_category_before_the_format_complement_is_still_reviewed() -> None:
 
 def test_report_without_as_keeps_the_mention() -> None:
     question = "Report the mean amount for single readings."
-    assert _question_mentions_category(question, "single")
+    assert question_mentions_category(question, "single")
 
 
 @pytest.mark.parametrize(
@@ -122,7 +122,7 @@ def test_ambiguous_mentions_remain_unassessed(question: str) -> None:
 def test_short_codes_must_be_written_in_capitals(
     question: str, value: str, mentioned: bool
 ) -> None:
-    assert _question_mentions_category(question, value) is mentioned
+    assert question_mentions_category(question, value) is mentioned
 
 
 def test_the_word_in_raises_no_warning_about_a_code_column() -> None:
@@ -141,7 +141,7 @@ def test_the_word_in_raises_no_warning_about_a_code_column() -> None:
     ("column", "value"), [(" ", "no"), ("_", "no"), ("flagged", " ")]
 )
 def test_blank_assignment_parts_never_match(column: str, value: str) -> None:
-    assert not _question_assigns_category("flagged is no", column, value)
+    assert not question_assigns_category("flagged is no", column, value)
 
 
 @pytest.mark.parametrize(

@@ -503,7 +503,7 @@ def _population_context() -> QueryContext:
     ],
 )
 def test_population_review_is_conservative(sql: str, status: str) -> None:
-    from verisight.execution.validation import review_population
+    from verisight.execution.population_review import review_population
 
     result = review_population(
         "Total production output. Exclude test records.", sql, _population_context()
@@ -532,7 +532,7 @@ def test_population_review_is_conservative(sql: str, status: str) -> None:
 def test_population_review_does_not_guess_negative_or_ambiguous_intent(
     question: str,
 ) -> None:
-    from verisight.execution.validation import review_population
+    from verisight.execution.population_review import review_population
 
     assert (
         review_population(
@@ -546,10 +546,8 @@ def test_population_review_caller_policy_and_shared_category() -> None:
     from dataclasses import replace
 
     from verisight.execution.context import ObservedCategoryValues, PopulationFilter
-    from verisight.execution.validation import (
-        _question_mentions_category,
-        review_population,
-    )
+    from verisight.execution.population_review import review_population
+    from verisight.execution.question_terms import question_mentions_category
 
     context = _population_context()
     sql = "SELECT SUM(amount) FROM generation WHERE kind != 'test'"
@@ -575,7 +573,7 @@ def test_population_review_caller_policy_and_shared_category() -> None:
         ),
     )
     assert review_population("production output", sql, shared).status == "not_assessed"
-    assert not _question_mentions_category("all values", " ")
+    assert not question_mentions_category("all values", " ")
 
 
 @pytest.mark.parametrize(
@@ -654,7 +652,7 @@ def test_population_review_caller_policy_and_shared_category() -> None:
     ],
 )
 def test_counting_grain_advisory_is_narrow(sql: str, status: str) -> None:
-    from verisight.execution.validation import review_counting_grain
+    from verisight.execution.population_review import review_counting_grain
 
     review = review_counting_grain("Count account identities, not rows.", sql)
     assert review.status == status
@@ -683,7 +681,7 @@ def test_counting_grain_advisory_is_narrow(sql: str, status: str) -> None:
 def test_counting_grain_advisory_requires_positive_explicit_intent(
     question: str, assessed: bool
 ) -> None:
-    from verisight.execution.validation import review_counting_grain
+    from verisight.execution.population_review import review_counting_grain
 
     review = review_counting_grain(question, "SELECT COUNT(*) FROM accounts")
     assert review.status == ("review_required" if assessed else "not_assessed")

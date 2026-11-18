@@ -6,6 +6,7 @@ from decimal import (
     ROUND_HALF_UP,
     Decimal,
     DecimalException,
+    DivisionByZero,
     Inexact,
     InvalidOperation,
     Overflow,
@@ -23,10 +24,39 @@ FLOAT_SIGNIFICANT_DIGITS = 12
 
 
 class ClaimOperation(StrEnum):
-    """Supported operations for evidence-linked numerical claims."""
+    """Supported operations for evidence-linked numerical claims.
+
+    ``RATIO`` is left divided by right, ``PERCENT`` is 100 times that, and
+    ``PERCENT_CHANGE`` is 100 times (left minus right) divided by right, with
+    right as the reference value. These three are derived: computed exactly
+    from two SQL cells, then compared with the claim at its own decimal places.
+    """
 
     VALUE = "value"
     DIFFERENCE = "difference"
+    RATIO = "ratio"
+    PERCENT = "percent"
+    PERCENT_CHANGE = "percent_change"
+
+
+DERIVED_OPERATIONS = frozenset(
+    {ClaimOperation.RATIO, ClaimOperation.PERCENT, ClaimOperation.PERCENT_CHANGE}
+)
+# A rounded derived claim must keep this many significant digits, so a quotient
+# of 0.333... is never accepted as "0". With fewer, only an exact value matches.
+MIN_DERIVED_SIGNIFICANT_DIGITS = 3
+# Working precision for derived quotients, far beyond any displayed rounding.
+_DERIVED_PRECISION = 50
+
+
+def contract_kind(operation: ClaimOperation) -> ClaimOperation:
+    """The answer slot a claim fills: one number, or a difference.
+
+    A derived claim states one final number, so it fills a VALUE slot.
+    """
+    if operation is ClaimOperation.DIFFERENCE:
+        return ClaimOperation.DIFFERENCE
+    return ClaimOperation.VALUE
 
 
 MAX_ROUNDED_PLACES = 12
@@ -88,7 +118,9 @@ class NumericalClaim:
             if self.right is not None:
                 raise ValueError("A value claim must have one evidence reference.")
         elif not isinstance(self.right, EvidenceReference):
-            raise ValueError("A difference claim requires right-hand evidence.")
+            raise ValueError(
+                f"A {self.operation.value} claim requires right-hand evidence."
+            )
 
         _decimal_number(self.expected, name="Expected value")
 
@@ -212,7 +244,7 @@ class NumericalClaimVerifier:
             actual = left
         else:
             # NumericalClaim validates the right-hand reference for every
-            # DIFFERENCE operation during construction.
+            # two-cell operation during construction.
             right_reference = cast(EvidenceReference, claim.right)
             right = self._resolve(right_reference, observations)
 
@@ -225,6 +257,8 @@ class NumericalClaimVerifier:
                     reason="Right-hand numerical evidence is unavailable.",
                 )
 
+            if claim.operation in DERIVED_OPERATIONS:
+                return self._verify_derived(claim, left, right, expected, tolerance)
             try:
                 actual = _subtract_exact(left, right)
             except DecimalException:
@@ -304,6 +338,50 @@ class NumericalClaimVerifier:
             expected=expected,
             absolute_tolerance=tolerance,
             reason="The numerical evidence contradicts the claimed value.",
+        )
+
+    @staticmethod
+    def _verify_derived(
+        claim: NumericalClaim,
+        left: Decimal,
+        right: Decimal,
+        expected: Decimal,
+        tolerance: Decimal,
+    ) -> ClaimVerificationResult:
+        """Compute a ratio or percentage exactly, then compare at the claim's places.
+
+        A zero reference cannot be divided by, so the claim is unverifiable.
+        """
+        try:
+            actual = _derive(claim.operation, left, right)
+        except DecimalException:
+            return ClaimVerificationResult(
+                status=VerificationStatus.UNVERIFIABLE,
+                actual=None,
+                expected=expected,
+                absolute_tolerance=tolerance,
+                reason="The right-hand evidence is zero, so it cannot divide.",
+            )
+        if abs(actual - expected) <= tolerance or _rounds_to(actual, expected):
+            return ClaimVerificationResult(
+                status=VerificationStatus.SUPPORTED,
+                actual=actual,
+                expected=expected,
+                absolute_tolerance=tolerance,
+                reason=(
+                    f"The claimed {claim.operation.value} equals the one computed "
+                    "from the evidence cells, rounded to the claim's decimal places."
+                ),
+            )
+        return ClaimVerificationResult(
+            status=VerificationStatus.CONTRADICTED,
+            actual=actual,
+            expected=expected,
+            absolute_tolerance=tolerance,
+            reason=(
+                f"The {claim.operation.value} computed from the evidence cells "
+                "contradicts the claimed value."
+            ),
         )
 
     @classmethod
@@ -485,6 +563,36 @@ def _subtract_exact(left: Decimal, right: Decimal) -> Decimal:
         context.traps[InvalidOperation] = True
         context.traps[Overflow] = True
         return left - right
+
+
+def _derive(operation: ClaimOperation, left: Decimal, right: Decimal) -> Decimal:
+    """Divide precisely enough for any display; dividing by zero raises."""
+    with localcontext() as context:
+        context.prec = _DERIVED_PRECISION
+        context.traps[DivisionByZero] = True
+        context.traps[InvalidOperation] = True
+        if operation is ClaimOperation.RATIO:
+            return left / right
+        if operation is ClaimOperation.PERCENT:
+            return left * 100 / right
+        return (left - right) * 100 / right
+
+
+def _rounds_to(actual: Decimal, expected: Decimal) -> bool:
+    """Whether ``expected`` is ``actual`` rounded to ``expected``'s own places.
+
+    It must keep ``MIN_DERIVED_SIGNIFICANT_DIGITS`` significant digits; a
+    shorter claim matches only when it is exact.
+    """
+    _, digits, exponent = expected.as_tuple()
+    places = -exponent if isinstance(exponent, int) and exponent < 0 else 0
+    if places > MAX_ROUNDED_PLACES or len(digits) < MIN_DERIVED_SIGNIFICANT_DIGITS:
+        return actual == expected
+    try:
+        return _round_for_policy(actual, DecimalRoundingPolicy(places)) == expected
+    except DecimalException:
+        # Too many digits to round at that many places: not a display of it.
+        return False
 
 
 def _round_for_policy(value: Decimal, policy: DecimalRoundingPolicy) -> Decimal:

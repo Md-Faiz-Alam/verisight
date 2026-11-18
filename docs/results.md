@@ -1004,6 +1004,10 @@ because `NOT IN` never matches null.
 
 ## Reproduce
 
+The comparison questions above live outside the repository. The public benchmark in
+`evaluation/benchmark/` can be rerun by anyone, data and expected answers included;
+see [Development](development.md#public-benchmark). It has no live results yet.
+
 ```powershell
 python evaluation\bank\run_bank_eval.py --dataset datasets\bank_marketing\bank-additional-full.csv --preflight-only
 python evaluation\multidomain\run_multidomain_eval.py --prepare --data-dir datasets\multidomain --preflight-only

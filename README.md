@@ -18,7 +18,8 @@ checked against the executed result.*
 ## Why VeriSight
 
 - **Verified, not just generated.** Gemini plans the SQL and states each number
-  as a claim on a result cell. VeriSight checks the claim against the executed
+  as a claim on a result cell, or as a ratio, percentage or difference of two
+  cells that VeriSight computes itself. VeriSight checks the claim against the executed
   query and refuses numbers it cannot support. On the website, a second query
   written without seeing the first must reach the same number by a different
   choice of tables, rows, columns or structure before an answer is marked
@@ -135,6 +136,9 @@ Every live run is published in [Live results](docs/results.md), failures include
 - **Earlier runs:** 150 development attempts gave 85 accepted answers, all correct.
   Held-out sets on unseen data first exposed 3 wrong accepted answers, which led to
   the SQL audit.
+- **A public benchmark** of 30 questions over five domains and five file formats,
+  with its data and independently worked answers, is in `evaluation/benchmark` so
+  anyone can rerun it. It has no live results yet.
 
 ## Trust levels
 

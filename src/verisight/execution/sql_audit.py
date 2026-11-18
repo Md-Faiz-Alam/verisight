@@ -18,11 +18,11 @@ from sqlglot.errors import SqlglotError
 
 from verisight.execution.context import ObservedCategoryValues, ObservedTotalRows
 from verisight.execution.models import QueryResult
-from verisight.execution.validation import (
-    _names_every_row,
-    _population_terms,
-    _question_assigns_category,
-    _question_mentions_category,
+from verisight.execution.question_terms import (
+    names_every_row,
+    population_terms,
+    question_assigns_category,
+    question_mentions_category,
 )
 from verisight.ingestion.models import LoadedDataset, LoadedTable
 
@@ -461,7 +461,7 @@ def _join_keys(
     """Group a join's ``a.x = b.y`` conditions by the two tables they connect."""
     keys: dict[tuple[str, str], tuple[list[str], list[str]]] = {}
     condition = join.args.get("on")
-    for term in [] if condition is None else _population_terms(condition):
+    for term in [] if condition is None else population_terms(condition):
         if not (
             isinstance(term, exp.EQ)
             and isinstance(term.this, exp.Column)
@@ -711,8 +711,8 @@ def _mentions(
             )
             if (
                 long_enough
-                and _question_mentions_category(question, value)
-                and not _names_every_row(question, subjects, item.column, value)
+                and question_mentions_category(question, value)
+                and not names_every_row(question, subjects, item.column, value)
             ):
                 by_value.setdefault(value.casefold(), []).append((item, value))
     found = []
@@ -720,7 +720,7 @@ def _mentions(
         tied = [
             pair
             for pair in pairs
-            if _question_assigns_category(question, pair[0].column, pair[1])
+            if question_assigns_category(question, pair[0].column, pair[1])
         ]
         chosen = tied or pairs
         # The same column name in several tables is still one meaning.
@@ -1207,7 +1207,7 @@ def _missing_rows_filtered(tree: exp.Expression, used: dict[str, LoadedTable]) -
     """
     compared: set[str] = set()
     for where in tree.find_all(exp.Where):
-        for term in _population_terms(where.this):
+        for term in population_terms(where.this):
             if isinstance(term, _KEEPS_KNOWN):
                 compared |= {c.name.casefold() for c in term.find_all(exp.Column)}
     if not compared:

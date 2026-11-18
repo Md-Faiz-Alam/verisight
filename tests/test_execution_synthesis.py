@@ -281,7 +281,13 @@ def test_structured_factory_configures_gemini_schema(
     assert schema["additionalProperties"] is False
     claim_schema = schema["properties"]["claims"]["items"]
     assert claim_schema["properties"]["expected"] == {"type": "string"}
-    assert claim_schema["properties"]["operation"]["enum"] == ["value", "difference"]
+    assert claim_schema["properties"]["operation"]["enum"] == [
+        "value",
+        "difference",
+        "ratio",
+        "percent",
+        "percent_change",
+    ]
     assert set(claim_schema["required"]) == {"operation", "expected", "left", "right"}
     left = claim_schema["properties"]["left"]
     right = claim_schema["properties"]["right"]

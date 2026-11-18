@@ -17,6 +17,7 @@ from verisight.execution.claim_verification import (
     NumericalClaim,
     NumericalClaimVerifier,
     VerificationStatus,
+    contract_kind,
 )
 from verisight.execution.exceptions import InvestigationError
 from verisight.execution.exceptions import (
@@ -51,7 +52,7 @@ class _Reference(BaseModel):
 class _Claim(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    operation: Literal["value", "difference"]
+    operation: Literal["value", "difference", "ratio", "percent", "percent_change"]
     expected: str = Field(
         max_length=128,
         pattern=r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$",
@@ -90,7 +91,7 @@ def _generation_schema() -> dict[str, Any]:
                     "properties": {
                         "operation": {
                             "type": "string",
-                            "enum": ["value", "difference"],
+                            "enum": [operation.value for operation in ClaimOperation],
                         },
                         "expected": {"type": "string"},
                         "left": reference,
@@ -183,17 +184,28 @@ class StructuredInvestigationSynthesizer:
             "in claims. If evidence is missing, "
             "explain the limitation instead of asserting a value. Empty claims "
             "does not imply the conclusion has been verified.\n"
-            "Each claim has operation, expected, left, and right. Operation is value "
-            "or difference. Expected is an exact decimal STRING, not a JSON number. "
-            "For value, right is null. For difference, compute left minus right. "
-            "No other derived operations or model-selected tolerances are allowed.\n"
+            "Each claim has operation, expected, left, and right. Operation is value, "
+            "difference, ratio, percent or percent_change. Expected is an exact "
+            "decimal STRING, not a JSON number. For value, right is null. For "
+            "difference, expected is left minus right. For ratio, left divided by "
+            "right. For percent, 100 times left divided by right, as in the share "
+            "of a total: left is the part, right the whole. For percent_change, 100 "
+            "times (left minus right) divided by right: left is the new value, "
+            "right the reference it changed from. For ratio, percent and "
+            "percent_change, write expected rounded to the decimal places you show, "
+            "keeping at least 3 significant digits, or exactly. No other operations "
+            "or model-selected tolerances are allowed.\n"
             "For a value claim, expected must equal the referenced SQL cell itself, "
             "not a calculation using that cell. Never cite a numerator, denominator, "
-            "count, or other intermediate value as evidence for a different final "
-            "metric. A ratio, rate, percentage, or weighted mean must already exist "
-            "as a final SQL result cell before you can claim its value.\n"
+            "count, or other intermediate value as a value claim for a different "
+            "final metric. A ratio, percentage or percentage change may be claimed "
+            "either as a value claim on a final SQL cell, or with the ratio, percent "
+            "or percent_change operation on the two cells it divides; those two "
+            "cells must measure the same population and units the question asks "
+            "about. A weighted mean or any other calculation must already exist as "
+            "a final SQL result cell before you can claim its value.\n"
             "If only components are available and the required calculation is not "
-            "a supported difference, explain that the final metric is missing and "
+            "one of these operations, explain that the final metric is missing and "
             "omit that claim. Do not calculate the missing metric in the conclusion "
             "or relabel an intermediate value as the answer.\n"
             "References contain observation_index, row_index, and column. Both indices "
@@ -255,6 +267,8 @@ class StructuredInvestigationSynthesizer:
                 )
                 + "\nFor nonempty claims, match this exact operation multiset, "
                 "including count and repetitions. Order is irrelevant. "
+                "A value in this contract may be filled by a value, ratio, "
+                "percent or percent_change claim. "
                 "Do not add component claims or their numerical values to the "
                 "conclusion when only the final metric is requested. "
                 "If evidence is insufficient, explain the limitation and return "
@@ -311,7 +325,7 @@ class StructuredInvestigationSynthesizer:
             + feedback
             + "\nGenerate a fresh complete response from the same evidence. "
             "Return one JSON object matching RESPONSE SCHEMA. "
-            "Use decimal strings for expected values, only value or difference "
+            "Use decimal strings for expected values, only the listed "
             "operations, and no more than 50 claims. "
             "Do not change the evidence or invent missing values. "
             "Every parsed conclusion number must equal the expected value of a claim "
@@ -343,9 +357,11 @@ class StructuredInvestigationSynthesizer:
             "where appropriate. Preserve the "
             "requested metric and valid evidence references. Every claim "
             "reference must name an existing numeric result cell by exact column "
-            "name, and a difference must reference two different cells. Each "
-            "expected value must equal the referenced cell, or left minus right for "
-            "a difference, copied exactly with all available digits. If the "
+            "name, and a two-cell claim must reference two different cells. Each "
+            "value claim must equal the referenced cell, and a difference left "
+            "minus right, copied exactly with all available digits; a ratio, "
+            "percent or percent_change may be rounded to the places shown, "
+            "keeping at least 3 significant digits. If the "
             "requested final value is not an existing SQL result cell, do not claim "
             "or calculate it; explain that limitation instead. Do not add dummy "
             "claims for context values. The list may omit other violations; "
@@ -493,7 +509,9 @@ class StructuredInvestigationSynthesizer:
             StructuredInvestigationSynthesizer._check_references(synthesis, state)
             if synthesis.claims:
                 operations = tuple(claim.operation for claim in synthesis.claims)
-                if Counter(operations) != Counter(contract.operations):
+                if Counter(map(contract_kind, operations)) != Counter(
+                    map(contract_kind, contract.operations)
+                ):
                     raise _SynthesisFormatError("claim_output_contract_mismatch")
             audit = StructuredInvestigationSynthesizer._audit(synthesis, state)
             if (

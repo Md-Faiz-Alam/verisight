@@ -420,9 +420,20 @@ after cells are materialized. These controls do not establish a complete sandbox
 ## Verification and narrative audit
 
 Claims reference observation rows and named columns. Supported operations are
-`value` and `difference` (left minus right). Verdicts are `supported`,
-`contradicted`, or `unverifiable`. Opt-in rounding can additionally return
-`supported_rounded`.
+`value`, `difference` (left minus right), `ratio` (left divided by right),
+`percent` (100 times left divided by right, such as a share of a total) and
+`percent_change` (100 times left minus right, divided by right, with right as
+the reference value). Verdicts are `supported`, `contradicted`, or
+`unverifiable`. Opt-in rounding can additionally return `supported_rounded`.
+
+A ratio or percentage is computed exactly from its two cells, so SQL does not
+have to return it as one cell. The claim may round it to the places it shows,
+keeping at least 3 significant digits: 33.3 or 33.33 for 5 out of 15, but not 33.
+With fewer digits it must be exact. A zero right-hand cell makes the claim
+`unverifiable`. Such a claim answers a question for one number, so it fills a
+`value` slot in an output contract; `--require-claim` therefore names only
+`value` and `difference`. Matching both cells still does not show that they are
+the population and unit the question means.
 
 Structured model-generated claims require decimal strings and use zero
 tolerance. The model cannot choose a tolerance. A rounded presentation can

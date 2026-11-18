@@ -14,6 +14,7 @@ from verisight.execution.claim_verification import (
     NumericalClaim,
     NumericalClaimVerifier,
     VerificationStatus,
+    contract_kind,
 )
 from verisight.execution.context import PopulationFilter
 from verisight.execution.cross_check import CrossCheck
@@ -343,7 +344,10 @@ class InvestigationResult:
             violations.append("incomplete_workflow")
         if len(operations) != len(contract.operations):
             violations.append("claim_count_mismatch")
-        if Counter(operations) != Counter(contract.operations):
+        # A ratio or percentage claim fills a slot for one number.
+        if Counter(map(contract_kind, operations)) != Counter(
+            map(contract_kind, contract.operations)
+        ):
             violations.append("claim_operations_mismatch")
         if any(
             item.verification.status is not VerificationStatus.SUPPORTED
@@ -388,6 +392,18 @@ class InvestigationResult:
         )
 
 
+# How each operation combines its evidence, for the claim-linked statement.
+_OPERATION_TEXT = {
+    ClaimOperation.VALUE: "value",
+    ClaimOperation.DIFFERENCE: "difference, left minus right",
+    ClaimOperation.RATIO: "ratio, left divided by right",
+    ClaimOperation.PERCENT: "percent, 100 times left divided by right",
+    ClaimOperation.PERCENT_CHANGE: (
+        "percent change, 100 times left minus right, divided by right"
+    ),
+}
+
+
 @dataclass(frozen=True, slots=True)
 class VerifiedNumericalClaim:
     """Keep a numerical claim, its evidence references, and its verdict together."""
@@ -412,11 +428,7 @@ class ClaimLinkedStatement:
     def __post_init__(self) -> None:
         """Render expected and evidence values with an explicit verification status."""
         verification = self.verified_claim.verification
-        operation = (
-            "difference, left minus right"
-            if self.verified_claim.claim.operation is ClaimOperation.DIFFERENCE
-            else "value"
-        )
+        operation = _OPERATION_TEXT[self.verified_claim.claim.operation]
         actual = (
             "unavailable" if verification.actual is None else str(verification.actual)
         )

@@ -29,9 +29,12 @@ from verisight.execution.planning import (
     QueryPlanner,
     QueryRequest,
 )
+from verisight.execution.population_review import (
+    review_counting_grain,
+    review_population,
+)
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.repair import QueryRepairer, QueryRepairRequest
-from verisight.execution.validation import review_counting_grain, review_population
 from verisight.ingestion.models import LoadedDataset
 
 

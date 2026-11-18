@@ -12,8 +12,8 @@ import pytest
 
 from verisight.config import Settings
 from verisight.execution.context import QueryContext, QueryContextBuilder
+from verisight.execution.population_review import review_population
 from verisight.execution.sql_audit import audit_sql
-from verisight.execution.validation import review_population
 from verisight.ingestion.models import LoadedDataset
 from verisight.ingestion.service import DatasetLoader
 

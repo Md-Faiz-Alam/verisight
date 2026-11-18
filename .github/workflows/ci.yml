@@ -56,6 +56,7 @@ jobs:
         run: >-
           python -m mypy --strict src tests scripts
           evaluation/baseline/run_baseline_eval.py
+          evaluation/benchmark/make_benchmark.py
           evaluation/measure_memory.py
           evaluation/rescore.py
 
@@ -176,7 +177,7 @@ jobs:
           & $env:SNAPSHOT_PYTHON -m ruff check .
           if ($LASTEXITCODE -ne 0) { throw "Snapshot lint failed." }
 
-          & $env:SNAPSHOT_PYTHON -m mypy --strict src tests scripts evaluation/baseline/run_baseline_eval.py evaluation/measure_memory.py evaluation/rescore.py
+          & $env:SNAPSHOT_PYTHON -m mypy --strict src tests scripts evaluation/baseline/run_baseline_eval.py evaluation/benchmark/make_benchmark.py evaluation/measure_memory.py evaluation/rescore.py
           if ($LASTEXITCODE -ne 0) { throw "Snapshot type checking failed." }
 
       - name: Run snapshot offline tests with full coverage

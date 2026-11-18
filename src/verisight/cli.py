@@ -112,9 +112,12 @@ def _parser() -> argparse.ArgumentParser:
             command.add_argument(
                 "--require-claim",
                 action="append",
-                choices=[operation.value for operation in ClaimOperation],
+                # Contracts name answer slots: a value slot also takes a ratio,
+                # percent or percent_change claim.
+                choices=[ClaimOperation.VALUE.value, ClaimOperation.DIFFERENCE.value],
                 help=(
                     "Require exactly these claim operations; repeat for each claim. "
+                    "A value may also be answered by a ratio or percentage claim. "
                     "Checks output and numeric support, not task semantics."
                 ),
             )

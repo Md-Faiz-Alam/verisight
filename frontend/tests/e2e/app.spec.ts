@@ -130,6 +130,18 @@ test("a verified answer shows the exact number and its evidence", async ({ page 
   await noSidewaysScroll(page);
 });
 
+test("a percentage shows the figure that was checked, not the exact quotient", async ({ page }) => {
+  const reply = answer("verified", "verified", "33.3");
+  reply.claims = [
+    { claim: { operation: "percent", expected: "33.3" }, verification: { status: "supported", actual: "33.333333333333" } },
+  ];
+  await stub(page, () => ({ json: reply }));
+  await openWorkspace(page);
+  await ask(page, "What share of orders shipped?");
+
+  await expect(page.locator(".answer-num")).toHaveText("33.3");
+});
+
 test("a long number is never rounded", async ({ page }) => {
   await stub(page, () => ({ json: answer("verified", "verified", "12345678901234567.123456") }));
   await openWorkspace(page);

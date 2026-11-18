@@ -1,0 +1,31 @@
+id,files,type,question,expected,tolerance
+h1,visits.json,number,How many visits were to the Cardiology department?,77,0
+h2,visits.json,number,"What is the average wait in minutes, over the visits that have a recorded wait time?",64.550000,0.005
+h3,visits.json,number,What percentage of visits were followed by a readmission?,18.333333,0.05
+h4,visits.json,difference,What is the total cost of Oncology visits minus the total cost of Pediatrics visits?,-10083.05,0.005
+h5,visits.json,number,How many visits had a long wait?,AMBIGUOUS,0
+h6,visits.json,number,What is the average age of the patients?,UNANSWERABLE,0
+r1,orders.csv,number,"How many orders are shipped, counting every spelling of the Shipped status?",245,0
+r2,orders.csv;customers.csv,number,What is the total amount of all orders placed by customers in the West region?,244972.35,0.005
+r3,orders.csv,number,How many different customers placed at least one order?,70,0
+r4,orders.csv,difference,How much more was the total amount of orders placed in 2024 than of orders placed in 2023?,35904.23,0.005
+r5,orders.csv;customers.csv,number,What is the total amount spent by the most valuable customers?,AMBIGUOUS,0
+r6,orders.csv,number,What is the total profit made on all orders?,UNANSWERABLE,0
+m1,production.xlsx,number,What is the total number of units produced on line L2?,32434,0
+m2,production.xlsx,number,"What is the overall defect rate, as a percentage of all units produced?",1.990361,0.01
+m3,production.xlsx,number,What is the median number of units produced per run on the Night shift?,660.0,0
+m4,production.xlsx,difference,What is the number of defects recorded on the Day shift minus the number recorded on the Night shift?,-524,0
+m5,production.xlsx,number,How many runs had poor quality?,AMBIGUOUS,0
+m6,production.xlsx,number,What was the average machine temperature on line L1?,UNANSWERABLE,0
+e1,scores.tsv,number,"What is the average Math score, over the Math scores that were recorded?",68.232143,0.005
+e2,scores.tsv,number,How many Science scores were 90 or higher?,15,0
+e3,scores.tsv,number,What is the highest English score at school B?,99,0
+e4,scores.tsv,difference,How much higher was the average Math score in 2024 than in 2023?,4.421691,0.005
+e5,scores.tsv,number,How many students are struggling?,AMBIGUOUS,0
+e6,scores.tsv,number,What is the average attendance rate of the students?,UNANSWERABLE,0
+c1,readings.jsonl,number,"What is the highest temperature recorded at the Cairo station, in degrees Celsius?",33.5,0
+c2,readings.jsonl,number,"What is the total recorded rainfall at the Lima station, in millimetres?",1484.5,0.005
+c3,readings.jsonl,number,On how many of its reading days did Oslo record a temperature below 0 degrees Celsius?,30,0
+c4,readings.jsonl,difference,"How much higher is the average temperature at Perth than at Oslo, in degrees Celsius?",12.874590,0.005
+c5,readings.jsonl,number,On how many days was it hot in Perth?,AMBIGUOUS,0
+c6,readings.jsonl,number,What was the average wind speed at the Cairo station?,UNANSWERABLE,0

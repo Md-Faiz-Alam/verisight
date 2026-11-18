@@ -30,7 +30,7 @@ from verisight.execution.exceptions import (
 from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.models import QueryResult
 from verisight.execution.prompt_budget import PromptBudgetExceededError
-from verisight.execution.validation import _population_terms
+from verisight.execution.question_terms import population_terms
 
 CROSS_CHECK_COLUMN = "cross_check_answer"
 # A column no calculation produces by accident: the second query declined.
@@ -416,7 +416,7 @@ def _canonical_sql(sql: str) -> str:
     # Deepest first, so each outer run of conditions sorts on settled text.
     for node in reversed(list(tree.find_all(exp.And))):
         if not isinstance(node.parent, exp.And):
-            terms = _population_terms(node)
+            terms = population_terms(node)
             terms.sort(key=lambda term: term.sql(dialect="duckdb"))
             node.replace(exp.and_(*terms))
     return tree.sql(dialect="duckdb")

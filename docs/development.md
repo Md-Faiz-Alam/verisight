@@ -142,6 +142,31 @@ drop claims or add provider calls. See [Output contracts](output-contracts.md).
 
 ## Deterministic and live evaluation
 
+### Public benchmark
+
+`evaluation/benchmark/` holds a benchmark anyone can rerun: 30 questions over
+five generated domains (hospital visits, retail orders joined to customers,
+factory runs, school scores and weather readings) in JSON, CSV, Excel, TSV and
+JSONL, with 20 answerable, 5 ambiguous and 5 unanswerable questions. The files
+keep real flaws: currency text, thousands separators, mixed-case labels and
+missing values. `make_benchmark.py` writes everything from a fixed seed and
+works out each expected answer in plain Python from the generated records, not
+from the files. `tests/test_benchmark.py` checks that the committed files are
+exactly what the generator writes and that hand-written SQL, run through
+VeriSight's loader, reaches every expected answer.
+
+```powershell
+python evaluation\benchmark\make_benchmark.py
+python evaluation\baseline\run_baseline_eval.py --root evaluation\benchmark --freeze
+```
+
+Then run each setup with `--run` and summarize with `--report`, as for the other
+comparisons. Live runs call Gemini. Because these questions are public, never
+change prompts, rules or code to pass one of them; report every run as it came,
+and treat this set as a regression check rather than an unseen held-out test.
+
+### Offline development benchmark
+
 Run the offline development benchmark:
 
 ```powershell

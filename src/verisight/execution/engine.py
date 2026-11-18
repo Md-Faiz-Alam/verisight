@@ -3,6 +3,7 @@
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from threading import TIMEOUT_MAX, Event, Timer
@@ -34,6 +35,18 @@ from verisight.execution.validation import (
 from verisight.ingestion.models import LoadedDataset, LoadedTable
 from verisight.ingestion.schema import SchemaInferer
 from verisight.serialization import to_jsonable
+
+# Exact-decimal columns remembered per executor; the oldest is dropped first.
+_MAX_EXACT_COLUMNS = 16
+
+
+@dataclass(frozen=True, slots=True)
+class _ExactColumn:
+    """An object column of numbers, as decimal text and the type to cast it to."""
+
+    source: pd.Series
+    text: list[str | None]
+    sql_type: str
 
 
 class DuckDBExecutor:
@@ -76,6 +89,7 @@ class DuckDBExecutor:
 
         self._population = population
         self._truncate_rows = truncate_rows
+        self._exact_columns: dict[tuple[str, int], _ExactColumn] = {}
         self._query_validator = AnalyticalQueryValidator()
         self._max_result_rows = max_result_rows
         self._max_result_bytes = max_result_bytes
@@ -280,8 +294,56 @@ class DuckDBExecutor:
         finally:
             connection.close()
 
-    @staticmethod
+    def _exact_column(self, series: pd.Series) -> _ExactColumn | None:
+        """Return decimal text and its type for an object column of numbers.
+
+        Converting every value is the slow part of a query on such a column, so
+        the result is kept for this executor and reused only while the column
+        still holds equal values; replacing or editing a cell recomputes it.
+        """
+        if not is_object_dtype(series.dtype):
+            return None
+        key = (str(series.name), len(series))
+        cached = self._exact_columns.get(key)
+        if cached is not None and cached.source.equals(series):
+            return cached
+        values = series.dropna()
+        if values.empty or not all(
+            type(value) in (int, float, Decimal) for value in values
+        ):
+            return None
+
+        decimals = [Decimal(str(value)) for value in values]
+        if not all(value.is_finite() for value in decimals):
+            raise QueryDataBindingError(
+                "Object-backed numerical data must be finite for exact SQL binding."
+            )
+        decimals = [value if value else Decimal(0) for value in decimals]
+        scale = max(max(0, -int(value.as_tuple().exponent)) for value in decimals)
+        integer_digits = max(
+            (max(0, value.adjusted() + 1) for value in decimals if value),
+            default=0,
+        )
+        precision = max(1, integer_digits + scale)
+        if precision > 38:
+            raise QueryDataBindingError(
+                "Object-backed numerical data exceeds DuckDB's exact "
+                "decimal precision limit of 38 digits."
+            )
+        formatted = iter(format(value, "f") for value in decimals)
+        exact = _ExactColumn(
+            # A copy of the cell references, so a later in-place edit differs.
+            source=series.copy(deep=True),
+            text=[None if missing else next(formatted) for missing in series.isna()],
+            sql_type=f"DECIMAL({precision},{scale})",
+        )
+        if len(self._exact_columns) >= _MAX_EXACT_COLUMNS:
+            self._exact_columns.pop(next(iter(self._exact_columns)))
+        self._exact_columns[key] = exact
+        return exact
+
     def _register_table(
+        self,
         connection: duckdb.DuckDBPyConnection,
         table: LoadedTable,
         population: tuple[PopulationFilter, ...] = (),
@@ -296,44 +358,15 @@ class DuckDBExecutor:
         projections: list[str] = []
         for column in table.data.columns:
             quoted = '"' + str(column).replace('"', '""') + '"'
-            series = table.data[column]
-            if not is_object_dtype(series.dtype):
+            exact = self._exact_column(table.data[column])
+            if exact is None:
                 projections.append(quoted)
                 continue
-            values = series.dropna()
-            if values.empty or not all(
-                type(value) in (int, float, Decimal) for value in values
-            ):
-                projections.append(quoted)
-                continue
-
-            decimals = [Decimal(str(value)) for value in values]
-            if not all(value.is_finite() for value in decimals):
-                raise QueryDataBindingError(
-                    "Object-backed numerical data must be finite for exact SQL binding."
-                )
-            decimals = [value if value else Decimal(0) for value in decimals]
-            scale = max(max(0, -int(value.as_tuple().exponent)) for value in decimals)
-            integer_digits = max(
-                (max(0, value.adjusted() + 1) for value in decimals if value),
-                default=0,
-            )
-            precision = max(1, integer_digits + scale)
-            if precision > 38:
-                raise QueryDataBindingError(
-                    "Object-backed numerical data exceeds DuckDB's exact "
-                    "decimal precision limit of 38 digits."
-                )
-
             if prepared is None:
-                prepared = table.data.copy(deep=True)
-            formatted = iter(format(value, "f") for value in decimals)
-            prepared[column] = [
-                None if missing else next(formatted) for missing in series.isna()
-            ]
-            projections.append(
-                f"CAST({quoted} AS DECIMAL({precision},{scale})) AS {quoted}"
-            )
+                # Columns are replaced, never edited, so sharing the rest is safe.
+                prepared = table.data.copy(deep=False)
+            prepared[column] = exact.text
+            projections.append(f"CAST({quoted} AS {exact.sql_type}) AS {quoted}")
 
         if prepared is None and not population:
             connection.register(table.relation_name, table.data)

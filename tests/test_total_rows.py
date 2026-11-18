@@ -14,7 +14,7 @@ from verisight.execution.context import (
     QueryContextBuilder,
 )
 from verisight.execution.formatting import QueryContextFormatter
-from verisight.execution.validation import review_population
+from verisight.execution.population_review import review_population
 from verisight.ingestion.models import LoadedDataset, LoadedTable, SourceMetadata
 from verisight.ingestion.schema import SchemaInferer
 from verisight.quality import totals
