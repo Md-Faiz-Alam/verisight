@@ -112,3 +112,8 @@ files = [
     "src/verisight",
     "tests",
 ]
+
+# openpyxl ships no type information; only evaluation runners import it.
+[[tool.mypy.overrides]]
+module = ["openpyxl", "openpyxl.*"]
+ignore_missing_imports = true

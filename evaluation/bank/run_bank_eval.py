@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from importlib import metadata
 from pathlib import Path
+from typing import Any
 
 DATASET_SHA256 = "74adfc578bf77a7ff4bb1ba4a9f8709d9e3c6907342959c2c8416847e0afb4d8"
 RELATION = "bank_additional_full"
@@ -398,7 +399,7 @@ def main() -> int:
         capture_output=True,
         text=True,
     ).stdout.strip()
-    packages = {}
+    packages: dict[str, str | None] = {}
     for name in ("verisight", "google-genai", "duckdb", "sqlglot", "pandas"):
         try:
             packages[name] = metadata.version(name)
@@ -433,7 +434,7 @@ def main() -> int:
         },
     )
 
-    results = []
+    results: list[dict[str, Any]] = []
     with (args.out / "results.jsonl").open("x", encoding="utf-8", newline="\n") as log:
         for round_number in range(1, args.repeats + 1):
             for case in CASES:

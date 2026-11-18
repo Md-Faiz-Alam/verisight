@@ -52,6 +52,12 @@ jobs:
       - name: Check lint
         run: python -m ruff check .
 
+      # Compared with the empty tree, so every committed file is checked; a plain
+      # "git diff --check" sees no changes in a fresh checkout. It runs before the
+      # tests so a test failure cannot hide a whitespace problem.
+      - name: Check whitespace
+        run: git diff --check 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD
+
       - name: Check types
         run: >-
           python -m mypy --strict src tests scripts
@@ -59,6 +65,14 @@ jobs:
           evaluation/benchmark/make_benchmark.py
           evaluation/measure_memory.py
           evaluation/rescore.py
+          evaluation/bank/run_bank_eval.py
+          evaluation/multidomain/run_multidomain_eval.py
+          evaluation/v2/run_v2_eval.py
+          evaluation/heldout/run_heldout_eval.py
+
+      # Same file name as the other held-out runner, so mypy checks it on its own.
+      - name: Check types of the second held-out runner
+        run: python -m mypy --strict evaluation/heldout_v2/run_heldout_eval.py
 
       - name: Run offline tests with full coverage
         run: >-
@@ -67,11 +81,6 @@ jobs:
           --cov=scripts
           --cov-report=term-missing
           --cov-fail-under=100
-
-      # Compared with the empty tree, so every committed file is checked; a plain
-      # "git diff --check" sees no changes in a fresh checkout.
-      - name: Check whitespace
-        run: git diff --check 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD
 
   frontend:
     name: Frontend build
@@ -90,7 +99,9 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: lts/*
+          # Pinned to the version the committed build was made with, so a new
+          # LTS release cannot change the build output and fail the check below.
+          node-version: "26"
 
       - name: Install dependencies
         run: npm ci
@@ -177,8 +188,11 @@ jobs:
           & $env:SNAPSHOT_PYTHON -m ruff check .
           if ($LASTEXITCODE -ne 0) { throw "Snapshot lint failed." }
 
-          & $env:SNAPSHOT_PYTHON -m mypy --strict src tests scripts evaluation/baseline/run_baseline_eval.py evaluation/benchmark/make_benchmark.py evaluation/measure_memory.py evaluation/rescore.py
+          & $env:SNAPSHOT_PYTHON -m mypy --strict src tests scripts evaluation/baseline/run_baseline_eval.py evaluation/benchmark/make_benchmark.py evaluation/measure_memory.py evaluation/rescore.py evaluation/bank/run_bank_eval.py evaluation/multidomain/run_multidomain_eval.py evaluation/v2/run_v2_eval.py evaluation/heldout/run_heldout_eval.py
           if ($LASTEXITCODE -ne 0) { throw "Snapshot type checking failed." }
+
+          & $env:SNAPSHOT_PYTHON -m mypy --strict evaluation/heldout_v2/run_heldout_eval.py
+          if ($LASTEXITCODE -ne 0) { throw "Snapshot type checking of the second held-out runner failed." }
 
       - name: Run snapshot offline tests with full coverage
         run: |
