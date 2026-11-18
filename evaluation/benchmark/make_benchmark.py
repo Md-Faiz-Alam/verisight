@@ -527,6 +527,8 @@ def build(root: Path = ROOT) -> list[Question]:
         )
         + "\n",
         encoding="utf-8",
+        # The same bytes on every system, so the file and its hash never vary.
+        newline="\n",
     )
 
     orders, customers, retail_questions = retail(rng)
@@ -582,6 +584,7 @@ def build(root: Path = ROOT) -> list[Question]:
             for row in readings
         ),
         encoding="utf-8",
+        newline="\n",
     )
 
     questions = [

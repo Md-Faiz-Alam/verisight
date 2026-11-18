@@ -1,0 +1,8 @@
+# The public benchmark is compared byte for byte by its tests and hashed by the
+# comparison runner, so its files keep LF line endings on every system.
+evaluation/benchmark/questions.csv text eol=lf
+evaluation/benchmark/data/*.csv text eol=lf
+evaluation/benchmark/data/*.tsv text eol=lf
+evaluation/benchmark/data/*.json text eol=lf
+evaluation/benchmark/data/*.jsonl text eol=lf
+evaluation/benchmark/data/*.xlsx binary
