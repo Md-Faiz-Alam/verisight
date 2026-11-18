@@ -533,10 +533,12 @@ compared. A repeat usually adds no evidence, so the answer stays at "Number matc
 SQL only".
 
 The exception is a query with only one route, recorded as `single_route`: it reads
-one table, returns one value built from aggregates, has no join, grouping,
-subquery, distinct values, window or row-picking aggregate such as `arg_max`, and
-never compares or combines two columns. `AVG(area)` or `SUM(amount) WHERE region =
-'East'` qualify. So does a lookup of one column, such as `SELECT gdp WHERE country =
+one table, returns only values built from aggregates of the same one column, has no
+join, grouping, subquery, `SELECT DISTINCT`, window or row-picking aggregate such as
+`arg_max`, and never compares or combines two columns. `AVG(area)`, `SUM(amount)
+WHERE region = 'East'`, `COUNT(DISTINCT customer_id)`, a median written as
+`percentile_cont(0.5) WITHIN GROUP (ORDER BY area)`, and a difference returned
+beside the two totals it subtracts all qualify. So does a lookup of one column, such as `SELECT gdp WHERE country =
 'India' AND year = 2024`, when its conditions alone pick exactly one row, with no
 `ORDER BY` or `LIMIT` choosing it. `shipped <= required`, `price - cost` and `SUM(a) / SUM(b)` do
 not, because relating two columns defines a new concept, and two models can share

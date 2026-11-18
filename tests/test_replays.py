@@ -159,5 +159,23 @@ def test_recording_saves_every_call_and_the_outcome(
     assert "Recorded 1 calls" in capsys.readouterr().out
     case = replay.load(out)
     assert case.source == "recorded"
+    assert case.cross_check_model is None
     assert [call.stage for call in case.calls] == ["investigator"]
     assert case.expected["declined"] == "not_in_data"
+
+
+def test_a_replay_uses_the_models_it_was_recorded_with(tmp_path: Path) -> None:
+    name = "recorded_cardiology_count.json"
+    case = replay.load(REPLAYS / name)
+    settings = replay._replay_settings(case)
+    # The same responses without a separate second model earn a lower level.
+    path = _copy(tmp_path, name)
+    _edit(path, lambda raw: raw.update(cross_check_model=None))
+
+    report = replay.replay(path)
+
+    assert settings.gemini_model == case.model
+    assert settings.gemini_cross_check_model == case.cross_check_model
+    assert case.expected["trust_level"] == "verified"
+    assert report.outcome["trust_level"] == "number_matched"
+    assert not report.matches

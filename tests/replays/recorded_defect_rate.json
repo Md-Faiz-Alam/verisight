@@ -1,0 +1,51 @@
+{
+  "question": "What is the overall defect rate, as a percentage of all units produced?",
+  "data_dir": "evaluation/benchmark/data",
+  "files": [
+    "production.xlsx"
+  ],
+  "answer_type": "number",
+  "source": "recorded",
+  "model": "gemini-3.1-flash-lite",
+  "calls": [
+    {
+      "stage": "investigator",
+      "prompt_sha256": "0fe4b4674cd32df059489a7a4f1c545d0ed53c0e82d73b6cad0656b975c5e7e9",
+      "response": "{\n  \"action\": \"investigate\",\n  \"reasoning\": \"The defect rate needs to be calculated by dividing the total number of defects by the total number of units produced across all runs. I will request these two aggregate sums to perform the calculation.\",\n  \"question\": \"SELECT SUM(defects), SUM(units_produced) FROM runs\"\n}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "52c883d9111f85ff5c86e8aa946ef9de8577763a8cd483dee939d5da5021702a",
+      "response": "SELECT \n    CAST(SUM(\"defects\") AS DOUBLE) AS \"total_defects\", \n    SUM(\"units_produced\") AS \"total_units_produced\", \n    (100.0 * SUM(\"defects\") / NULLIF(SUM(\"units_produced\"), 0)) AS \"overall_defect_rate_percentage\" \nFROM \"runs\""
+    },
+    {
+      "stage": "investigator",
+      "prompt_sha256": "85412ea3566587f3819a395a8e8ad7e0c27a1bbce8e9595d6cc4b7455104c1da",
+      "response": "{\"action\": \"finish\", \"reasoning\": \"The analytical calculation of the total defect rate as a percentage of all units produced has been successfully performed using the sum of defects and the sum of units produced, resulting in a value of 1.99%. No further information is needed.\", \"question\": null}"
+    },
+    {
+      "stage": "structured_synthesis",
+      "prompt_sha256": "7da633941825e8b97daf78a7520dc4525f1aa931bc5c1df2a321be2109bb8d7f",
+      "response": "{\"conclusion\":\"The overall defect rate, calculated as the total number of defects divided by the total number of units produced, is 1.9903607528864606 percent.\",\"claims\":[{\"operation\":\"value\",\"expected\":\"1.9903607528864606\",\"left\":{\"observation_index\":0,\"row_index\":0,\"column\":\"overall_defect_rate_percentage\"},\"right\":null}]}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "f82eadbca67a5f9e77215d5a2320c2737298dc5b0131b096f36a77164839effc",
+      "response": "SELECT 100.0 * SUM(\"defects\") / NULLIF(SUM(\"units_produced\"), 0) AS \"cross_check_answer\" FROM \"runs\""
+    }
+  ],
+  "expected": {
+    "status": "complete",
+    "trust_level": "number_matched",
+    "claims": [
+      {
+        "operation": "value",
+        "expected": "1.9903607528864606",
+        "verification": "supported"
+      }
+    ],
+    "declined": null,
+    "cross_check": "agreed"
+  },
+  "cross_check_model": "gemini-3.5-flash-lite"
+}

@@ -1,0 +1,52 @@
+{
+  "question": "What is the total amount of all orders placed by customers in the West region?",
+  "data_dir": "evaluation/benchmark/data",
+  "files": [
+    "orders.csv",
+    "customers.csv"
+  ],
+  "answer_type": "number",
+  "source": "recorded",
+  "model": "gemini-3.1-flash-lite",
+  "calls": [
+    {
+      "stage": "investigator",
+      "prompt_sha256": "291a1d2f39252e85a02d99a0355734ff9d71398dfa3c5c67de0e7228755dff2c",
+      "response": "{\n  \"action\": \"investigate\",\n  \"reasoning\": \"The total amount of orders for a specific region requires joining the 'orders' and 'customers' tables on the 'customer_id' column, filtering by the 'West' region, and summing the 'amount' column.\",\n  \"question\": \"SELECT SUM(T1.amount) FROM orders AS T1 INNER JOIN customers AS T2 ON T1.customer_id = T2.customer_id WHERE T2.region = 'West'\"\n}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "2a4b45a8fa2e0b7ea78649234a8f7e2a9b353931a70a4ffb8126711441b93a93",
+      "response": "SELECT SUM(\"orders\".\"amount\") AS \"total_amount\" FROM \"orders\" AS \"orders\" INNER JOIN \"customers\" AS \"customers\" ON \"orders\".\"customer_id\" = \"customers\".\"customer_id\" WHERE \"customers\".\"region\" = 'West'"
+    },
+    {
+      "stage": "investigator",
+      "prompt_sha256": "2b5b30abee8f7ea846836b4af60eedfdb931ef03433684447a7a7d8a138613ac",
+      "response": "{\n  \"action\": \"finish\",\n  \"reasoning\": \"The analytical question has been answered by the executed observation, which provides the total amount of orders for the 'West' region by joining the 'orders' and 'customers' tables.\",\n  \"question\": null\n}"
+    },
+    {
+      "stage": "structured_synthesis",
+      "prompt_sha256": "e926dee0c38de7b1329104fa7ea9425f60504c8692d404cbeb0e1c46182c873a",
+      "response": "{\n  \"conclusion\": \"The total amount of all orders placed by customers in the West region is 244972.35.\",\n  \"claims\": [\n    {\n      \"operation\": \"value\",\n      \"expected\": \"244972.35\",\n      \"left\": {\n        \"observation_index\": 0,\n        \"row_index\": 0,\n        \"column\": \"total_amount\"\n      },\n      \"right\": null\n    }\n  ]\n}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "a1d948627ddddfeb29116ab7a4affe1eef527e8db8bc7eabda58280ea05abd6d",
+      "response": "SELECT SUM(\"o\".\"amount\") AS \"cross_check_answer\" FROM \"orders\" AS \"o\" WHERE \"o\".\"customer_id\" IN (SELECT \"c\".\"customer_id\" FROM \"customers\" AS \"c\" WHERE \"c\".\"region\" = 'West')"
+    }
+  ],
+  "expected": {
+    "status": "complete",
+    "trust_level": "verified",
+    "claims": [
+      {
+        "operation": "value",
+        "expected": "244972.35",
+        "verification": "supported"
+      }
+    ],
+    "declined": null,
+    "cross_check": "agreed"
+  },
+  "cross_check_model": "gemini-3.5-flash-lite"
+}

@@ -177,7 +177,11 @@ recorded again.
 The first four files are hand-written, marked `"source": "hand-written"`, and use
 the public benchmark data: a verified join, a reworded repeat that stays a number
 match, a percentage claimed from two cells, and a question the data cannot answer.
-Replace them with real recordings when a live run is acceptable:
+Four more, named `recorded_*`, are real Gemini responses to the same benchmark
+questions, recorded with `gemini-3.1-flash-lite` and `gemini-3.5-flash-lite` for
+the second query. Each file names both models, because a separate model for the
+second query changes the trust level, and a replay uses the same pair. Record
+more when a live run is acceptable:
 
 ```powershell
 python -m scripts.replay check tests/replays

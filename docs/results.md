@@ -980,6 +980,16 @@ attempts made no model call, so they say nothing about accuracy; the runner was 
 and full VeriSight was run again from a new freeze. Its first attempt is kept with
 the run's records.
 
+**A change made after this run.** Three of the five warnings came from narrow gaps
+in the rule that lets a repeat from a separate model count: it allowed only one
+returned column, while a difference also returns the two totals it subtracts; it
+treated `COUNT(DISTINCT x)` of one column as a structure another route could test;
+and it did not read a median written as `percentile_cont(0.5) WITHIN GROUP`. All
+three now count. On this run's saved SQL, the warnings would fall from 5 to 2 of 19
+correct answers, the two left being queries with a CTE or joined subqueries. These
+questions found the gaps, so that is not a C3 result; measuring it needs new
+questions.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10

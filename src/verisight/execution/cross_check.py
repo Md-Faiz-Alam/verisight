@@ -352,7 +352,32 @@ def _columns(node: exp.Expression) -> frozenset[str]:
     return frozenset(column.name.casefold() for column in node.find_all(exp.Column))
 
 
-def _relates_columns(tree: exp.Select, projection: exp.Expression) -> bool:
+# Aggregates, counting an ordered-set aggregate such as
+# percentile_cont(0.5) WITHIN GROUP (ORDER BY x), which reads x like MEDIAN(x).
+_AGGREGATES: tuple[type[exp.Expression], ...] = (exp.AggFunc, exp.WithinGroup)
+
+
+def _blocking_structure(tree: exp.Expression) -> bool:
+    """Whether the query uses a structure that another route could test.
+
+    ``COUNT(DISTINCT x)`` of one column is not one: any other way to count the
+    different values of x makes the same choice of rows and column.
+    """
+    for node in tree.find_all(*_ROUTE_STRUCTURES):
+        if (
+            isinstance(node, exp.Distinct)
+            and isinstance(node.parent, exp.Count)
+            and len(node.expressions) == 1
+            and isinstance(node.expressions[0], exp.Column)
+        ):
+            continue
+        return True
+    return False
+
+
+def _relates_columns(
+    tree: exp.Select, projection: exp.Expression | Sequence[exp.Expression]
+) -> bool:
     """Return whether the query builds a quantity from two different columns.
 
     Comparing a column with a value only chooses rows. Comparing or combining
@@ -366,10 +391,12 @@ def _relates_columns(tree: exp.Select, projection: exp.Expression) -> bool:
             continue
         if len(_columns(node)) > 1:
             return True
+    projections = [projection] if isinstance(projection, exp.Expression) else projection
     outermost = [
         node
-        for node in projection.find_all(exp.AggFunc)
-        if node.find_ancestor(exp.AggFunc) is None
+        for item in projections
+        for node in item.find_all(*_AGGREGATES)
+        if node.find_ancestor(*_AGGREGATES) is None
     ]
     # COUNT(*) reads no column; it counts the same rows, so it relates nothing.
     measures = {_columns(node) for node in outermost} - {frozenset()}
@@ -379,9 +406,11 @@ def _relates_columns(tree: exp.Select, projection: exp.Expression) -> bool:
 def _single_route(sql: str, *, one_row: bool) -> bool:
     """Return whether no other route could test more than the same choices.
 
-    The query must read one table in one SELECT, return one expression built
+    The query must read one table in one SELECT, return only expressions built
     from aggregates, use none of the structures above, and never relate two
-    columns. Its row conditions may sit in WHERE or inside the aggregate;
+    columns. Several such expressions may be returned, as a difference returns
+    the two totals it subtracts, as long as all of them measure the same one
+    column. Its row conditions may sit in WHERE or inside the aggregate;
     either way they choose the same rows. A lookup of one column also counts
     when its conditions alone pick exactly one row (``one_row``), with no
     ordering or limit to choose it. This is decided from the SQL and the row
@@ -390,19 +419,21 @@ def _single_route(sql: str, *, one_row: bool) -> bool:
     tree = sqlglot.parse_one(sql, read="duckdb")
     if not isinstance(tree, exp.Select) or len(list(tree.find_all(exp.Select))) != 1:
         return False
-    if tree.find(*_ROUTE_STRUCTURES) is not None:
+    if _blocking_structure(tree) or len(list(tree.find_all(exp.Table))) != 1:
         return False
-    if len(list(tree.find_all(exp.Table))) != 1 or len(tree.expressions) != 1:
-        return False
-    projection = tree.expressions[0]
-    if projection.find(exp.AggFunc) is None:
-        return one_row and _lookup(tree, projection)
+    projections = tree.expressions
+    if len(projections) == 1 and projections[0].find(*_AGGREGATES) is None:
+        return one_row and _lookup(tree, projections[0])
     if any(
-        column.find_ancestor(exp.AggFunc) is None
-        for column in projection.find_all(exp.Column)
+        projection.find(*_AGGREGATES) is None
+        or any(
+            column.find_ancestor(*_AGGREGATES) is None
+            for column in projection.find_all(exp.Column)
+        )
+        for projection in projections
     ):
         return False
-    return not _relates_columns(tree, projection)
+    return not _relates_columns(tree, projections)
 
 
 def _lookup(tree: exp.Select, projection: exp.Expression) -> bool:

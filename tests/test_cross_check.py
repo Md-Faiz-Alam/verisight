@@ -298,7 +298,27 @@ def test_repeated_formulation_is_recorded(sql: str, identical: bool) -> None:
         ("SELECT SUM(s.amount) FROM sales AS s JOIN regions AS r ON s.r = r.r", False),
         ("SELECT region, SUM(amount) FROM sales GROUP BY region", False),
         ("SELECT SUM(amount) FROM sales GROUP BY region", False),
-        ("SELECT COUNT(DISTINCT region) FROM sales", False),
+        # Counting the different values of one column has no other route.
+        ("SELECT COUNT(DISTINCT region) FROM sales", True),
+        ("SELECT COUNT(DISTINCT region, year) FROM sales", False),
+        ("SELECT DISTINCT region FROM sales", False),
+        ("SELECT SUM(DISTINCT amount) FROM sales", False),
+        # A median written as an ordered-set aggregate reads one column too.
+        (
+            "SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY amount) "
+            "FROM sales WHERE region = 'E'",
+            True,
+        ),
+        # A difference beside the two totals it subtracts, all of one column.
+        (
+            "SELECT SUM(CASE WHEN region = 'E' THEN amount END) AS e, "
+            "SUM(CASE WHEN region = 'W' THEN amount END) AS w, "
+            "SUM(CASE WHEN region = 'E' THEN amount END) "
+            "- SUM(CASE WHEN region = 'W' THEN amount END) AS diff FROM sales",
+            True,
+        ),
+        ("SELECT SUM(amount), SUM(price) FROM sales", False),
+        ("SELECT SUM(amount), region FROM sales", False),
         ("SELECT SUM(amount) FROM (SELECT amount FROM sales) AS s", False),
         ("SELECT SUM(amount) FROM sales WHERE r IN (SELECT r FROM regions)", False),
         ("WITH s AS (SELECT amount FROM sales) SELECT SUM(amount) FROM s", False),
@@ -315,7 +335,8 @@ def test_repeated_formulation_is_recorded(sql: str, identical: bool) -> None:
         ("SELECT amount * 2 FROM sales WHERE id = 7", False),
         ("SELECT amount FROM sales WHERE shipped <= required", False),
         ("SELECT amount + SUM(amount) FROM sales", False),
-        ("SELECT SUM(amount), COUNT(*) FROM sales", False),
+        # A count of the same rows beside a total reads no second column.
+        ("SELECT SUM(amount), COUNT(*) FROM sales", True),
         ("SELECT SUM(a.x) FROM sales AS a, sales AS b", False),
     ],
 )

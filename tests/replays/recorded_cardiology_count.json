@@ -1,0 +1,51 @@
+{
+  "question": "How many visits were to the Cardiology department?",
+  "data_dir": "evaluation/benchmark/data",
+  "files": [
+    "visits.json"
+  ],
+  "answer_type": "number",
+  "source": "recorded",
+  "model": "gemini-3.1-flash-lite",
+  "calls": [
+    {
+      "stage": "investigator",
+      "prompt_sha256": "cd327b698281654a6312963829b884edfb76273e105baa9ba25a3bd1ae2962a4",
+      "response": "{\n  \"action\": \"investigate\",\n  \"reasoning\": \"The 'visits' table contains a 'department' column which can be used to filter and count the number of visits associated with 'Cardiology'.\",\n  \"question\": \"SELECT count(*) FROM visits WHERE department = 'Cardiology'\"\n}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "decf00dc02274c267cda965d5cb7f2c0b7bc9ab4643f54184f5bfd3996ef0410",
+      "response": "SELECT COUNT(*) AS \"visit_count\" FROM \"visits\" WHERE \"department\" = 'Cardiology'"
+    },
+    {
+      "stage": "investigator",
+      "prompt_sha256": "a5465119e27453e083a63fcbd85aed219d07da40f85aac1e9fde67fcbf9447ad",
+      "response": "{\n  \"action\": \"finish\",\n  \"reasoning\": \"The analytical question was straightforward, and the executed observation directly provides the count of visits to the Cardiology department, which is 77.\",\n  \"question\": null\n}"
+    },
+    {
+      "stage": "structured_synthesis",
+      "prompt_sha256": "c1279086e0600b36842fce4e16ba2f5bf7fe36ea21890b99140596290f2e84b8",
+      "response": "{\n  \"conclusion\": \"There were 77 visits to the Cardiology department.\",\n  \"claims\": [\n    {\n      \"operation\": \"value\",\n      \"expected\": \"77\",\n      \"left\": {\n        \"observation_index\": 0,\n        \"row_index\": 0,\n        \"column\": \"visit_count\"\n      },\n      \"right\": null\n    }\n  ]\n}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "bca91b942a13f77c33a7cb280b6ef71ec1ceb24edb2da37f7182f2edecd7e9f8",
+      "response": "SELECT SUM(CASE WHEN \"department\" = 'Cardiology' THEN 1 ELSE 0 END) AS \"cross_check_answer\" FROM \"visits\""
+    }
+  ],
+  "expected": {
+    "status": "complete",
+    "trust_level": "verified",
+    "claims": [
+      {
+        "operation": "value",
+        "expected": "77",
+        "verification": "supported"
+      }
+    ],
+    "declined": null,
+    "cross_check": "agreed"
+  },
+  "cross_check_model": "gemini-3.5-flash-lite"
+}

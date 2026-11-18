@@ -1,0 +1,25 @@
+{
+  "question": "What is the average age of the patients?",
+  "data_dir": "evaluation/benchmark/data",
+  "files": [
+    "visits.json"
+  ],
+  "answer_type": "number",
+  "source": "recorded",
+  "model": "gemini-3.1-flash-lite",
+  "calls": [
+    {
+      "stage": "investigator",
+      "prompt_sha256": "0bd93ce97471af3978972aed4efb7cae9e97b2979b21d83e814cf6347e5605aa",
+      "response": "{\n  \"action\": \"not_in_data\",\n  \"reasoning\": \"The 'visits' table contains columns for visit_id, patient_id, department, visit_date, wait_minutes, cost, and readmitted, but none of these columns contain patient age data.\",\n  \"question\": null\n}"
+    }
+  ],
+  "expected": {
+    "status": "incomplete",
+    "trust_level": "not_verified",
+    "claims": [],
+    "declined": "not_in_data",
+    "cross_check": null
+  },
+  "cross_check_model": "gemini-3.5-flash-lite"
+}

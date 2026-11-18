@@ -82,6 +82,9 @@ class Case:
     answer_type: str = "number"
     source: str = "recorded"
     model: str = ""
+    # A second-query model other than ``model`` changes the trust level, so a
+    # replay must use the same pair the recording did.
+    cross_check_model: str | None = None
     calls: list[Call] = field(default_factory=list)
     expected: dict[str, Any] = field(default_factory=dict)
 
@@ -140,12 +143,21 @@ def investigate(
     return result, calls
 
 
-def _replay_settings() -> Settings:
+def _replay_settings(case: Case | None = None) -> Settings:
     # No request leaves the process: every call is answered from the file.
-    return Settings(
+    settings = Settings(
         _env_file=None,  # type: ignore[call-arg]
         gemini_api_key=SecretStr("replay"),
         allow_llm_data_disclosure=True,
+    )
+    if case is None:
+        return settings
+    # The models that answered when it was recorded, so the same checks apply.
+    return settings.model_copy(
+        update={
+            "gemini_model": case.model or settings.gemini_model,
+            "gemini_cross_check_model": case.cross_check_model,
+        }
     )
 
 
@@ -178,7 +190,7 @@ def replay(path: Path) -> ReplayReport:
             stale.append(index)
         return call.response
 
-    result, _ = investigate(case, answer, _replay_settings())
+    result, _ = investigate(case, answer, _replay_settings(case))
     return ReplayReport(outcome(result), case.expected, tuple(stale), case.source)
 
 
@@ -197,6 +209,7 @@ def record(
         answer_type=case.answer_type,
         source=case.source,
         model=settings.gemini_model,
+        cross_check_model=settings.gemini_cross_check_model,
         calls=calls,
         expected=outcome(result),
     )
