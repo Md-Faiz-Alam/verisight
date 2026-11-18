@@ -276,6 +276,7 @@ def test_the_website_hides_a_number_the_data_cannot_hold(tmp_path: Path) -> None
         )
         reply = client.post(
             f"/api/datasets/{upload.json()['dataset_id']}/ask",
+            headers={"X-Dataset-Token": upload.json()["owner_token"]},
             json={
                 "question": "What is the average price in euros?",
                 "consent": True,

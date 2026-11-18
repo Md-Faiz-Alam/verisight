@@ -61,6 +61,7 @@ from verisight.web.store import (
     RateLimiter,
     StoredDataset,
     StoreFullError,
+    new_owner_token,
     remove_leftover_directories,
     safe_file_name,
 )
@@ -192,6 +193,9 @@ _INVALID_JSON_HINT = (
 AppFactory = Callable[[Settings], VeriSight]
 
 _UPLOAD_PATH = "/api/datasets"
+# Every request about a dataset carries the token its upload returned. Without
+# it, a dataset id alone opens nothing.
+OWNER_TOKEN_HEADER = "X-Dataset-Token"
 # Room for multipart boundaries and part headers on top of the file bytes.
 _MULTIPART_OVERHEAD = 1 << 20
 # Every other request is small JSON: a question of at most 10,000 characters,
@@ -503,6 +507,7 @@ def create_app(
         clock=clock,
         max_prepared=limits.max_prepared_datasets,
         max_prepared_bytes=limits.max_prepared_mb * 1024 * 1024,
+        max_per_owner=limits.max_datasets_per_client,
     )
     upload_limiter = RateLimiter(limits.uploads_per_hour, clock=clock)
     question_limiter = RateLimiter(limits.questions_per_hour, clock=clock)
@@ -611,7 +616,7 @@ def create_app(
             ) from None
 
     async def register(
-        dataset_id: str, directory: Path, paths: list[Path]
+        dataset_id: str, directory: Path, paths: list[Path], owner: str
     ) -> dict[str, object]:
         # Reading and profiling a file holds several times its size in memory,
         # so only a few uploads are read at once; the rest are asked to retry.
@@ -633,6 +638,7 @@ def create_app(
             upload_slots.release()
             # The loaded file sits in reference cycles until collected.
             gc.collect()
+        token, token_hash = new_owner_token()
         stored = StoredDataset(
             dataset_id=dataset_id,
             directory=directory,
@@ -640,12 +646,23 @@ def create_app(
             created=clock(),
             profile=profile,
             size_bytes=size_bytes,
+            owner=owner,
+            token_hash=token_hash,
         )
-        datasets.add(stored)
+        try:
+            datasets.add(stored)
+        except StoreFullError:
+            datasets.release(dataset_id)
+            raise WebError(
+                503,
+                "busy",
+                "VeriSight is holding as many uploads as it can. Try again later.",
+            ) from None
         if builder is not None:
             datasets.prepared(stored, lambda: builder)
         return {
             "dataset_id": dataset_id,
+            "owner_token": token,
             "files": [
                 {"name": path.name, "size_bytes": path.stat().st_size} for path in paths
             ],
@@ -721,7 +738,7 @@ def create_app(
         except BaseException:
             datasets.release(dataset_id)
             raise
-        return await register(dataset_id, directory, paths)
+        return await register(dataset_id, directory, paths, client_of(request))
 
     @app.post("/api/datasets/demo", status_code=201)
     async def demo(request: Request) -> dict[str, object]:
@@ -734,12 +751,28 @@ def create_app(
             Path(shutil.copyfile(DEMO_DIR / name, directory / name))
             for name in DEMO_FILES
         ]
-        return await register(dataset_id, directory, paths)
+        return await register(dataset_id, directory, paths, client_of(request))
+
+    def owned(dataset_id: str, request: Request) -> StoredDataset:
+        """Return a dataset only to a request that carries its owner token.
+
+        A wrong or missing token gets the same reply as an unknown id, so a
+        guessed or leaked id reveals nothing.
+        """
+        stored = datasets.get(dataset_id)
+        if stored is None or not stored.opens_with(
+            request.headers.get(OWNER_TOKEN_HEADER)
+        ):
+            raise WebError(
+                404,
+                "dataset_not_found",
+                "This dataset has expired or was removed. Upload it again.",
+            )
+        return stored
 
     @app.delete("/api/datasets/{dataset_id}", status_code=204)
-    async def remove(dataset_id: str) -> Response:
-        if not datasets.delete(dataset_id):
-            raise WebError(404, "dataset_not_found", "This dataset no longer exists.")
+    async def remove(dataset_id: str, request: Request) -> Response:
+        datasets.delete(owned(dataset_id, request).dataset_id)
         return Response(status_code=204)
 
     def prepared_builder(stored: StoredDataset) -> DashboardBuilder:
@@ -785,13 +818,7 @@ def create_app(
     async def dashboard(
         dataset_id: str, body: DashboardRequest, request: Request
     ) -> dict[str, object]:
-        stored = datasets.get(dataset_id)
-        if stored is None:
-            raise WebError(
-                404,
-                "dataset_not_found",
-                "This dataset has expired or was removed. Upload it again.",
-            )
+        stored = owned(dataset_id, request)
         if not dashboard_limiter.allow(client_of(request)):
             raise WebError(
                 429, "rate_limited", "Too many chart updates. Try again in an hour."
@@ -823,13 +850,7 @@ def create_app(
     async def rows(
         dataset_id: str, body: RowsRequest, request: Request
     ) -> dict[str, object]:
-        stored = datasets.get(dataset_id)
-        if stored is None:
-            raise WebError(
-                404,
-                "dataset_not_found",
-                "This dataset has expired or was removed. Upload it again.",
-            )
+        stored = owned(dataset_id, request)
         if not dashboard_limiter.allow(client_of(request)):
             raise WebError(
                 429, "rate_limited", "Too many chart updates. Try again in an hour."
@@ -840,13 +861,7 @@ def create_app(
     async def ask(
         dataset_id: str, body: AskRequest, request: Request
     ) -> dict[str, object]:
-        stored = datasets.get(dataset_id)
-        if stored is None:
-            raise WebError(
-                404,
-                "dataset_not_found",
-                "This dataset has expired or was removed. Upload it again.",
-            )
+        stored = owned(dataset_id, request)
         question = body.question.strip()
         if not question or len(question) > limits.max_question_chars:
             raise WebError(

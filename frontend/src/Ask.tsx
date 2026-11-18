@@ -179,7 +179,7 @@ export function Ask({
         answer_type: kind,
         consent: allow,
         api_key: key.trim() || null,
-      });
+      }, dataset.owner_token);
       setTurns((all) => all.map((t) => (t.id === id ? { ...t, answer } : t)));
     } catch (err: any) {
       setTurns((all) => all.map((t) => (t.id === id ? { ...t, error: { message: err.message, code: err.code } } : t)));

@@ -1,7 +1,10 @@
 """Temporary storage for uploaded datasets, and simple per-client rate limits."""
 
 import gc
+import hashlib
+import hmac
 import re
+import secrets
 import shutil
 import tempfile
 import threading
@@ -45,6 +48,26 @@ class StoredDataset:
     size_bytes: int = 0
     # Loaded form for fast dashboards; it is dropped with the dataset.
     prepared: object = field(default=None, repr=False)
+    # The client address that uploaded it, for its per-visitor allowance.
+    owner: str = ""
+    # SHA-256 of the owner token; the token itself is never kept.
+    token_hash: bytes = field(default=b"", repr=False)
+
+    def opens_with(self, token: str | None) -> bool:
+        """Whether ``token`` is this dataset's owner token."""
+        if not token or not self.token_hash:
+            return False
+        return hmac.compare_digest(hash_token(token), self.token_hash)
+
+
+def new_owner_token() -> tuple[str, bytes]:
+    """Return a random owner token and the hash that is stored for it."""
+    token = secrets.token_urlsafe(32)
+    return token, hash_token(token)
+
+
+def hash_token(token: str) -> bytes:
+    return hashlib.sha256(token.encode("utf-8")).digest()
 
 
 def remove_leftover_directories(
@@ -79,6 +102,10 @@ class DatasetStore:
     upload never evicts a stored dataset, and concurrent uploads can never
     leave more than ``max_datasets`` stored. At most ``max_datasets`` uploads
     may be in progress at once.
+
+    Each owner may keep ``max_per_owner`` datasets; beyond that, their own
+    oldest is removed. An upload never removes another owner's dataset: when
+    the store is full, it is refused with ``StoreFullError`` instead.
     """
 
     def __init__(
@@ -89,9 +116,11 @@ class DatasetStore:
         clock: Callable[[], float] = time.monotonic,
         max_prepared: int = 4,
         max_prepared_bytes: int = 60 * 1024 * 1024,
+        max_per_owner: int | None = None,
     ) -> None:
         self._ttl = ttl_seconds
         self._max = max_datasets
+        self._max_per_owner = max_per_owner or max_datasets
         self._clock = clock
         self._max_prepared = max_prepared
         self._max_prepared_bytes = max_prepared_bytes
@@ -119,20 +148,33 @@ class DatasetStore:
             shutil.rmtree(directory, ignore_errors=True)
 
     def add(self, dataset: StoredDataset) -> None:
-        """Store a validated upload, evicting the oldest others beyond capacity."""
+        """Store a validated upload, making room only among its owner's data.
+
+        Raises ``StoreFullError``, keeping the reservation for the caller to
+        release, when only other owners' datasets could make room.
+        """
         with self._lock:
+            own = sorted(
+                (
+                    item
+                    for item in self._items.values()
+                    if item.owner == dataset.owner
+                    and item.dataset_id != dataset.dataset_id
+                ),
+                key=lambda item: item.created,
+            )
+            drop = max(0, len(own) + 1 - self._max_per_owner)
+            room = self._max - (len(self._items) - drop)
+            if room < 1 and own[drop:]:
+                # A full store: the owner's own oldest gives way first.
+                drop += min(len(own) - drop, 1 - room)
+                room = self._max - (len(self._items) - drop)
+            if room < 1:
+                raise StoreFullError
+            for item in own[:drop]:
+                self._remove(item.dataset_id)
             self._pending.pop(dataset.dataset_id, None)
             self._items[dataset.dataset_id] = dataset
-            while len(self._items) > self._max:
-                oldest = min(
-                    (
-                        item
-                        for item in self._items.values()
-                        if item.dataset_id != dataset.dataset_id
-                    ),
-                    key=lambda item: item.created,
-                )
-                self._remove(oldest.dataset_id)
 
     def get(self, dataset_id: str) -> StoredDataset | None:
         self.purge_expired()

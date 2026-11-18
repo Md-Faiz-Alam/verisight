@@ -82,7 +82,9 @@ verisight-web
 ```
 
 Then open <http://127.0.0.1:8000>. Visitors can paste their own Gemini key,
-which is used for one question and never stored. To publish it, see
+which is used for one question and never stored. Each upload can be read, asked
+about or removed only with the private token returned to the visitor who uploaded
+it. To publish it, see
 [Deploy on AWS](docs/deploy-aws.md).
 
 ## Live results

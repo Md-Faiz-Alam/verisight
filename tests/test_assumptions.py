@@ -205,6 +205,7 @@ def test_the_website_shows_no_number_for_an_undefined_word(tmp_path: Path) -> No
         )
         reply = client.post(
             f"/api/datasets/{upload.json()['dataset_id']}/ask",
+            headers={"X-Dataset-Token": upload.json()["owner_token"]},
             json={
                 "question": "How many raisins are large?",
                 "consent": True,

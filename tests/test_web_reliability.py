@@ -22,6 +22,7 @@ from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 from verisight.web import create_app
+from verisight.web.app import OWNER_TOKEN_HEADER
 from verisight.web.config import WebSettings
 from verisight.web.store import DatasetStore, remove_leftover_directories
 
@@ -107,6 +108,7 @@ def _settings() -> Settings:
 def _upload(client: TestClient, name: str = "data.csv", body: bytes = CSV) -> str:
     response = client.post("/api/datasets", files=[("files", (name, body))])
     assert response.status_code == 201
+    client.headers[OWNER_TOKEN_HEADER] = response.json()["owner_token"]
     return str(response.json()["dataset_id"])
 
 

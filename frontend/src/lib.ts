@@ -34,10 +34,18 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export function post<T>(path: string, body: unknown): Promise<T> {
+/** The header that proves a request comes from the visitor who uploaded the data. */
+export const OWNER_TOKEN_HEADER = "X-Dataset-Token";
+
+/** Headers for a request about one upload; the token lives only in memory. */
+export function ownerHeaders(token: string): Record<string, string> {
+  return { [OWNER_TOKEN_HEADER]: token };
+}
+
+export function post<T>(path: string, body: unknown, token?: string): Promise<T> {
   return api<T>(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(token ? ownerHeaders(token) : {}) },
     body: JSON.stringify(body),
   });
 }

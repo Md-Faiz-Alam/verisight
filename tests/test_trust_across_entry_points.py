@@ -97,6 +97,7 @@ def _website_trust(tmp_path: Path, second: str) -> dict[str, object]:
         )
         answer = client.post(
             f"/api/datasets/{upload.json()['dataset_id']}/ask",
+            headers={"X-Dataset-Token": upload.json()["owner_token"]},
             json={"question": QUESTION, "consent": True, "api_key": "k"},
         )
     trust: dict[str, object] = answer.json()["trust"]

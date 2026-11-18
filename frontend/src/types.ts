@@ -43,6 +43,8 @@ export interface Finding {
 
 export interface Dataset {
   dataset_id: string;
+  /** Sent with every request about this upload; never stored in the browser. */
+  owner_token: string;
   files: { name: string; size_bytes: number }[];
   expires_in_seconds: number;
   profile: {

@@ -41,7 +41,7 @@ export function Explore({ dataset, initial }: { dataset: Dataset; initial: strin
       sort: sort?.column ?? null,
       descending: sort?.descending ?? false,
       search: applied,
-    })
+    }, dataset.owner_token)
       .then((result) => {
         if (!live) return;
         setPage(result);

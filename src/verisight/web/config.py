@@ -25,6 +25,8 @@ class WebSettings(BaseSettings):
     max_files: int = Field(default=5, gt=0, le=20)
     dataset_ttl_seconds: int = Field(default=3600, gt=0)
     max_datasets: int = Field(default=100, gt=0)
+    # Uploads one visitor address may keep; beyond it, their own oldest goes.
+    max_datasets_per_client: int = Field(default=5, gt=0)
     max_concurrent_questions: int = Field(default=2, gt=0, le=32)
     # Uploads read and profiled at once; each holds several times its size.
     max_concurrent_uploads: int = Field(default=2, gt=0, le=32)

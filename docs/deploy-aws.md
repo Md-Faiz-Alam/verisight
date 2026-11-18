@@ -159,7 +159,8 @@ All settings are environment variables in the `environment` block:
 | `VERISIGHT_WEB_MAX_FILES` | 5 | Files per upload |
 | `VERISIGHT_WEB_DATASET_TTL_SECONDS` | 3600 | Uploads are deleted after this |
 | `VERISIGHT_WEB_CLEANUP_INTERVAL_SECONDS` | 60 | How often expired uploads are deleted, even with no visitors |
-| `VERISIGHT_WEB_MAX_DATASETS` | 100 | Stored uploads; the oldest is removed only when a new upload is valid |
+| `VERISIGHT_WEB_MAX_DATASETS` | 100 | Stored uploads; when full, new uploads are refused rather than removing another visitor's |
+| `VERISIGHT_WEB_MAX_DATASETS_PER_CLIENT` | 5 | Uploads one visitor address keeps; a new one replaces their own oldest |
 | `VERISIGHT_WEB_QUESTIONS_PER_HOUR` | 30 | Questions per visitor address |
 | `VERISIGHT_WEB_UPLOADS_PER_HOUR` | 60 | Uploads per visitor address |
 | `VERISIGHT_WEB_DASHBOARDS_PER_HOUR` | 1200 | Dashboard updates, row pages and rule-based answer attempts per visitor address |

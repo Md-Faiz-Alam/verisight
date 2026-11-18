@@ -80,6 +80,7 @@ def _ask(
         )
         reply = client.post(
             f"/api/datasets/{upload.json()['dataset_id']}/ask",
+            headers={"X-Dataset-Token": upload.json()["owner_token"]},
             json={"question": question, "consent": True, "api_key": "k"},
         ).json()
     return reply, planner
@@ -271,6 +272,7 @@ def test_a_refused_second_query_takes_verified_away(tmp_path: Path) -> None:
         )
         reply = client.post(
             f"/api/datasets/{upload.json()['dataset_id']}/ask",
+            headers={"X-Dataset-Token": upload.json()["owner_token"]},
             json={
                 "question": "Adding every row together, what does area come to?",
                 "consent": True,

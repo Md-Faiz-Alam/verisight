@@ -4,7 +4,7 @@ import { Explore } from "./Explore";
 import { Landing } from "./Landing";
 import { Overview, useDashboard, type Selection } from "./Overview";
 import { Model, Quality } from "./Quality";
-import { api, saveTheme, storedTheme } from "./lib";
+import { api, ownerHeaders, saveTheme, storedTheme } from "./lib";
 import { Icon } from "./ui";
 import type { Config, Dataset, Turn, View } from "./types";
 
@@ -300,7 +300,10 @@ export function App() {
   };
 
   const remove = () => {
-    if (dataset) api(`/api/datasets/${dataset.dataset_id}`, { method: "DELETE" }).catch(() => undefined);
+    if (dataset)
+      api(`/api/datasets/${dataset.dataset_id}`, { method: "DELETE", headers: ownerHeaders(dataset.owner_token) }).catch(
+        () => undefined,
+      );
     setDataset(null);
   };
 

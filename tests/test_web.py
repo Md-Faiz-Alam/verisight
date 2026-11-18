@@ -28,7 +28,7 @@ from verisight.execution.investigation_result import (
 from verisight.service import VeriSight
 from verisight.web import create_app
 from verisight.web.__main__ import main as serve
-from verisight.web.app import _browser_safe
+from verisight.web.app import OWNER_TOKEN_HEADER, _browser_safe
 from verisight.web.config import WebSettings
 from verisight.web.store import (
     DatasetStore,
@@ -68,7 +68,11 @@ def _upload(client: TestClient, *files: tuple[str, bytes], status: int = 201) ->
         "/api/datasets", files=[("files", (name, data)) for name, data in files]
     )
     assert response.status_code == status, response.text
-    return response.json()
+    body = response.json()
+    if "owner_token" in body:
+        # Later requests about this upload carry its owner token.
+        client.headers[OWNER_TOKEN_HEADER] = body["owner_token"]
+    return body
 
 
 def _script(conclusion: str, expected: str, column: str = "total") -> list[str]:
@@ -783,7 +787,7 @@ def test_unknown_and_removed_datasets(client: TestClient) -> None:
     assert client.delete(f"/api/datasets/{dataset_id}").status_code == 204
     assert client.delete(f"/api/datasets/{dataset_id}").json() == {
         "code": "dataset_not_found",
-        "message": "This dataset no longer exists.",
+        "message": "This dataset has expired or was removed. Upload it again.",
     }
     status, error = _ask(client, dataset_id, api_key="k")
     assert status == 404
@@ -814,6 +818,7 @@ def test_rate_limits_and_forwarded_clients() -> None:
         )
         assert other.status_code == 201
         dataset_id = first.json()["dataset_id"]
+        client.headers[OWNER_TOKEN_HEADER] = first.json()["owner_token"]
         with patch(GENERATE, side_effect=_script("The total is 1.", "1")):
             _ask(client, dataset_id, api_key="k")
         status, error = _ask(client, dataset_id, api_key="k")
@@ -1179,3 +1184,62 @@ def test_answer_steps_say_whether_rows_were_cut(client: TestClient) -> None:
 
     assert status == 200
     assert answer["steps"][0]["truncated"] is False
+
+
+def test_a_dataset_opens_only_with_its_owner_token(client: TestClient) -> None:
+    dataset = _upload(client, ("data.csv", CSV))
+    url = f"/api/datasets/{dataset['dataset_id']}"
+    token = client.headers.pop(OWNER_TOKEN_HEADER)
+    requests = [
+        ("post", f"{url}/rows", {"relation": "data"}),
+        ("post", f"{url}/dashboard", {}),
+        ("post", f"{url}/ask", {"question": "What is the total amount?"}),
+        ("delete", url, None),
+    ]
+    for wrong in ({}, {OWNER_TOKEN_HEADER: "guess"}, {OWNER_TOKEN_HEADER: ""}):
+        for method, path, body in requests:
+            response = client.request(method, path, json=body, headers=wrong)
+            assert response.status_code == 404, (method, path, wrong)
+            assert response.json()["code"] == "dataset_not_found"
+
+    owner = {OWNER_TOKEN_HEADER: token}
+    assert client.post(f"{url}/rows", json={"relation": "data"}, headers=owner)
+    assert client.delete(url, headers=owner).status_code == 204
+    assert len(token) >= 40
+    assert token not in json.dumps(dataset["profile"])
+
+
+def test_a_new_upload_never_removes_another_visitors_dataset() -> None:
+    store = DatasetStore(ttl_seconds=60, max_datasets=2)
+    app = create_app(
+        settings=_settings(),
+        web=WebSettings(trust_forwarded_for=True),
+        store=store,
+    )
+    with TestClient(app) as client:
+        kept = [
+            client.post(
+                "/api/datasets",
+                files=[("files", ("data.csv", CSV))],
+                headers={"x-forwarded-for": address},
+            )
+            for address in ("1.1.1.1", "2.2.2.2")
+        ]
+        refused = client.post(
+            "/api/datasets",
+            files=[("files", ("data.csv", CSV))],
+            headers={"x-forwarded-for": "3.3.3.3"},
+        )
+        replaced = client.post(
+            "/api/datasets",
+            files=[("files", ("data.csv", CSV))],
+            headers={"x-forwarded-for": "1.1.1.1"},
+        )
+        # A visitor at the limit makes room from their own uploads.
+        first_gone = store.get(kept[0].json()["dataset_id"]) is None
+        second_kept = store.get(kept[1].json()["dataset_id"]) is not None
+
+    assert [response.status_code for response in kept] == [201, 201]
+    assert (refused.status_code, refused.json()["code"]) == (503, "busy")
+    assert replaced.status_code == 201
+    assert (first_gone, second_kept) == (True, True)

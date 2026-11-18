@@ -1,5 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, cellText, compact, downloadCsv, exact, percent, rawText, toNumber } from "../../src/lib";
+import {
+  ApiError,
+  OWNER_TOKEN_HEADER,
+  api,
+  cellText,
+  compact,
+  downloadCsv,
+  exact,
+  percent,
+  post,
+  rawText,
+  toNumber,
+} from "../../src/lib";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -130,5 +142,19 @@ describe("downloadCsv", () => {
     expect(await saved[0].text()).toBe(
       ["name,note", "'=SUM(A1),\"a,b\"", '-5,"say ""hi"""', ",'@cmd"].join("\r\n"),
     );
+  });
+});
+
+describe("post", () => {
+  it("sends the owner token only when one is given", async () => {
+    const fetch = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await post("/api/datasets/d1/rows", { relation: "t" }, "secret-token");
+    await post("/api/config", {});
+
+    const headers = fetch.mock.calls.map((call) => (call as unknown as [string, RequestInit])[1].headers);
+    expect(headers[0]).toEqual({ "Content-Type": "application/json", [OWNER_TOKEN_HEADER]: "secret-token" });
+    expect(headers[1]).toEqual({ "Content-Type": "application/json" });
   });
 });

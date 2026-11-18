@@ -24,7 +24,7 @@ export function useDashboard(dataset: Dataset, selection: Selection, onLost: () 
       filters: selection.filters.map(({ column, value }) => ({ column, value })),
       start: selection.start || null,
       end: selection.end || null,
-    })
+    }, dataset.owner_token)
       .then((result) => {
         if (!live) return;
         setData(result);

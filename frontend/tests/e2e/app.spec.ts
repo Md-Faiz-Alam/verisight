@@ -2,6 +2,7 @@ import { expect, test, type Page, type Request, type Route } from "@playwright/t
 
 const DATASET = {
   dataset_id: "d1",
+  owner_token: "owner-secret",
   files: [{ name: "orders.csv", size_bytes: 120 }],
   expires_in_seconds: 3600,
   profile: {
@@ -73,6 +74,10 @@ async function stub(page: Page, ask: (body: any, index: number) => Reply, upload
     if (path === "/api/config") return route.fulfill({ json: { server_key: false, max_upload_mb: 20 } });
     if (path === "/api/datasets" && method === "POST") {
       return route.fulfill({ status: upload?.status ?? 201, json: upload?.json ?? DATASET });
+    }
+    if (path.startsWith("/api/datasets/d1") && request.headers()["x-dataset-token"] !== "owner-secret") {
+      // The real server answers a request without the owner token as if the data were gone.
+      return route.fulfill({ status: 404, json: { code: "dataset_not_found", message: "Gone." } });
     }
     if (path.endsWith("/dashboard")) return route.fulfill({ json: DASHBOARD });
     if (path.endsWith("/ask")) {

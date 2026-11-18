@@ -746,7 +746,16 @@ The data description sent to Gemini also names years stored as codes, such as `y
 The website keeps each upload in a temporary folder, loads it once for the profile,
 charts and questions, and frees loaded copies beyond 60 MB of files or 4 uploads.
 Uploads expire after 60 minutes, and folders left by a crash are removed at the next
-start. Two questions run at once; others get a clear "busy" reply.
+start. Two questions and two upload checks run at once; others get a clear "busy"
+reply.
+
+Each upload returns an owner token, and every request about that upload (rows,
+charts, questions, removal) must send it in the `X-Dataset-Token` header. Only a
+SHA-256 hash of the token is kept, and the browser holds the token in memory only.
+A request without the right token gets the same reply as an unknown dataset, so a
+leaked id opens nothing. One visitor address keeps at most 5 uploads, and a new
+upload only ever replaces that visitor's own oldest one; when the server is full,
+the upload is refused instead of removing someone else's data.
 
 ## CI and remaining architecture work
 
