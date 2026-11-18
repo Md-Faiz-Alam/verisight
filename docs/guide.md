@@ -509,9 +509,14 @@ shares the investigation's time budget.
 | `not_assessed` | No comparison was possible: the answer has several claims, the second query failed or returned no single number, the provider was unavailable, or time ran out. |
 
 The website marks an answer as verified only on `agreed`, and only when the second
-query was written differently from the first. `identical_sql` records a repeat: the
-same query apart from aliases, quoting and the order of AND conditions. A repeat
-usually adds no evidence, so the answer stays at "Number matches SQL only".
+query made different choices from the first. `identical_sql` records the same query
+apart from aliases, quoting and the order of AND conditions. `same_choices` records
+a repeat however it is written: the same tables, row conditions, measured columns
+and structures such as joins, grouping, distinct values or a limit. Moving a filter
+into `SUM(CASE WHEN ...)`, swapping the sides of a comparison or wrapping the query
+in a subquery changes the text but not these choices. The kind of aggregate is not
+compared. A repeat usually adds no evidence, so the answer stays at "Number matches
+SQL only".
 
 The exception is a query with only one route, recorded as `single_route`: it reads
 one table, returns one value built from aggregates, has no join, grouping,

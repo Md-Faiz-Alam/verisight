@@ -96,7 +96,8 @@ $containers = @"
       "VERISIGHT_WEB_MAX_UPLOAD_MB": "10",
       "VERISIGHT_MAX_EXCEL_UNCOMPRESSED_MB": "100",
       "VERISIGHT_WEB_QUESTIONS_PER_HOUR": "20",
-      "VERISIGHT_WEB_MAX_CONCURRENT_QUESTIONS": "1"
+      "VERISIGHT_WEB_MAX_CONCURRENT_QUESTIONS": "1",
+      "VERISIGHT_WEB_TRUST_FORWARDED_FOR": "true"
     },
     "ports": { "8000": "HTTP" }
   }
@@ -161,7 +162,8 @@ All settings are environment variables in the `environment` block:
 | `VERISIGHT_WEB_MAX_DATASETS` | 100 | Stored uploads; the oldest is removed only when a new upload is valid |
 | `VERISIGHT_WEB_QUESTIONS_PER_HOUR` | 30 | Questions per visitor address |
 | `VERISIGHT_WEB_UPLOADS_PER_HOUR` | 60 | Uploads per visitor address |
-| `VERISIGHT_WEB_DASHBOARDS_PER_HOUR` | 1200 | Dashboard updates per visitor address |
+| `VERISIGHT_WEB_DASHBOARDS_PER_HOUR` | 1200 | Dashboard updates, row pages and rule-based answer attempts per visitor address |
+| `VERISIGHT_WEB_TRUST_FORWARDED_FOR` | false | Read the visitor address from the load balancer's `X-Forwarded-For` entry |
 | `VERISIGHT_WEB_MAX_PREPARED_DATASETS` | 4 | Datasets kept in memory so chart filters respond at once |
 | `VERISIGHT_WEB_MAX_CONCURRENT_QUESTIONS` | 2 | Questions answered at once |
 | `VERISIGHT_WEB_PROVIDER_RETRIES` | 3 | Retries after a Gemini 503 |
@@ -170,11 +172,14 @@ All settings are environment variables in the `environment` block:
 | `VERISIGHT_GEMINI_CROSS_CHECK_MODEL` | same as above | Model for the independent second query |
 
 An upload request larger than `MAX_UPLOAD_MB` × `MAX_FILES` (plus 1 MB) is
-refused before any file is saved. On `micro`, also set
+refused before any file is saved, and any other request larger than 64 KB is
+refused before it is read. On `micro`, also set
 `VERISIGHT_MAX_EXCEL_UNCOMPRESSED_MB` to `100`.
 
-The image sets `VERISIGHT_WEB_TRUST_FORWARDED_FOR=true`, so rate limits use the
-visitor address added by AWS's load balancer.
+The deployment above sets `VERISIGHT_WEB_TRUST_FORWARDED_FOR=true`, so rate limits
+use the visitor address added by AWS's load balancer. The image leaves it off: set
+it only where such a proxy always sits in front of the container, because without
+one a visitor can forge the header and escape the rate limits.
 
 ## Update the site
 

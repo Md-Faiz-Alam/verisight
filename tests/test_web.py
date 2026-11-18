@@ -663,6 +663,32 @@ def test_direct_answers_count_against_the_rate_limit() -> None:
     assert (status, error["code"]) == (429, "rate_limited")
 
 
+def test_trying_the_rules_is_rate_limited_before_any_work() -> None:
+    with _client(dashboards_per_hour=2, questions_per_hour=100) as client:
+        dataset = _upload(client, ("data.csv", CSV))
+        question = "Which states look unusual, and why?"
+        statuses = [
+            _ask(client, dataset["dataset_id"], question=question, consent=False)
+            for _ in range(3)
+        ]
+
+    assert [status for status, _ in statuses] == [400, 400, 429]
+    assert statuses[0][1]["code"] == "consent_required"
+    assert statuses[2][1]["code"] == "rate_limited"
+
+
+def test_oversized_json_requests_are_refused(client: TestClient) -> None:
+    dataset = _upload(client, ("data.csv", CSV))
+    url = f"/api/datasets/{dataset['dataset_id']}/ask"
+
+    huge = client.post(url, json={"question": "x" * 200_000})
+    long = client.post(url, json={"question": "x" * 10_001})
+
+    assert huge.status_code == 413
+    assert huge.json()["code"] == "request_too_large"
+    assert long.status_code == 422
+
+
 def test_broken_direct_path_falls_back_to_the_model_workflow() -> None:
     class _NoDirect(VeriSight):
         def dashboard_builder(self, paths: object) -> DashboardBuilder:
@@ -1024,7 +1050,7 @@ def _limited(
 ) -> list[Any]:
     import asyncio
 
-    from verisight.web.app import UploadBodyLimit
+    from verisight.web.app import RequestBodyLimit
 
     messages: list[dict[str, Any]] = [
         {"type": "http.request", "body": chunk, "more_body": i < len(chunks) - 1}
@@ -1038,7 +1064,9 @@ def _limited(
     async def send(message: Any) -> None:
         sent.append(message)
 
-    middleware = UploadBodyLimit(downstream, limit_bytes=10, max_upload_mb=1)
+    middleware = RequestBodyLimit(
+        downstream, limit_bytes=10, max_upload_mb=1, other_limit_bytes=100
+    )
     scope = {"type": "http", "method": "POST", "path": path, "headers": []}
     asyncio.run(middleware(scope, receive, send))
     return sent
@@ -1065,6 +1093,7 @@ def test_body_limit_counts_bodies_without_a_declared_length() -> None:
     refused = _limited(_read_all_then_reply, [b"123456", b"789012", b"3"])
     allowed = _limited(_read_all_then_reply, [b"12345", b"67890"])
     other = _limited(_read_all_then_reply, [b"x" * 50], path="/api/other")
+    large_other = _limited(_read_all_then_reply, [b"x" * 60, b"x" * 60], "/api/other")
     disconnected = _limited(_read_all_then_reply, [])
     failed = _limited(_read_then_fail, [b"123456", b"789012"])
 
@@ -1072,6 +1101,8 @@ def test_body_limit_counts_bodies_without_a_declared_length() -> None:
     assert len(refused) == 2
     assert allowed[0]["status"] == 201
     assert other[0]["status"] == 201
+    assert large_other[0]["status"] == 413
+    assert b"request_too_large" in large_other[1]["body"]
     assert disconnected[0]["status"] == 201
     assert failed[0]["status"] == 413
     with pytest.raises(ValueError, match="parsed"):

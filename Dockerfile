@@ -16,7 +16,10 @@ RUN pip install ".[web]" \
     && useradd --create-home --uid 10001 verisight
 
 USER verisight
-ENV VERISIGHT_WEB_TRUST_FORWARDED_FOR=true
+# Behind a load balancer that appends the visitor address, set
+# VERISIGHT_WEB_TRUST_FORWARDED_FOR=true where the container is deployed. Left
+# off here, a container run without such a proxy cannot have its rate limits
+# dodged with a forged X-Forwarded-For header.
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

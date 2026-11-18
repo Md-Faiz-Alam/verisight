@@ -118,6 +118,13 @@ class CrossCheck:
     second query then
     repeated the first formulation instead of reaching the number another way.
 
+    ``same_choices`` is true when the second query, however it is written, made
+    the same choices as the first: the same tables, row conditions, measured
+    columns and structures such as joins, grouping or distinct values. Moving a
+    WHERE condition into ``SUM(CASE WHEN ...)`` or wrapping the query in a
+    subquery changes the text but not these choices, so the agreement then
+    repeats the first query's reading of the question.
+
     ``single_route`` is recorded for a repeat only. It is true when the query
     reads one table with no join, grouping, subquery, distinct values or window,
     and either aggregates or looks up one column in exactly one row, so no other
@@ -134,6 +141,7 @@ class CrossCheck:
     identical_sql: bool | None = None
     single_route: bool | None = None
     separate_model: bool | None = None
+    same_choices: bool | None = None
 
 
 class IndependentCrossChecker:
@@ -176,11 +184,13 @@ class IndependentCrossChecker:
                 primary_value=answer,
                 identical_sql=False,
                 separate_model=self._separate_model,
+                same_choices=False,
             )
         identical = _canonical_sql(sql) == _canonical_sql(primary_sql)
+        same = identical or _choices(sql) == _choices(primary_sql)
         single_route = (
             _single_route(primary_sql, one_row=len(execution.result.rows) == 1)
-            if identical
+            if same
             else None
         )
         independent = _answer_cell(execution.result)
@@ -193,6 +203,7 @@ class IndependentCrossChecker:
                 identical_sql=identical,
                 single_route=single_route,
                 separate_model=self._separate_model,
+                same_choices=same,
             )
         agreed = _same_number(answer, independent) or _same_when_rounded(
             question, answer, independent
@@ -206,6 +217,7 @@ class IndependentCrossChecker:
             identical_sql=identical,
             single_route=single_route,
             separate_model=self._separate_model,
+            same_choices=same,
         )
 
 
@@ -408,3 +420,104 @@ def _canonical_sql(sql: str) -> str:
             terms.sort(key=lambda term: term.sql(dialect="duckdb"))
             node.replace(exp.and_(*terms))
     return tree.sql(dialect="duckdb")
+
+
+# Comparisons choose rows; a column used only inside one is a condition, not a
+# measure. LT and LTE are read as GT and GTE with their sides swapped.
+_COMPARISONS: tuple[type[exp.Expression], ...] = (
+    exp.EQ,
+    exp.NEQ,
+    exp.GT,
+    exp.GTE,
+    exp.LT,
+    exp.LTE,
+    exp.Is,
+    exp.In,
+    exp.Like,
+    exp.ILike,
+    exp.Between,
+)
+_SYMMETRIC: tuple[type[exp.Expression], ...] = (exp.EQ, exp.NEQ)
+_FLIPPED: dict[type[exp.Expression], type[exp.Expression]] = {
+    exp.LT: exp.GT,
+    exp.LTE: exp.GTE,
+}
+# Structures that change which rows or groups are combined. A subquery or CTE
+# alone only renames the same rows, so it is not one of them.
+_CHOICE_STRUCTURES: tuple[type[exp.Expression], ...] = (
+    exp.Join,
+    exp.Group,
+    exp.Having,
+    exp.Window,
+    exp.Distinct,
+    exp.SetOperation,
+    exp.Lateral,
+    exp.Unnest,
+    exp.Limit,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _Choices:
+    """What a query decided, apart from how it was written."""
+
+    tables: frozenset[str]
+    conditions: frozenset[str]
+    measures: frozenset[str]
+    structures: frozenset[str]
+
+
+def _condition(node: exp.Expression) -> str:
+    """Render one comparison so that equivalent spellings read the same."""
+    negated = isinstance(node.parent, exp.Not)
+    flipped = _FLIPPED.get(type(node))
+    if flipped is not None:
+        node = flipped(this=node.expression.copy(), expression=node.this.copy())
+    if isinstance(node, _SYMMETRIC):
+        sides = sorted(side.sql(dialect="duckdb") for side in node.iter_expressions())
+        text = f"{node.key}({', '.join(sides)})"
+    elif isinstance(node, exp.In) and not node.args.get("query"):
+        values = sorted(value.sql(dialect="duckdb") for value in node.expressions)
+        text = f"in({node.this.sql(dialect='duckdb')}: {', '.join(values)})"
+    else:
+        text = node.sql(dialect="duckdb")
+    return f"not {text}" if negated else text
+
+
+def _choices(sql: str) -> _Choices:
+    """Read the tables, conditions, measures and structures a query chose.
+
+    Table qualifiers, quoting and identifier case are ignored, and a column
+    that only names an alias the query defined is not a measure. The kind of
+    aggregate is not compared: ``COUNT(*)`` with a filter and
+    ``SUM(CASE WHEN filter THEN 1 ELSE 0 END)`` make the same choices.
+    """
+    tree = sqlglot.parse_one(sql, read="duckdb")
+    for column in tree.find_all(exp.Column):
+        column.set("table", None)
+    for identifier in tree.find_all(exp.Identifier):
+        identifier.set("this", identifier.name.casefold())
+        identifier.set("quoted", False)
+    defined = {cte.alias_or_name for cte in tree.find_all(exp.CTE)}
+    renamed = {
+        alias.alias
+        for alias in tree.find_all(exp.Alias)
+        if not (isinstance(alias.this, exp.Column) and alias.this.name == alias.alias)
+    }
+    return _Choices(
+        tables=frozenset(
+            table.name
+            for table in tree.find_all(exp.Table)
+            if table.name not in defined
+        ),
+        conditions=frozenset(_condition(node) for node in tree.find_all(*_COMPARISONS)),
+        measures=frozenset(
+            column.name
+            for column in tree.find_all(exp.Column)
+            if column.find_ancestor(*_COMPARISONS) is None
+            and column.name not in renamed
+        ),
+        structures=frozenset(
+            type(node).__name__ for node in tree.find_all(*_CHOICE_STRUCTURES)
+        ),
+    )

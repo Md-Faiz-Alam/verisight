@@ -758,7 +758,13 @@ def _investigate(
 
 
 GOOD = "SELECT SUM(amount) AS total FROM orders"
+# Totals per region, then added up: a different route to the same rows.
 SECOND = (
+    "SELECT SUM(t) AS cross_check_answer "
+    "FROM (SELECT region, SUM(amount) AS t FROM orders GROUP BY region) AS g"
+)
+# Only the spelling differs: the same table, rows and column as GOOD.
+RENAMED = (
     "SELECT SUM(a) AS cross_check_answer FROM (SELECT amount AS a FROM orders) AS o"
 )
 REPEAT = "SELECT SUM(amount) AS cross_check_answer FROM orders"
@@ -794,7 +800,20 @@ def test_second_query_that_repeats_the_first_is_only_a_number_match(
     assert result.trust is not None
     second = result.trust.checks[3]
     assert second.status is CheckStatus.NOT_ASSESSED
-    assert "same way as the first" in second.detail
+    assert "same choices as the first" in second.detail
+
+
+def test_a_reworded_repeat_by_the_same_model_is_only_a_number_match(
+    tmp_path: Path,
+) -> None:
+    result = _investigate(tmp_path, [GOOD, RENAMED])
+
+    assert _level(result) is TrustLevel.NUMBER_MATCHED
+    assert result.cross_check is not None
+    assert result.cross_check.identical_sql is False
+    assert result.cross_check.same_choices is True
+    assert result.trust is not None
+    assert result.trust.checks[3].status is CheckStatus.NOT_ASSESSED
 
 
 def _second_query_check(cross_check: CrossCheck) -> TrustCheck:
@@ -821,6 +840,7 @@ def test_a_repeat_counts_only_on_a_single_route_from_another_model(
             "values_match",
             sql=REPEAT,
             identical_sql=True,
+            same_choices=True,
             single_route=single_route,
             separate_model=separate_model,
         )
@@ -948,7 +968,11 @@ def _assessed(
         observations=observations,
         generated_claims=(claim,),
         cross_check=CrossCheck(
-            CrossCheckStatus.AGREED, "values_match", sql=SECOND, identical_sql=False
+            CrossCheckStatus.AGREED,
+            "values_match",
+            sql=SECOND,
+            identical_sql=False,
+            same_choices=False,
         ),
     )
     return assess_trust(

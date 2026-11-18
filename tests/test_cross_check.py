@@ -80,6 +80,7 @@ def test_matching_numbers_agree_and_keep_both_values() -> None:
         independent_value=Decimal("100"),
         identical_sql=False,
         separate_model=False,
+        same_choices=False,
     )
     question, original = runner.calls[0]
     assert question.startswith("How much?\n\nINDEPENDENT CROSS-CHECK")
@@ -345,7 +346,83 @@ def test_single_route_is_not_recorded_when_the_queries_differ() -> None:
     check = _check(_Runner())
 
     assert check.identical_sql is False
+    assert check.same_choices is False
     assert check.single_route is None
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "same"),
+    [
+        # Rewriting a filter as conditional aggregation repeats the same choices.
+        (
+            "SELECT COUNT(*) FROM orders WHERE status = 'shipped'",
+            "SELECT SUM(CASE WHEN status = 'shipped' THEN 1 ELSE 0 END) "
+            "AS cross_check_answer FROM orders",
+            True,
+        ),
+        (
+            "SELECT AVG(amount) FROM sales WHERE region = 'E'",
+            "SELECT SUM(CASE WHEN region = 'E' THEN amount END) "
+            "/ COUNT(CASE WHEN region = 'E' THEN amount END) FROM sales",
+            True,
+        ),
+        # Renaming the rows through a subquery or CTE chooses nothing new.
+        (PRIMARY, "SELECT SUM(a) FROM (SELECT amount AS a FROM sales) AS s", True),
+        (PRIMARY, 'WITH s AS (SELECT * FROM sales) SELECT SUM("Amount") FROM s', True),
+        (
+            "SELECT COUNT(*) FROM sales WHERE amount < 5",
+            "SELECT COUNT(*) FROM sales WHERE 5 > amount",
+            True,
+        ),
+        (
+            "SELECT COUNT(*) FROM sales WHERE region IN ('a', 'b')",
+            "SELECT COUNT(*) FROM sales WHERE region IN ('b', 'a')",
+            True,
+        ),
+        (
+            "SELECT COUNT(DISTINCT region) FROM sales",
+            "SELECT COUNT(*) FROM (SELECT DISTINCT region FROM sales) AS d",
+            True,
+        ),
+        # Different rows, columns or structures are a different route.
+        (
+            "SELECT COUNT(*) FROM sales WHERE region = 'a'",
+            "SELECT COUNT(*) FROM sales WHERE NOT region = 'a'",
+            False,
+        ),
+        (
+            "SELECT COUNT(*) FROM sales WHERE status = 'Shipped'",
+            "SELECT COUNT(*) FROM sales WHERE LOWER(status) = 'shipped'",
+            False,
+        ),
+        (PRIMARY, "SELECT SUM(price) FROM sales", False),
+        (PRIMARY, "SELECT SUM(amount) FROM refunds", False),
+        (
+            PRIMARY,
+            "SELECT SUM(t) FROM (SELECT region, SUM(amount) AS t FROM sales "
+            "GROUP BY region) AS g",
+            False,
+        ),
+        (
+            "SELECT SUM(s.amount) FROM sales AS s JOIN shops AS p ON s.shop = p.id "
+            "WHERE p.open = 1",
+            "SELECT SUM(amount) FROM sales "
+            "WHERE shop IN (SELECT id FROM shops WHERE open = 1)",
+            False,
+        ),
+    ],
+)
+def test_a_rewritten_query_is_a_repeat_when_it_makes_the_same_choices(
+    first: str, second: str, same: bool
+) -> None:
+    check = IndependentCrossChecker(_Runner(sql=second)).check(
+        "How much?", ANSWER, first
+    )
+
+    assert check.status is CrossCheckStatus.AGREED
+    assert check.identical_sql is False
+    assert check.same_choices is same
+    assert (check.single_route is None) is not same
 
 
 def test_single_route_is_kept_when_the_result_is_not_one_number() -> None:

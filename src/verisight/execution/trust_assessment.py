@@ -70,9 +70,12 @@ def _second_query_check(result: InvestigationResult) -> TrustCheck:
             "was refused: the data may not hold what was asked, or the question "
             "may need a definition.",
         )
+    # A repeat is a second query that made the first one's choices, however it
+    # was written. Without that record, the agreement is treated as a repeat.
+    repeat = check.same_choices is not False
     if (
         check.status is CrossCheckStatus.AGREED
-        and check.identical_sql
+        and repeat
         and check.single_route
         and check.separate_model
     ):
@@ -84,18 +87,21 @@ def _second_query_check(result: InvestigationResult) -> TrustCheck:
             "grouping or subquery, no other route could test more than those "
             "choices.",
         )
-    if check.status is CrossCheckStatus.AGREED and check.identical_sql:
+    if check.status is CrossCheckStatus.AGREED and repeat:
         return TrustCheck(
             "second_query",
             CheckStatus.NOT_ASSESSED,
-            "The second query was written the same way as the first, so its "
+            "The second query made the same choices as the first: the same "
+            "tables, row conditions and columns. Written differently or not, its "
             "agreement adds no independent evidence.",
         )
     if check.status is CrossCheckStatus.AGREED:
         return TrustCheck(
             "second_query",
             CheckStatus.PASSED,
-            "A second query, written without seeing the first, got the same number.",
+            "A second query, written without seeing the first, reached the same "
+            "number through different tables, row conditions, columns or "
+            "structure.",
         )
     return TrustCheck(
         "second_query",

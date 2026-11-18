@@ -194,34 +194,60 @@ AppFactory = Callable[[Settings], VeriSight]
 _UPLOAD_PATH = "/api/datasets"
 # Room for multipart boundaries and part headers on top of the file bytes.
 _MULTIPART_OVERHEAD = 1 << 20
+# Every other request is small JSON: a question of at most 10,000 characters,
+# even with each one escaped as \\uXXXX, fits with room to spare.
+_OTHER_BODY_LIMIT = 64 * 1024
+_MAX_QUESTION_CHARS = 10_000
 
 
-class UploadBodyLimit:
-    """Reject an upload request body larger than all allowed files together.
+class RequestBodyLimit:
+    """Reject a request body larger than its endpoint can use.
 
-    Runs before multipart parsing, so an oversized request is refused without
-    first being stored in temporary files. A declared Content-Length is checked
-    up front; a body without one is counted while it arrives.
+    An upload may carry all allowed files together; any other request is
+    limited to ``other_limit_bytes``. Runs before the body is parsed, so an
+    oversized upload is never stored in temporary files and an oversized JSON
+    body is never held in memory. A declared Content-Length is checked up
+    front; a body without one is counted while it arrives.
     """
 
-    def __init__(self, app: Any, *, limit_bytes: int, max_upload_mb: int) -> None:
+    def __init__(
+        self,
+        app: Any,
+        *,
+        limit_bytes: int,
+        max_upload_mb: int,
+        other_limit_bytes: int = _OTHER_BODY_LIMIT,
+    ) -> None:
         self._app = app
-        self._limit = limit_bytes
-        self._message = (
+        self._upload_limit = limit_bytes
+        self._other_limit = other_limit_bytes
+        self._upload_message = (
             f"The upload is larger than the {max_upload_mb} MB per file allowed."
         )
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
-        if (
-            scope["type"] != "http"
-            or scope["method"] != "POST"
-            or scope["path"] != _UPLOAD_PATH
-        ):
+        if scope["type"] != "http":
             await self._app(scope, receive, send)
             return
+        upload = scope["method"] == "POST" and scope["path"] == _UPLOAD_PATH
+        limit = self._upload_limit if upload else self._other_limit
+        code, message = (
+            ("file_too_large", self._upload_message)
+            if upload
+            else ("request_too_large", "The request is too large.")
+        )
+
+        async def refuse() -> None:
+            response = JSONResponse(
+                status_code=413,
+                content={"code": code, "message": message},
+                headers={"Connection": "close", **_SECURITY_HEADERS},
+            )
+            await response(scope, receive, send)
+
         declared = dict(scope.get("headers") or ()).get(b"content-length")
-        if declared is not None and declared.isdigit() and int(declared) > self._limit:
-            await self._refuse(scope, receive, send)
+        if declared is not None and declared.isdigit() and int(declared) > limit:
+            await refuse()
             return
         received = 0
         exceeded = False
@@ -234,7 +260,7 @@ class UploadBodyLimit:
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
-                if received > self._limit:
+                if received > limit:
                     # Stop reading; the response is replaced below.
                     exceeded = True
                     return {"type": "http.disconnect"}
@@ -245,7 +271,7 @@ class UploadBodyLimit:
             if exceeded:
                 if not replaced:
                     replaced = True
-                    await self._refuse(scope, receive, send)
+                    await refuse()
                 return
             await send(message)
 
@@ -255,15 +281,7 @@ class UploadBodyLimit:
             if not exceeded:
                 raise
         if exceeded and not replaced:
-            await self._refuse(scope, receive, send)
-
-    async def _refuse(self, scope: Any, receive: Any, send: Any) -> None:
-        response = JSONResponse(
-            status_code=413,
-            content={"code": "file_too_large", "message": self._message},
-            headers={"Connection": "close", **_SECURITY_HEADERS},
-        )
-        await response(scope, receive, send)
+            await refuse()
 
 
 def _load_hint(error: BaseException) -> str | None:
@@ -321,7 +339,7 @@ class RowsRequest(BaseModel):
 class AskRequest(BaseModel):
     """A question about an uploaded dataset."""
 
-    question: str = Field(min_length=1)
+    question: str = Field(min_length=1, max_length=_MAX_QUESTION_CHARS)
     answer_type: Literal["number", "difference", "any"] = "number"
     consent: bool = False
     api_key: str | None = Field(default=None, max_length=200, repr=False)
@@ -516,7 +534,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.add_middleware(
-        UploadBodyLimit,
+        RequestBodyLimit,
         limit_bytes=limits.max_upload_mb * limits.max_files * 1024 * 1024
         + _MULTIPART_OVERHEAD,
         max_upload_mb=limits.max_upload_mb,
@@ -820,11 +838,18 @@ def create_app(
                 "invalid_question",
                 f"Ask a question of 1 to {limits.max_question_chars} characters.",
             )
+        client = client_of(request)
         if body.answer_type != "difference":
+            # Trying the rules costs queries like a chart update, so it is limited
+            # like one before any work. A rule-based answer is also a question.
+            if not dashboard_limiter.allow(client):
+                raise WebError(
+                    429, "rate_limited", "Too many questions. Try again in an hour."
+                )
             started = time.perf_counter()
             direct = await run_in_threadpool(answer_directly, stored, question)
             if direct is not None:
-                if not question_limiter.allow(client_of(request)):
+                if not question_limiter.allow(client):
                     raise WebError(
                         429, "rate_limited", "Too many questions. Try again in an hour."
                     )
@@ -846,7 +871,7 @@ def create_app(
                 "Add a Gemini API key. It is used for this question only and is "
                 "never stored.",
             )
-        if not question_limiter.allow(client_of(request)):
+        if not question_limiter.allow(client):
             raise WebError(
                 429, "rate_limited", "Too many questions. Try again in an hour."
             )

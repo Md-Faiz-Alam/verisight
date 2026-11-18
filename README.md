@@ -20,8 +20,9 @@ checked against the executed result.*
 - **Verified, not just generated.** Gemini plans the SQL and states each number
   as a claim on a result cell. VeriSight checks the claim against the executed
   query and refuses numbers it cannot support. On the website, a second query
-  written without seeing the first must reach the same number before an answer
-  is marked verified. When it cannot verify an answer, it says so instead of
+  written without seeing the first must reach the same number by a different
+  choice of tables, rows, columns or structure before an answer is marked
+  verified. When it cannot verify an answer, it says so instead of
   guessing.
 - **Messy data handled in the open.** `N/A`, `$1,234.50`, `10%`, `Shipped ` /
   `shipped` and padded headers are cleaned under strict rules, and every change
@@ -141,8 +142,8 @@ a trust level and the checks behind it:
 | Level | Meaning |
 | --- | --- |
 | Computed without AI | Fixed rules wrote the SQL because the question matched exact columns and values. |
-| Verified | The number equals its SQL result, the SQL audit found no known mistake, and a second query, written differently from the first, agreed. On a simple one-table query with no other route, a matching query from a different model also counts. |
-| Number matches SQL only | The number equals its SQL result, but a check could not run, or the second query only repeated the first where another route was possible. |
+| Verified | The number equals its SQL result, the SQL audit found no known mistake, and a second query agreed after choosing different tables, row conditions, columns or structure (such as a join or grouping). Rewording the same choices, for example moving a filter into `SUM(CASE WHEN ...)`, does not count. On a simple one-table query with no other route, the same choices made by a different model also count. |
+| Number matches SQL only | The number equals its SQL result, but a check could not run, or the second query repeated the first one's choices where another route was possible. |
 | Needs review | A check failed. The page says which one and why. |
 | Not verified | No number could be tied to an executed result, the data does not hold what was asked, or the question needs a definition, such as what counts as "large". No number is shown. |
 
@@ -174,8 +175,11 @@ lists its supported files, questions, limits and targets, with the status of eac
   means what the question asked. The SQL audit and second query catch many such
   mistakes, but not all, and a second query can share the first one's mistake.
 - On the Gemini free tier, Google can use what is sent to improve its products.
-  Questions send column names, some values and up to 20 result rows per query,
-  which for a small file can be all of it. Use non-sensitive data only.
+  Questions send column names and some values. The website sends at most 20 result
+  rows per query. The command line and Python API send whole query results, within
+  a limit of 60,000 characters per prompt; a larger result stops the investigation
+  instead of being cut. For a small file this can be all of it. Use non-sensitive
+  data only.
 - So far all testing was done by the project's own side.
 
 ## Documentation

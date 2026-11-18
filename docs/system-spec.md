@@ -72,8 +72,9 @@ promised.
 
 VeriSight does not upload the source file as an attachment. AI-assisted analysis
 sends dataset-derived context and query results to Gemini. These may include raw
-values. Up to 20 result rows may be disclosed per query, and multiple queries may
-disclose more. For small datasets, this can include all records. Use non-sensitive
+values. On the website, up to 20 result rows may be disclosed per query. The command
+line and Python API disclose whole query results, within a limit of 60,000
+characters per prompt. Multiple queries may disclose more. For small datasets, this can include all records. Use non-sensitive
 data only.
 
 How Google may use submitted data depends on the service and account conditions.

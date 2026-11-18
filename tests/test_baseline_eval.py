@@ -379,6 +379,7 @@ def test_a_website_answer_records_the_second_query() -> None:
         cross_check={
             "status": "agreed",
             "identical_sql": True,
+            "same_choices": True,
             "single_route": True,
             "separate_model": True,
             "sql": "SELECT SUM(x) FROM t",
@@ -394,6 +395,7 @@ def test_a_website_answer_records_the_second_query() -> None:
 
     details = runner.read_website_answer(200, reply, _question()).details
 
+    assert details["same_choices"] is True
     assert details["single_route"] is True
     assert details["separate_model"] is True
     assert details["second_sql"] == "SELECT SUM(x) FROM t"

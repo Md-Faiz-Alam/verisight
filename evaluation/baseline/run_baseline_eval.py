@@ -306,6 +306,7 @@ def read_website_answer(
         "second_query": cross.get("status"),
         "second_value": cross.get("independent_value"),
         "repeated_query": cross.get("identical_sql"),
+        "same_choices": cross.get("same_choices"),
         "single_route": cross.get("single_route"),
         "separate_model": cross.get("separate_model"),
         "second_sql": cross.get("sql"),
