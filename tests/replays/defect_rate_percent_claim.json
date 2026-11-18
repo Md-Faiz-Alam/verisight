@@ -1,0 +1,50 @@
+{
+  "question": "What is the overall defect rate, as a percentage of all units produced?",
+  "data_dir": "evaluation/benchmark/data",
+  "files": [
+    "production.xlsx"
+  ],
+  "answer_type": "number",
+  "source": "hand-written",
+  "model": "gemini-3.1-flash-lite",
+  "calls": [
+    {
+      "stage": "investigator",
+      "prompt_sha256": "0fe4b4674cd32df059489a7a4f1c545d0ed53c0e82d73b6cad0656b975c5e7e9",
+      "response": "{\"action\": \"investigate\", \"reasoning\": \"Total defects and units.\", \"question\": \"Total defects and units produced\"}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "3344e24ca5002586a1eff2938c4a5e1fc28c3d4c017bd04e88f50a0607304820",
+      "response": "SELECT SUM(defects) AS defects, SUM(units_produced) AS units FROM runs"
+    },
+    {
+      "stage": "investigator",
+      "prompt_sha256": "5474fdbb048a26d6beb5a853b547f0ab44682934c953012f99a10699f0c572f9",
+      "response": "{\"action\": \"finish\", \"reasoning\": \"Both totals are known.\", \"question\": null}"
+    },
+    {
+      "stage": "structured_synthesis",
+      "prompt_sha256": "d1fc604e634c41a0955aeba346335dc0d44d784b70e54dfef648908dd8dff33a",
+      "response": "{\"conclusion\": \"The defect rate is 1.99% of units produced.\", \"claims\": [{\"operation\": \"percent\", \"expected\": \"1.99\", \"left\": {\"observation_index\": 0, \"row_index\": 0, \"column\": \"defects\"}, \"right\": {\"observation_index\": 0, \"row_index\": 0, \"column\": \"units\"}}]}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "f82eadbca67a5f9e77215d5a2320c2737298dc5b0131b096f36a77164839effc",
+      "response": "SELECT 100.0 * SUM(defects) / SUM(units_produced) AS cross_check_answer FROM runs"
+    }
+  ],
+  "expected": {
+    "status": "complete",
+    "trust_level": "number_matched",
+    "claims": [
+      {
+        "operation": "percent",
+        "expected": "1.99",
+        "verification": "supported"
+      }
+    ],
+    "declined": null,
+    "cross_check": "agreed"
+  }
+}

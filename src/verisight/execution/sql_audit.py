@@ -388,6 +388,11 @@ def audit_sql(
             *_fan_out(tree, used),
             *_uncounted_total_rows(tree, used, total_rows),
             *_filter_values(tree, used),
+            # These read only the SQL and the loaded rows, so they work for a
+            # question in any language and a table from any domain.
+            *_identifier_aggregated(tree, used),
+            *_text_ordered(tree, used),
+            *_join_key_format(tree, used),
             *_named_value(question, tree, tables, categories),
             *_broad_match(question, tree, tables, categories),
             *_distinct_count(question, tree),
@@ -658,6 +663,154 @@ def _found_elsewhere(value: str, used: dict[str, LoadedTable], skip: str) -> str
             ):
                 return str(name)
     return None
+
+
+# Fewer rows than this say too little about whether a column is an identifier.
+_MIN_IDENTIFIER_ROWS = 20
+_YEARS = (1800, 2200)
+_NUMBER_TEXT_VALUE = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?")
+_SLASHED_DATE = re.compile(r"[0-9]{1,2}[/.-][0-9]{1,2}[/.-][0-9]{2,4}")
+# A join that matches under half its keys exactly, yet nearly all once case,
+# spaces and leading zeros are ignored, is losing rows to formatting.
+_EXACT_KEY_SHARE = 0.5
+_LOOSE_KEY_SHARE = 0.9
+
+
+def _loaded_column(
+    column: exp.Column, sources: dict[str, LoadedTable]
+) -> pd.Series | None:
+    owner = _owner(column, sources)
+    if owner is None:
+        return None
+    table = sources[owner]
+    return table.data[_actual_name(table, column.name)]
+
+
+def _identifier_kind(values: pd.Series, function: str) -> str | None:
+    """Name what an integer column holds when adding it up has no meaning."""
+    present = values.dropna()
+    if len(present) < _MIN_IDENTIFIER_ROWS or not all(
+        type(value) is int or (hasattr(value, "is_integer") and value.is_integer())
+        for value in present.tolist()
+        if not isinstance(value, bool)
+    ):
+        return None
+    numbers = [int(value) for value in present.tolist()]
+    low, high = min(numbers), max(numbers)
+    # Every row has its own number, and the numbers run nearly one after another.
+    if len(set(numbers)) == len(numbers) and high - low + 1 <= 2 * len(numbers):
+        return "a row identifier: each row has its own number"
+    if function == "SUM" and _YEARS[0] <= low and high <= _YEARS[1]:
+        return "calendar years"
+    return None
+
+
+def _identifier_aggregated(
+    tree: exp.Expression, used: dict[str, LoadedTable]
+) -> Iterator[AuditFinding]:
+    """Find SUM or AVG over an identifier column, or SUM over years."""
+    seen: set[tuple[str, str]] = set()
+    for select in tree.find_all(exp.Select):
+        sources = _sources(select, used)
+        for node in select.find_all(exp.Sum, exp.Avg):
+            if isinstance(node.this, exp.Distinct):
+                continue
+            function = type(node).__name__.upper()
+            for column in node.find_all(exp.Column):
+                if _only_a_condition(column, node):
+                    continue
+                values = _loaded_column(column, sources)
+                kind = None if values is None else _identifier_kind(values, function)
+                if kind is None or (function, column.name) in seen:
+                    continue
+                seen.add((function, column.name))
+                yield AuditFinding(
+                    "identifier_aggregated",
+                    f"{function}({column.name}) combines values that are {kind}, "
+                    "so the result measures nothing.",
+                )
+
+
+def _ordered_as_text(values: pd.Series) -> str | None:
+    """Name the kind of text whose letter order differs from its real order."""
+    present = values.dropna()
+    if present.empty or not all(type(value) is str for value in present):
+        return None
+    text = present.str.strip()
+    if text.str.fullmatch(_NUMBER_TEXT_VALUE).all() and text.str.len().nunique() > 1:
+        return "numbers"
+    if text.str.fullmatch(_SLASHED_DATE).all():
+        return "dates"
+    return None
+
+
+def _text_ordered(
+    tree: exp.Expression, used: dict[str, LoadedTable]
+) -> Iterator[AuditFinding]:
+    """Find order comparisons and MIN or MAX on text that holds numbers or dates.
+
+    Text compares letter by letter, so "9" sorts after "10". A query that casts
+    the column first compares the real values and is not flagged.
+    """
+    seen: set[str] = set()
+    ordered = (exp.GT, exp.GTE, exp.LT, exp.LTE, exp.Between, exp.Min, exp.Max)
+    for select in tree.find_all(exp.Select):
+        sources = _sources(select, used)
+        for node in select.find_all(*ordered):
+            sides = (
+                [node.this]
+                if isinstance(node, exp.Between | exp.Min | exp.Max)
+                else [node.this, node.expression]
+            )
+            for side in sides:
+                if not isinstance(side, exp.Column) or side.name in seen:
+                    continue
+                values = _loaded_column(side, sources)
+                kind = None if values is None else _ordered_as_text(values)
+                if kind is None:
+                    continue
+                seen.add(side.name)
+                yield AuditFinding(
+                    "text_ordered",
+                    f"{side.name} holds {kind} stored as text, which compare "
+                    'letter by letter: "9" comes after "10". Cast it first.',
+                )
+
+
+def _loose_key(value: object) -> str:
+    text = str(value).strip().casefold()
+    return text.lstrip("0") or text
+
+
+def _join_key_format(
+    tree: exp.Expression, used: dict[str, LoadedTable]
+) -> Iterator[AuditFinding]:
+    """Find joins whose keys differ only in case, spaces or leading zeros."""
+    for select in tree.find_all(exp.Select):
+        sources = _sources(select, used)
+        for join in select.args.get("joins") or []:
+            for (left, right), (lefts, rights) in _join_keys(join, sources).items():
+                for left_name, right_name in zip(lefts, rights, strict=True):
+                    first = sources[left].data[_actual_name(sources[left], left_name)]
+                    second = sources[right].data[
+                        _actual_name(sources[right], right_name)
+                    ]
+                    keys = set(first.dropna().map(str))
+                    others = set(second.dropna().map(str))
+                    if not keys:
+                        continue
+                    exact = len(keys & others) / len(keys)
+                    loose_others = {_loose_key(value) for value in others}
+                    loose = sum(_loose_key(key) in loose_others for key in keys) / len(
+                        keys
+                    )
+                    if exact < _EXACT_KEY_SHARE and loose >= _LOOSE_KEY_SHARE:
+                        yield AuditFinding(
+                            "join_key_format",
+                            f"{left_name} and {right_name} hold the same keys "
+                            "written differently, in case, spaces or leading "
+                            f"zeros, so the join matches only {exact:.0%} of them.",
+                        )
 
 
 def _filter_values(

@@ -165,6 +165,29 @@ comparisons. Live runs call Gemini. Because these questions are public, never
 change prompts, rules or code to pass one of them; report every run as it came,
 and treat this set as a regression check rather than an unseen held-out test.
 
+### Replayed model responses
+
+`tests/replays/` holds model responses replayed through the real pipeline in CI:
+planning, SQL, claim checks, the audit, the second query and the trust level, with
+no network call. A change after the model that alters an answer's outcome fails
+`tests/test_replays.py`. Each file stores a SHA-256 hash of every prompt; when a
+prompt changes, the replay still runs but warns that it is stale, and it should be
+recorded again.
+
+The first four files are hand-written, marked `"source": "hand-written"`, and use
+the public benchmark data: a verified join, a reworded repeat that stays a number
+match, a percentage claimed from two cells, and a question the data cannot answer.
+Replace them with real recordings when a live run is acceptable:
+
+```powershell
+python -m scripts.replay check tests/replays
+python -m scripts.replay record --data-dir evaluation/benchmark/data --file visits.json --question "How many visits were to the Cardiology department?" --out tests/replays/cardiology.json --allow-llm-data-disclosure
+```
+
+Recording calls Gemini with `VERISIGHT_GEMINI_API_KEY`. A replay shows that the
+pipeline still handles these responses the same way; it does not measure how good
+new prompts are, which needs live runs.
+
 ### Offline development benchmark
 
 Run the offline development benchmark:

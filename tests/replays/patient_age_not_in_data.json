@@ -1,0 +1,24 @@
+{
+  "question": "What is the average age of the patients?",
+  "data_dir": "evaluation/benchmark/data",
+  "files": [
+    "visits.json"
+  ],
+  "answer_type": "number",
+  "source": "hand-written",
+  "model": "gemini-3.1-flash-lite",
+  "calls": [
+    {
+      "stage": "investigator",
+      "prompt_sha256": "0bd93ce97471af3978972aed4efb7cae9e97b2979b21d83e814cf6347e5605aa",
+      "response": "{\"action\": \"not_in_data\", \"reasoning\": \"No column records a patient's age.\", \"question\": null}"
+    }
+  ],
+  "expected": {
+    "status": "incomplete",
+    "trust_level": "not_verified",
+    "claims": [],
+    "declined": "not_in_data",
+    "cross_check": null
+  }
+}

@@ -165,6 +165,12 @@ but the query skips, the wrong column or calculation, missing values counted as 
 or left in, a named year left out, thresholds such as "at least 5", percentages divided
 down, and subtractions in the wrong order.
 
+Most of those checks read the question's English wording. Seven read only the SQL and
+the loaded rows, so they work for a question in any language: an empty result, joins
+that copy rows, totals counted twice, filter values the data lacks, identifiers or years
+added up, numbers or dates stored as text and compared letter by letter, and join keys
+that differ only in case, spaces or leading zeros.
+
 On the correct and trap queries of the evaluations, measured offline without a model,
 the audit flagged no correct query after one fix and caught 24 of 37 development traps
 and 18 of 30 held-out traps. Before that fix it wrongly flagged 1 held-out correct query.

@@ -369,6 +369,18 @@ def test_single_route_is_not_recorded_when_the_queries_differ() -> None:
         # Renaming the rows through a subquery or CTE chooses nothing new.
         (PRIMARY, "SELECT SUM(a) FROM (SELECT amount AS a FROM sales) AS s", True),
         (PRIMARY, 'WITH s AS (SELECT * FROM sales) SELECT SUM("Amount") FROM s', True),
+        # An alias named like its column still measures that column.
+        (
+            "SELECT SUM(defects) AS defects, SUM(units) AS units FROM runs",
+            "SELECT 100.0 * SUM(defects) / SUM(units) FROM runs",
+            True,
+        ),
+        # A column only passed through a subquery is not a new measure.
+        (
+            "SELECT COUNT(*) FROM sales WHERE region = 'E'",
+            "SELECT COUNT(*) FROM (SELECT id FROM sales WHERE region = 'E') AS s",
+            True,
+        ),
         (
             "SELECT COUNT(*) FROM sales WHERE amount < 5",
             "SELECT COUNT(*) FROM sales WHERE 5 > amount",
@@ -726,3 +738,14 @@ def test_main_planner_is_used_without_a_cross_check_model() -> None:
     primary = GenerativeQueryPlanner(_Script([]))
 
     assert VeriSight(settings=settings)._cross_check_planner(primary) is primary
+
+
+def test_choices_read_unions_and_stop_on_alias_cycles() -> None:
+    from verisight.execution.cross_check import _choices
+
+    union = _choices("SELECT SUM(a) FROM t UNION ALL SELECT SUM(b) FROM u")
+    # Two aliases that name each other end the trace instead of looping.
+    cycle = _choices("SELECT y AS x, x AS y FROM t")
+
+    assert union.measures == {"a", "b"}
+    assert cycle.tables == {"t"}

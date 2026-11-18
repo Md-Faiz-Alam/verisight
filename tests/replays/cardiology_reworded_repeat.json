@@ -1,0 +1,50 @@
+{
+  "question": "How many visits were to the Cardiology department?",
+  "data_dir": "evaluation/benchmark/data",
+  "files": [
+    "visits.json"
+  ],
+  "answer_type": "number",
+  "source": "hand-written",
+  "model": "gemini-3.1-flash-lite",
+  "calls": [
+    {
+      "stage": "investigator",
+      "prompt_sha256": "cd327b698281654a6312963829b884edfb76273e105baa9ba25a3bd1ae2962a4",
+      "response": "{\"action\": \"investigate\", \"reasoning\": \"Count Cardiology visits.\", \"question\": \"Count of Cardiology visits\"}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "4394bec0f5df2b1177c85fb1a6e5b36ea2a199166fa478fe62869fa51b1342b7",
+      "response": "SELECT COUNT(*) AS cardiology_visits FROM visits WHERE department = 'Cardiology'"
+    },
+    {
+      "stage": "investigator",
+      "prompt_sha256": "d29879fbe2455ce1fc08505528d056954c80f4ae7bc30f029bfb05c368f1fe48",
+      "response": "{\"action\": \"finish\", \"reasoning\": \"The count is computed.\", \"question\": null}"
+    },
+    {
+      "stage": "structured_synthesis",
+      "prompt_sha256": "9fa2f13cbb6aac3248728efeb0639b3a10c8ba04f6842ca92d8415fc6f3acc66",
+      "response": "{\"conclusion\": \"There were 77 visits to Cardiology.\", \"claims\": [{\"operation\": \"value\", \"expected\": \"77\", \"left\": {\"observation_index\": 0, \"row_index\": 0, \"column\": \"cardiology_visits\"}, \"right\": null}]}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "bca91b942a13f77c33a7cb280b6ef71ec1ceb24edb2da37f7182f2edecd7e9f8",
+      "response": "SELECT COUNT(*) AS cross_check_answer FROM (SELECT visit_id FROM visits WHERE department = 'Cardiology') AS v"
+    }
+  ],
+  "expected": {
+    "status": "complete",
+    "trust_level": "number_matched",
+    "claims": [
+      {
+        "operation": "value",
+        "expected": "77",
+        "verification": "supported"
+      }
+    ],
+    "declined": null,
+    "cross_check": "agreed"
+  }
+}

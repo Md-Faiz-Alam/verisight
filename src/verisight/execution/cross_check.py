@@ -499,11 +499,6 @@ def _choices(sql: str) -> _Choices:
         identifier.set("this", identifier.name.casefold())
         identifier.set("quoted", False)
     defined = {cte.alias_or_name for cte in tree.find_all(exp.CTE)}
-    renamed = {
-        alias.alias
-        for alias in tree.find_all(exp.Alias)
-        if not (isinstance(alias.this, exp.Column) and alias.this.name == alias.alias)
-    }
     return _Choices(
         tables=frozenset(
             table.name
@@ -511,13 +506,56 @@ def _choices(sql: str) -> _Choices:
             if table.name not in defined
         ),
         conditions=frozenset(_condition(node) for node in tree.find_all(*_COMPARISONS)),
-        measures=frozenset(
-            column.name
-            for column in tree.find_all(exp.Column)
-            if column.find_ancestor(*_COMPARISONS) is None
-            and column.name not in renamed
-        ),
+        measures=_measures(tree),
         structures=frozenset(
             type(node).__name__ for node in tree.find_all(*_CHOICE_STRUCTURES)
         ),
     )
+
+
+def _within(node: exp.Expression, ancestor: exp.Expression) -> bool:
+    parent = node.parent
+    while parent is not None:
+        if parent is ancestor:
+            return True
+        parent = parent.parent
+    return False
+
+
+def _measures(tree: exp.Expression) -> frozenset[str]:
+    """Columns whose values the answer is made of.
+
+    These are the columns an aggregate reads, the outer query returns, or a
+    DISTINCT keeps, outside any comparison. A column that only passes through a
+    subquery, as in ``COUNT(*) FROM (SELECT id FROM t WHERE ...)``, measures
+    nothing, and a renamed column is traced to the column it renames.
+    """
+    aliases = {
+        alias.alias: alias.this
+        for alias in tree.find_all(exp.Alias)
+        if not (isinstance(alias.this, exp.Column) and alias.this.name == alias.alias)
+    }
+    found: set[str] = set()
+
+    def add(node: exp.Expression, depth: int = 0) -> None:
+        for column in node.find_all(exp.Column):
+            if column.find_ancestor(*_COMPARISONS) is not None:
+                continue
+            target = aliases.get(column.name)
+            # In SUM(x) AS x, the column x is the source, not the alias.
+            if target is None or _within(column, target):
+                found.add(column.name)
+            elif depth < len(aliases):
+                add(target, depth + 1)
+
+    for aggregate in tree.find_all(exp.AggFunc):
+        add(aggregate)
+    for select in tree.find_all(exp.Select):
+        if select.args.get("distinct") is not None:
+            for projection in select.expressions:
+                add(projection)
+    if isinstance(tree, exp.Select):
+        for projection in tree.expressions:
+            if projection.find(exp.AggFunc) is None:
+                add(projection)
+    return frozenset(found)

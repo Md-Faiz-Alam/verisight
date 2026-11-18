@@ -1,0 +1,51 @@
+{
+  "question": "What is the total amount of all orders placed by customers in the West region?",
+  "data_dir": "evaluation/benchmark/data",
+  "files": [
+    "orders.csv",
+    "customers.csv"
+  ],
+  "answer_type": "number",
+  "source": "hand-written",
+  "model": "gemini-3.1-flash-lite",
+  "calls": [
+    {
+      "stage": "investigator",
+      "prompt_sha256": "291a1d2f39252e85a02d99a0355734ff9d71398dfa3c5c67de0e7228755dff2c",
+      "response": "{\"action\": \"investigate\", \"reasoning\": \"Join orders to customers.\", \"question\": \"Total amount, West customers\"}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "4a67a7e0075a774b11619d3f36a76680ea3d710c3b43325cb49a31279ffa67c9",
+      "response": "SELECT SUM(o.amount) AS west_total FROM orders AS o JOIN customers AS c ON o.customer_id = c.customer_id WHERE c.region = 'West'"
+    },
+    {
+      "stage": "investigator",
+      "prompt_sha256": "2915eed8fe961279617e5295f31d3bedc933692c719bfc886221ea9a63ad7de4",
+      "response": "{\"action\": \"finish\", \"reasoning\": \"The total is computed.\", \"question\": null}"
+    },
+    {
+      "stage": "structured_synthesis",
+      "prompt_sha256": "8a08069dc428a1a1523e14977aa0ff3ae8fe6c6dfdfe272db8dbcdd234e2b17c",
+      "response": "{\"conclusion\": \"Orders from West customers total 244972.35.\", \"claims\": [{\"operation\": \"value\", \"expected\": \"244972.35\", \"left\": {\"observation_index\": 0, \"row_index\": 0, \"column\": \"west_total\"}, \"right\": null}]}"
+    },
+    {
+      "stage": "text_generation",
+      "prompt_sha256": "a1d948627ddddfeb29116ab7a4affe1eef527e8db8bc7eabda58280ea05abd6d",
+      "response": "SELECT SUM(amount) AS cross_check_answer FROM orders WHERE customer_id IN (SELECT customer_id FROM customers WHERE region = 'West')"
+    }
+  ],
+  "expected": {
+    "status": "complete",
+    "trust_level": "verified",
+    "claims": [
+      {
+        "operation": "value",
+        "expected": "244972.35",
+        "verification": "supported"
+      }
+    ],
+    "declined": null,
+    "cross_check": "agreed"
+  }
+}
