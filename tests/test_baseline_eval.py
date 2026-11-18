@@ -657,3 +657,55 @@ def test_an_incomplete_website_answer_records_why_it_stopped() -> None:
     assert stopped.details["incomplete_reason"] == reason
     assert stopped.provider_error is False
     assert finished.details["incomplete_reason"] is None
+
+
+def test_the_website_setup_asks_through_the_real_website(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from verisight.web import create_app
+    from verisight.web.config import WebSettings
+    from verisight.web.store import DatasetStore
+
+    root = _root(tmp_path, "")
+    store = DatasetStore(ttl_seconds=60, max_datasets=5)
+    app = create_app(settings=Settings(), web=WebSettings(), store=store)
+    question = runner.Question(
+        "q1",
+        ("orders.csv",),
+        "number",
+        "What is the total amount?",
+        Decimal(350),
+        "number",
+        Decimal(0),
+    )
+
+    # A plainly worded total is answered by fixed rules, so no model is called.
+    with TestClient(app) as client:
+        answer = runner.answer_on_website(client, question, root / "data", "")
+        leftover = [dataset_id for dataset_id in list(store._items)]
+
+    assert runner.score(question, answer) == "correct_prominent"
+    assert answer.number == Decimal(350)
+    assert leftover == []
+
+
+def test_a_lost_dataset_stops_the_run_instead_of_counting_a_miss(
+    tmp_path: Path,
+) -> None:
+    root = _root(tmp_path, "")
+
+    class _Losing:
+        def post(self, path: str, **_: Any) -> Any:
+            status = 201 if path == "/api/datasets" else 404
+            body = (
+                {"dataset_id": "d1", "owner_token": "t"}
+                if status == 201
+                else {"code": "dataset_not_found"}
+            )
+            return type("Reply", (), {"status_code": status, "json": lambda s: body})()
+
+        def delete(self, path: str, **_: Any) -> None:
+            return None
+
+    with pytest.raises(SystemExit, match="lost the uploaded dataset"):
+        runner.answer_on_website(_Losing(), _question(), root / "data", "")

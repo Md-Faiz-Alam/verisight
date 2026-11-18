@@ -379,6 +379,8 @@ def answer_on_website(
             upload_refused=True, details={"upload_status": upload.status_code}
         )
     dataset_id = upload.json()["dataset_id"]
+    # Every request about an upload must carry the token its upload returned.
+    owner = {"X-Dataset-Token": upload.json()["owner_token"]}
     started = time.perf_counter()
     try:
         reply = client.post(
@@ -389,9 +391,16 @@ def answer_on_website(
                 "consent": True,
                 "api_key": key,
             },
+            headers=owner,
         )
     finally:
-        client.delete(f"/api/datasets/{dataset_id}")
+        client.delete(f"/api/datasets/{dataset_id}", headers=owner)
+    if reply.status_code == 404:
+        # The question never reached an answer, so it must not count as a miss.
+        raise SystemExit(
+            "The website lost the uploaded dataset; the runner is out of step "
+            "with it. No attempt was recorded for this question."
+        )
     answer = read_website_answer(reply.status_code, reply.json(), question)
     answer.seconds = round(time.perf_counter() - started, 3)
     return answer

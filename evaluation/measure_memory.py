@@ -158,19 +158,30 @@ def main() -> int:
     )
     questions = {"question": "How much came in altogether?", "consent": True}
     with TestClient(app) as client:
-        ids = []
+        # Each upload's id and the owner token its later requests carry.
+        ids: list[tuple[str, dict[str, str]]] = []
         for number in range(5):
             upload = client.post("/api/datasets", files=[("files", ("data.csv", body))])
             upload.raise_for_status()
-            ids.append(upload.json()["dataset_id"])
+            ids.append(
+                (
+                    upload.json()["dataset_id"],
+                    {"X-Dataset-Token": upload.json()["owner_token"]},
+                )
+            )
             client.post(
-                f"/api/datasets/{ids[-1]}/dashboard", json={"relation": "data"}
+                f"/api/datasets/{ids[-1][0]}/dashboard",
+                json={"relation": "data"},
+                headers=ids[-1][1],
             ).raise_for_status()
             mark(f"upload and charts {number + 1}")
 
-        def ask(dataset_id: str) -> int:
+        def ask(upload: tuple[str, dict[str, str]]) -> int:
+            dataset_id, owner = upload
             reply = client.post(
-                f"/api/datasets/{dataset_id}/ask", json={**questions, "api_key": "k"}
+                f"/api/datasets/{dataset_id}/ask",
+                json={**questions, "api_key": "k"},
+                headers=owner,
             )
             return reply.status_code
 

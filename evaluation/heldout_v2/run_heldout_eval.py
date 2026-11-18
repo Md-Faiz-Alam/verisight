@@ -554,6 +554,8 @@ def ask_once(
     if upload.status_code != 201:
         return upload.status_code, {"upload_error": upload.json()}, 0.0
     dataset_id = upload.json()["dataset_id"]
+    # Every request about an upload must carry its owner token.
+    owner = {"X-Dataset-Token": upload.json()["owner_token"]}
     started = time.perf_counter()
     try:
         answer = client.post(
@@ -564,10 +566,11 @@ def ask_once(
                 "consent": True,
                 "api_key": key,
             },
+            headers=owner,
         )
     finally:
         elapsed = round(time.perf_counter() - started, 3)
-        client.delete(f"/api/datasets/{dataset_id}")
+        client.delete(f"/api/datasets/{dataset_id}", headers=owner)
     return answer.status_code, answer.json(), elapsed
 
 
