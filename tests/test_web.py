@@ -101,7 +101,10 @@ def _script(conclusion: str, expected: str, column: str = "total") -> list[str]:
                 ],
             }
         ),
-        "SELECT SUM(a) AS cross_check_answer FROM (SELECT amount AS a FROM data) AS d",
+        # Another route to the same total: per-state totals, added up. Renaming
+        # the column in a subquery would only repeat the first query.
+        "SELECT SUM(t) AS cross_check_answer FROM "
+        "(SELECT state, SUM(amount) AS t FROM data GROUP BY state) AS g",
     ]
 
 
