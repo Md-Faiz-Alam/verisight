@@ -133,7 +133,7 @@ def test_csv_loader_preserves_significant_leading_zeros(
     assert table.data["phone"].tolist() == ["0091234", "0012345"]
 
 
-def test_csv_loader_preserves_long_integer_identifiers_with_missing_values(
+def test_csv_loader_keeps_long_integers_exact_with_missing_values(
     tmp_path: Path,
 ) -> None:
     file_path = tmp_path / "identifiers.csv"
@@ -145,9 +145,11 @@ def test_csv_loader_preserves_long_integer_identifiers_with_missing_values(
     loader = CsvLoader(Settings())
     table = loader.load(file_path)
 
-    assert table.data.loc[0, "account_id"] == "12345678901234567"
+    # Read as a float, 12345678901234567 would become 12345678901234568.
+    assert str(table.data["account_id"].dtype) == "Int64"
+    assert table.data.loc[0, "account_id"] == 12345678901234567
     assert pd.isna(table.data.loc[1, "account_id"])
-    assert table.data.loc[2, "account_id"] == "12345678901234569"
+    assert table.data.loc[2, "account_id"] == 12345678901234569
 
 
 def test_csv_loader_keeps_ordinary_numeric_columns_numeric(
@@ -634,9 +636,7 @@ def test_csv_type_inference_updates_input_dataframe_in_place() -> None:
         "+123456789012345678901234567890",
         "-123456789012345678901234567890",
         "18446744073709551616",
-        "-9223372036854775808",
-        "9007199254740992",
-        "-9007199254740992",
+        "-9223372036854775809",
         pytest.param("9" * 5000, id="5000-digit-identifier"),
     ],
 )
@@ -657,6 +657,49 @@ def test_csv_loader_preserves_oversized_integer_identifiers(
     assert isinstance(table.data.loc[0, "account_id"], str)
     assert pd.isna(table.data.loc[1, "account_id"])
     assert table.data.loc[2, "account_id"] == "42"
+
+
+@pytest.mark.parametrize(
+    ("number", "dtype"),
+    [
+        (9007199254740992, "int64"),
+        (-9007199254740992, "int64"),
+        (-(2**63), "int64"),
+        (2**63 - 1, "int64"),
+        (2**63, "uint64"),
+        (2**64 - 1, "uint64"),
+    ],
+)
+@pytest.mark.parametrize("with_missing", [False, True])
+def test_csv_loader_types_wide_integers_like_the_excel_loader(
+    tmp_path: Path, number: int, dtype: str, with_missing: bool
+) -> None:
+    path = tmp_path / "wide.csv"
+    content = f"value,label\n{number},wide\n+42,small\n"
+    if with_missing:
+        content += ",missing\n"
+    path.write_text(content, encoding="utf-8")
+
+    data = CsvLoader(Settings()).load(path).data
+
+    assert data["value"].iloc[0] == number
+    assert data["value"].iloc[1] == 42
+    expected = dtype
+    if with_missing:
+        expected = "UInt64" if dtype == "uint64" else "Int64"
+        assert pd.isna(data["value"].iloc[2])
+    assert str(data["value"].dtype) == expected
+
+
+def test_csv_wide_integers_sum_exactly_in_sql(tmp_path: Path) -> None:
+    path = tmp_path / "wide.csv"
+    path.write_text("value\n9007199254740993\n2\n", encoding="utf-8")
+
+    result = VeriSight(settings=Settings(allow_llm_data_disclosure=False)).execute(
+        [path], "SELECT SUM(value) AS total FROM wide"
+    )
+
+    assert int(str(result.rows[0][0])) == 9007199254740995
 
 
 @pytest.mark.parametrize("with_missing", [False, True])

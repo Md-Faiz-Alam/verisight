@@ -198,7 +198,7 @@ def test_excel_numbers_mixed_with_markers(tmp_path: Path) -> None:
     }
 
 
-def test_plain_text_numbers_and_dates_without_markers_are_untouched(
+def test_excel_text_numbers_stay_text_and_iso_dates_become_dates(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "plain.xlsx"
@@ -208,8 +208,13 @@ def test_plain_text_numbers_and_dates_without_markers_are_untouched(
 
     table = _table(path)
 
+    # A number typed as text is the author's choice; an ISO date reads the same
+    # from Excel as from CSV.
     assert table.data["code"].tolist() == ["12", "7"]
-    assert table.data["day"].tolist() == ["2026-01-31", "2026-02-01"]
+    assert table.data["day"].tolist() == [
+        pd.Timestamp("2026-01-31"),
+        pd.Timestamp("2026-02-01"),
+    ]
     assert table.value_notes == ()
 
 

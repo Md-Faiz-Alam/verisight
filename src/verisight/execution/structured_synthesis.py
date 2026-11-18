@@ -152,6 +152,8 @@ class StructuredInvestigationSynthesizer:
                 max_retries=settings.gemini_max_retries,
                 retry_base_delay_seconds=settings.gemini_retry_base_delay_seconds,
                 response_json_schema=_generation_schema(),
+                temperature=settings.gemini_temperature,
+                seed=settings.gemini_seed,
             )
         )
 
@@ -198,6 +200,9 @@ class StructuredInvestigationSynthesizer:
             "are ZERO-BASED positions in observations and result.rows. Column is an "
             "exact result.columns name. Reference numeric SQL cells only; do not "
             "reinterpret nulls, booleans, or numeric-looking strings as numbers.\n"
+            "A result with truncated true holds only its first rows. Never count, "
+            "total, average or rank its rows as if they were complete; cite only "
+            "cells it contains.\n"
             + ANALYTICAL_SCOPE_RULES
             + METRIC_SCALE_RULES
             + "If SQL selected a broader or otherwise different population from "

@@ -12,11 +12,25 @@ GenerationStage = Literal["investigator", "structured_synthesis", "text_generati
 
 @dataclass(frozen=True, slots=True)
 class GenerationCallReport:
+    """One model call: where, how long, and what it cost in tokens.
+
+    Token counts are the provider's own for the attempt that returned text;
+    they stay ``None`` when the provider reported none. ``temperature`` and
+    ``seed`` are ``None`` when the provider's default was used.
+    """
+
     stage: GenerationStage
     call_number: int
     attempts: int
     elapsed_seconds: float
     returned_text: bool
+    model: str | None = None
+    temperature: float | None = None
+    seed: int | None = None
+    prompt_tokens: int | None = None
+    output_tokens: int | None = None
+    thinking_tokens: int | None = None
+    total_tokens: int | None = None
 
 
 @dataclass(slots=True)
@@ -25,6 +39,13 @@ class GenerationCall:
     call_number: int
     attempts: int = 0
     returned_text: bool = False
+    model: str | None = None
+    temperature: float | None = None
+    seed: int | None = None
+    prompt_tokens: int | None = None
+    output_tokens: int | None = None
+    thinking_tokens: int | None = None
+    total_tokens: int | None = None
 
 
 _active_calls: ContextVar[list[GenerationCallReport] | None] = ContextVar(
@@ -62,5 +83,12 @@ def track_generation_call(
                     attempts=call.attempts,
                     elapsed_seconds=round(perf_counter() - started, 3),
                     returned_text=call.returned_text,
+                    model=call.model,
+                    temperature=call.temperature,
+                    seed=call.seed,
+                    prompt_tokens=call.prompt_tokens,
+                    output_tokens=call.output_tokens,
+                    thinking_tokens=call.thinking_tokens,
+                    total_tokens=call.total_tokens,
                 )
             )

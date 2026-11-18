@@ -281,6 +281,7 @@ def test_verified_answer_shows_sql_cells_and_claims() -> None:
             "sql": "SELECT SUM(amount) AS total FROM data",
             "columns": ["total"],
             "rows": [[930]],
+            "truncated": False,
         }
     ]
     claim = answer["claims"][0]
@@ -1147,3 +1148,34 @@ def test_excel_unpacked_size_is_limited(tmp_path: Path) -> None:
     assert len(workbook) < 1024 * 1024
     assert failure["code"] == "data_load_error"
     assert "too large once unpacked" in failure["message"]
+
+
+def test_uploads_wait_their_turn_to_be_read() -> None:
+    store = DatasetStore(ttl_seconds=60, max_datasets=5)
+    reads = threading.BoundedSemaphore(1)
+    reads.acquire()
+    app = create_app(
+        settings=_settings(), web=WebSettings(), store=store, upload_reads=reads
+    )
+    with TestClient(app) as client:
+        refused = _upload(client, ("data.csv", CSV), status=503)
+        demo = client.post("/api/datasets/demo")
+        reads.release()
+        accepted = _upload(client, ("data.csv", CSV))
+
+    assert refused["code"] == "busy"
+    assert demo.status_code == 503
+    assert accepted["dataset_id"]
+    # A refused upload leaves no reservation or directory behind.
+    assert store.create_directory()[0]
+
+
+def test_answer_steps_say_whether_rows_were_cut(client: TestClient) -> None:
+    dataset = _upload(client, ("data.csv", CSV))
+
+    status, answer = _ask(
+        client, dataset["dataset_id"], question="What is the total amount?"
+    )
+
+    assert status == 200
+    assert answer["steps"][0]["truncated"] is False

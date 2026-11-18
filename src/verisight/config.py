@@ -39,6 +39,10 @@ class Settings(BaseSettings):
         gt=0,
     )
 
+    # Keep the first max_query_result_rows rows of a longer result, marked as
+    # truncated, instead of rejecting the query.
+    truncate_query_results: bool = False
+
     max_query_result_bytes: int = Field(
         default=1_048_576,
         gt=0,
@@ -77,6 +81,15 @@ class Settings(BaseSettings):
     # A different model for the independent cross-check makes a shared mistake
     # less likely. Unset, the cross-check uses gemini_model.
     gemini_cross_check_model: str | None = Field(default=None, min_length=1)
+
+    # Sampling. Unset, the provider's default is used, which Google recommends
+    # for Gemini 3 models. A seed asks for repeatable output on a best-effort
+    # basis; neither setting makes a model deterministic. Both are recorded
+    # with every call.
+    gemini_temperature: float | None = Field(
+        default=None, ge=0, le=2, allow_inf_nan=False
+    )
+    gemini_seed: int | None = None
 
     gemini_request_timeout_seconds: float = Field(
         default=30.0,

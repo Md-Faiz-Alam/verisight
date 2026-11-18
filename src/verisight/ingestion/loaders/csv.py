@@ -454,6 +454,9 @@ class CsvLoader(BaseTableLoader):
                 )
 
                 if bool(exceeds_safe_range.any()):
+                    exact = cls._exact_wide_integers(series, values)
+                    if exact is not None:
+                        data[column] = exact
                     continue
 
                 numeric = pd.to_numeric(series, errors="raise")
@@ -481,6 +484,37 @@ class CsvLoader(BaseTableLoader):
                 data[column] = numeric
 
         return data
+
+    @staticmethod
+    def _exact_wide_integers(
+        series: pd.Series, distinct: pd.Series
+    ) -> pd.Series | None:
+        """Type integers beyond 2**53 exactly, as the Excel loader does.
+
+        Each value is parsed as a Python integer, never through a float, so no
+        digit changes. Values within int64 or uint64 get that type, nullable
+        when values are missing. Wider integers stay as text, where they are
+        identifiers rather than quantities a 64-bit column could hold.
+        """
+        # 2**64 - 1 has 20 digits; a longer value can never fit, and parsing a
+        # very long one would only spend time.
+        if distinct.str.lstrip("+-").str.len().max() > 20:
+            return None
+        integers = [int(value) for value in distinct]
+        minimum, maximum = min(integers), max(integers)
+        missing = bool(series.isna().any())
+        if minimum >= -(2**63) and maximum <= 2**63 - 1:
+            dtype = "Int64" if missing else "int64"
+        elif minimum >= 0 and maximum <= 2**64 - 1:
+            dtype = "UInt64" if missing else "uint64"
+        else:
+            return None
+        return pd.Series(
+            [None if pd.isna(value) else int(value) for value in series],
+            index=series.index,
+            name=series.name,
+            dtype=dtype,
+        )
 
     @staticmethod
     def _convert_boolean_series(series: pd.Series) -> pd.Series:

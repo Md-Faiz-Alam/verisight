@@ -436,6 +436,8 @@ def test_verisight_builds_gemini_planner_from_settings() -> None:
         max_retries=2,
         retry_base_delay_seconds=1.0,
         response_json_schema=None,
+        temperature=None,
+        seed=None,
     )
 
     assert isinstance(service._planner, GenerativeQueryPlanner)
@@ -871,6 +873,8 @@ def test_public_investigate_builds_default_gemini_components(
         max_retries=2,
         retry_base_delay_seconds=1.0,
         response_json_schema=INVESTIGATION_DECISION_JSON_SCHEMA,
+        temperature=None,
+        seed=None,
     )
     synthesizer_class.assert_called_once()
     synthesis_config = synthesizer_class.call_args.kwargs

@@ -364,7 +364,10 @@ VERISIGHT_ALLOW_LLM_DATA_DISCLOSURE=true
 ```
 
 Set `VERISIGHT_GEMINI_MODEL` to override the configured model. Check available
-models and quotas for your provider project. Disclosure permission defaults to
+models and quotas for your provider project. `VERISIGHT_GEMINI_TEMPERATURE` (0 to
+2) and `VERISIGHT_GEMINI_SEED` set sampling; unset, the provider's default
+temperature is used, which Google recommends for Gemini 3 models. A seed makes
+repeated output more likely, not certain. Disclosure permission defaults to
 false. Enabling it permits built-in generation to send analytical context,
 including schema, profiles, questions, query observations, bounded observed
 categorical values and detected total-row values used by SQL planning and repair.
@@ -568,7 +571,11 @@ as strings.
 
 Safe provider diagnostics include HTTP status, retryability, attempts, a coarse
 stage, and a per-client call number. Evaluation telemetry records generation
-attempts, elapsed time, and whether text returned, without prompts or responses.
+attempts, elapsed time, whether text returned, the model, the temperature and
+seed (`null` for the provider's default), and the provider's token counts for
+the response used: `prompt_tokens`, `output_tokens`, `thinking_tokens` and
+`total_tokens`, `null` when the provider reports none. Prompts and responses are
+never recorded. Tokens spent on failed attempts are not reported by the provider.
 CLI investigation reports include the same allowlisted metadata as
 `generation_calls`, including for operation errors, so time-budget failures can
 be attributed to individual calls. Previews make no calls and omit the field.

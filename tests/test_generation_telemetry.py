@@ -68,6 +68,13 @@ def test_success_records_actual_retry_count_and_safe_elapsed_time(
             "attempts": 2,
             "elapsed_seconds": 3.25,
             "returned_text": True,
+            "model": "test-model",
+            "temperature": None,
+            "seed": None,
+            "prompt_tokens": None,
+            "output_tokens": None,
+            "thinking_tokens": None,
+            "total_tokens": None,
         }
     ]
     sleep.assert_called_once_with(1.0)
@@ -216,3 +223,105 @@ def test_evaluation_keeps_generation_calls_on_success_and_failure(failed: bool) 
     assert calls[0]["attempts"] == (2 if failed else 1)
     assert calls[0]["returned_text"] is (not failed)
     assert "private" not in serialized
+
+
+def test_model_sampling_and_token_counts_are_recorded() -> None:
+    sdk = MagicMock()
+    usage = MagicMock(
+        prompt_token_count=1200,
+        candidates_token_count=80,
+        thoughts_token_count=None,
+        total_token_count=1280,
+    )
+    sdk.models.generate_content.return_value = MagicMock(
+        text="private-response", usage_metadata=usage
+    )
+    client = GeminiTextGenerationClient(
+        api_key="private-key",
+        model="test-model",
+        client=sdk,
+        temperature=0.5,
+        seed=7,
+    )
+
+    with capture_generation_calls() as calls:
+        client.generate("private-prompt")
+
+    report = asdict(calls[0])
+    assert {key: report[key] for key in ("model", "temperature", "seed")} == {
+        "model": "test-model",
+        "temperature": 0.5,
+        "seed": 7,
+    }
+    assert (
+        report["prompt_tokens"],
+        report["output_tokens"],
+        report["thinking_tokens"],
+        report["total_tokens"],
+    ) == (1200, 80, None, 1280)
+    config = sdk.models.generate_content.call_args.kwargs["config"]
+    assert (config.temperature, config.seed) == (0.5, 7)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        MagicMock(text="ok", usage_metadata=None),
+        MagicMock(
+            text="ok",
+            usage_metadata=MagicMock(
+                prompt_token_count=-1,
+                candidates_token_count="5",
+                thoughts_token_count=True,
+                total_token_count=1.5,
+            ),
+        ),
+    ],
+)
+def test_missing_or_invalid_token_counts_stay_unknown(response: MagicMock) -> None:
+    sdk = MagicMock()
+    sdk.models.generate_content.return_value = response
+    client = GeminiTextGenerationClient(api_key="k", model="m", client=sdk)
+
+    with capture_generation_calls() as calls:
+        client.generate("prompt")
+
+    report = calls[0]
+    assert (report.temperature, report.seed) == (None, None)
+    assert (
+        report.prompt_tokens,
+        report.output_tokens,
+        report.thinking_tokens,
+        report.total_tokens,
+    ) == (None, None, None, None)
+
+
+@pytest.mark.parametrize("temperature", [-0.1, 2.1])
+def test_temperature_outside_the_provider_range_is_refused(
+    temperature: float,
+) -> None:
+    with pytest.raises(ValueError, match="temperature"):
+        GeminiTextGenerationClient(api_key="k", model="m", temperature=temperature)
+
+
+def test_settings_pass_sampling_to_every_client() -> None:
+    from verisight.execution.structured_synthesis import (
+        StructuredInvestigationSynthesizer,
+    )
+    from verisight.service import VeriSight
+
+    settings = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        gemini_api_key="k",
+        allow_llm_data_disclosure=True,
+        gemini_temperature=0.2,
+        gemini_seed=11,
+    )
+
+    planner_client = VeriSight._build_generation_client(settings)
+    synthesizer = StructuredInvestigationSynthesizer.from_settings(settings)
+
+    assert planner_client is not None
+    for client in (planner_client, synthesizer._client):
+        assert isinstance(client, GeminiTextGenerationClient)
+        assert (client._temperature, client._seed) == (0.2, 11)

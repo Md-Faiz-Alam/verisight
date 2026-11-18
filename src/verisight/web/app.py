@@ -418,6 +418,7 @@ def _answer_view(
                 "sql": observation.sql,
                 "columns": to_jsonable(observation.result.columns),
                 "rows": to_jsonable(observation.result.rows),
+                "truncated": observation.result.truncated,
             }
             for observation in result.observations
         ],
@@ -458,6 +459,7 @@ def _direct_view(answer: DirectAnswer, elapsed: float) -> dict[str, object]:
                 "sql": answer.sql,
                 "columns": to_jsonable(answer.observation.result.columns),
                 "rows": to_jsonable(answer.observation.result.rows),
+                "truncated": answer.observation.result.truncated,
             }
         ],
         "assessment": None,
@@ -489,6 +491,7 @@ def create_app(
     factory: AppFactory = _default_factory,
     clock: Callable[[], float] = time.monotonic,
     question_slots: threading.Semaphore | None = None,
+    upload_reads: threading.Semaphore | None = None,
 ) -> FastAPI:
     """Build the web application. Arguments exist for tests and embedding."""
     core = settings if settings is not None else Settings()
@@ -506,6 +509,9 @@ def create_app(
     dashboard_limiter = RateLimiter(limits.dashboards_per_hour, clock=clock)
     slots = question_slots or threading.BoundedSemaphore(
         limits.max_concurrent_questions
+    )
+    upload_slots = upload_reads or threading.BoundedSemaphore(
+        limits.max_concurrent_uploads
     )
     server_key = (core.gemini_api_key or "").strip()
 
@@ -607,14 +613,24 @@ def create_app(
     async def register(
         dataset_id: str, directory: Path, paths: list[Path]
     ) -> dict[str, object]:
-        size_bytes = sum(path.stat().st_size for path in paths)
-        datasets.make_room(size_bytes)
+        # Reading and profiling a file holds several times its size in memory,
+        # so only a few uploads are read at once; the rest are asked to retry.
+        if not upload_slots.acquire(blocking=False):
+            datasets.release(dataset_id)
+            raise WebError(
+                503,
+                "busy",
+                "Many uploads are being checked right now. Try again in a moment.",
+            )
         try:
+            size_bytes = sum(path.stat().st_size for path in paths)
+            datasets.make_room(size_bytes)
             profile, builder = await run_in_threadpool(analyze, tuple(paths))
         except BaseException:
             datasets.release(dataset_id)
             raise
         finally:
+            upload_slots.release()
             # The loaded file sits in reference cycles until collected.
             gc.collect()
         stored = StoredDataset(
@@ -904,6 +920,7 @@ def create_app(
                         limits.provider_retry_delay_seconds
                     ),
                     "max_query_result_rows": limits.max_result_rows,
+                    "truncate_query_results": True,
                 }
             )
         )

@@ -166,7 +166,7 @@ def _reply(**extra: Any) -> dict[str, Any]:
         ],
         "assessment": {"accepted": True},
         "trust": {"level": "verified", "checks": []},
-        "model_calls": [{}, {}],
+        "model_calls": [{"total_tokens": 120}, {"total_tokens": None}],
         "cross_check": {"status": "agreed", "identical_sql": False},
         "steps": [{"sql": "SELECT 1"}],
         **extra,
@@ -178,6 +178,7 @@ def test_a_verified_website_answer_is_prominent() -> None:
 
     assert (answer.number, answer.visibility) == (Decimal(300), "prominent")
     assert answer.calls == 2
+    assert answer.tokens == 120
 
 
 def test_an_unverified_website_answer_is_only_warned() -> None:
@@ -318,7 +319,13 @@ def test_the_summary_reports_every_number_the_targets_need() -> None:
         runner.Question("e", ("o",), "number", "?", None, "UNANSWERABLE", Decimal(0)),
     ]
     records = [
-        {"id": "a", "outcome": "correct_prominent", "calls": 5, "seconds": 2.0},
+        {
+            "id": "a",
+            "outcome": "correct_prominent",
+            "calls": 5,
+            "tokens": 900,
+            "seconds": 2.0,
+        },
         {"id": "b", "outcome": "correct_warned", "calls": 5, "seconds": 4.0},
         {"id": "c", "outcome": "wrong_warned", "calls": 1, "seconds": 6.0},
         {"id": "d", "outcome": "provider_error", "calls": 0, "seconds": 0.0},
@@ -333,6 +340,7 @@ def test_the_summary_reports_every_number_the_targets_need() -> None:
     assert summary["wrong_visible_anywhere"] == 2
     assert summary["false_warning_share"] == 0.5
     assert summary["model_calls"] == 12
+    assert summary["total_tokens"] == 900
     assert summary["median_seconds"] == 5.0
 
 

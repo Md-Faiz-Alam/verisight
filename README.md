@@ -176,7 +176,8 @@ lists its supported files, questions, limits and targets, with the status of eac
   mistakes, but not all, and a second query can share the first one's mistake.
 - On the Gemini free tier, Google can use what is sent to improve its products.
   Questions send column names and some values. The website sends at most 20 result
-  rows per query. The command line and Python API send whole query results, within
+  rows per query: a longer result keeps its first 20 rows and is marked as cut, so
+  the model is told not to count or rank them as complete. The command line and Python API send whole query results, within
   a limit of 60,000 characters per prompt; a larger result stops the investigation
   instead of being cut. For a small file this can be all of it. Use non-sensitive
   data only.

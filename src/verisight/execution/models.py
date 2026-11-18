@@ -25,10 +25,15 @@ QueryRow: TypeAlias = tuple[QueryScalar, ...]
 
 @dataclass(frozen=True, slots=True)
 class QueryResult:
-    """Structured result produced by an analytical query."""
+    """Structured result produced by an analytical query.
+
+    ``truncated`` is true when the query produced more rows than the executor
+    keeps; ``rows`` then holds only the first ones, in the query's order.
+    """
 
     columns: tuple[str, ...]
     rows: tuple[QueryRow, ...]
+    truncated: bool = False
 
     @property
     def row_count(self) -> int:

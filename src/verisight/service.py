@@ -139,6 +139,8 @@ class VeriSight:
             max_retries=settings.gemini_max_retries,
             retry_base_delay_seconds=settings.gemini_retry_base_delay_seconds,
             response_json_schema=response_json_schema,
+            temperature=settings.gemini_temperature,
+            seed=settings.gemini_seed,
         )
 
     @classmethod
@@ -213,6 +215,7 @@ class VeriSight:
             execution_timeout_seconds=self._settings.max_query_execution_seconds,
             temp_storage_limit_mb=self._settings.max_query_temp_storage_mb,
             population=population,
+            truncate_rows=self._settings.truncate_query_results,
         )
 
     def load(self, paths: str | Path | Iterable[str | Path]) -> LoadedDataset:

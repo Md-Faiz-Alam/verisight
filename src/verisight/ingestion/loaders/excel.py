@@ -18,6 +18,7 @@ from verisight.ingestion.models import (
     SourceMetadata,
     ValueNote,
 )
+from verisight.ingestion.temporal import parse_iso_datetimes
 from verisight.ingestion.validation import validate_file
 
 EXCEL_EXTENSIONS = frozenset({".xls", ".xlsx"})
@@ -287,4 +288,8 @@ def _infer_column(series: pd.Series) -> pd.Series:
 
     if any(abs(value) > 2**53 - 1 for value in integers):
         return series
+    # ISO date text becomes a date, as it does in a CSV file.
+    dates = parse_iso_datetimes(series)
+    if dates is not None:
+        return dates
     return series.infer_objects()

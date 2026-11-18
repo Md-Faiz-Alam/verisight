@@ -19,6 +19,7 @@ from verisight.execution.deadline import (
     remaining_seconds,
 )
 from verisight.execution.generation_telemetry import (
+    GenerationCall,
     GenerationStage,
     track_generation_call,
 )
@@ -89,6 +90,23 @@ def _is_retryable(error: Exception) -> bool:
     )
 
 
+def _token_count(usage: object, name: str) -> int | None:
+    """Return one provider token count, or None when it is absent or invalid."""
+    value = getattr(usage, name, None)
+    return value if type(value) is int and value >= 0 else None
+
+
+def _record_usage(call: GenerationCall, response: object) -> None:
+    """Copy the provider's token counts for the response that was used."""
+    usage = getattr(response, "usage_metadata", None)
+    if usage is None:
+        return
+    call.prompt_tokens = _token_count(usage, "prompt_token_count")
+    call.output_tokens = _token_count(usage, "candidates_token_count")
+    call.thinking_tokens = _token_count(usage, "thoughts_token_count")
+    call.total_tokens = _token_count(usage, "total_token_count")
+
+
 def _generation_stage(schema: dict[str, object] | None) -> GenerationStage:
     """Infer a coarse stage from response fields, never from prompt contents."""
     properties = schema.get("properties") if schema is not None else None
@@ -121,6 +139,8 @@ class GeminiTextGenerationClient:
         retry_base_delay_seconds: float = 1.0,
         sleep: Callable[[float], None] = time.sleep,
         response_json_schema: dict[str, object] | None = None,
+        temperature: float | None = None,
+        seed: int | None = None,
     ) -> None:
         if not api_key.strip():
             raise ValueError("Gemini API key must not be empty.")
@@ -137,9 +157,14 @@ class GeminiTextGenerationClient:
         if not 0 < retry_base_delay_seconds < float("inf"):
             raise ValueError("Gemini retry delay must be finite and positive.")
 
+        if temperature is not None and not 0 <= temperature <= 2:
+            raise ValueError("Gemini temperature must be between 0 and 2.")
+
         self._stage: GenerationStage = _generation_stage(response_json_schema)
         self._call_number = 0
         self._model = model
+        self._temperature = temperature
+        self._seed = seed
         self._max_retries = max_retries
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._sleep = sleep
@@ -151,6 +176,8 @@ class GeminiTextGenerationClient:
                 "application/json" if response_json_schema is not None else None
             ),
             response_json_schema=response_json_schema,
+            temperature=temperature,
+            seed=seed,
         )
 
         self._client = client
@@ -220,6 +247,9 @@ class GeminiTextGenerationClient:
 
         self._call_number += 1
         with track_generation_call(self._stage, self._call_number) as call:
+            call.model = self._model
+            call.temperature = self._temperature
+            call.seed = self._seed
             for attempt in range(self._max_retries + 1):
                 check_deadline()
                 call.attempts = attempt + 1
@@ -245,6 +275,7 @@ class GeminiTextGenerationClient:
                             )
 
                         call.returned_text = True
+                        _record_usage(call, response)
                         return text
 
                     raise self._failure(

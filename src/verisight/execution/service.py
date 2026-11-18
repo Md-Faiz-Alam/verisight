@@ -50,6 +50,7 @@ class AnalyticalExecutionService:
         execution_timeout_seconds: float = 30.0,
         temp_storage_limit_mb: int = 1_024,
         population: tuple[PopulationFilter, ...] = (),
+        truncate_rows: bool = False,
     ) -> None:
         """Initialize the service for a loaded dataset."""
 
@@ -61,6 +62,7 @@ class AnalyticalExecutionService:
             execution_timeout_seconds=execution_timeout_seconds,
             temp_storage_limit_mb=temp_storage_limit_mb,
             population=population,
+            truncate_rows=truncate_rows,
         )
         self._planner = planner
         self._repairer = repairer

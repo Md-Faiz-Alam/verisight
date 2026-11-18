@@ -249,6 +249,13 @@ def test_cli_reports_call_timing_and_repairs_invented_metric(
         "attempts",
         "elapsed_seconds",
         "returned_text",
+        "model",
+        "temperature",
+        "seed",
+        "prompt_tokens",
+        "output_tokens",
+        "thinking_tokens",
+        "total_tokens",
     }
 
 
@@ -273,6 +280,13 @@ def test_cli_reports_call_timing_for_failures_before_evidence(
             "attempts": 1,
             "elapsed_seconds": report["generation_calls"][0]["elapsed_seconds"],
             "returned_text": False,
+            "model": "gemini-3.1-flash-lite",
+            "temperature": None,
+            "seed": None,
+            "prompt_tokens": None,
+            "output_tokens": None,
+            "thinking_tokens": None,
+            "total_tokens": None,
         }
     ]
     assert "synthetic-private-provider-detail" not in output

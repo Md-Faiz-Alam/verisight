@@ -1063,13 +1063,14 @@ def test_result_bytes_stop_fetching_and_close_resources() -> None:
     cursor = connection.execute.return_value
     cursor.description = [("v",)]
     cursor.fetchone.side_effect = [("abcdefghij",)] * 100 + [None]
-    executor = DuckDBExecutor(max_result_bytes=70)
+    # 70 bytes of rows and columns, plus 17 for ',"truncated":false'.
+    executor = DuckDBExecutor(max_result_bytes=87)
     with (
         patch.object(executor, "_connection") as connection_context,
         patch("verisight.execution.engine.Timer") as timer,
     ):
         connection_context.return_value.__enter__.return_value = connection
-        with pytest.raises(QueryResultLimitError, match="70 bytes"):
+        with pytest.raises(QueryResultLimitError, match="87 bytes"):
             executor.execute(dataset, "SELECT value FROM synthetic")
         assert cursor.fetchone.call_count == 3
         connection_context.return_value.__exit__.assert_called_once()

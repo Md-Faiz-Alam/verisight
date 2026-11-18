@@ -48,8 +48,13 @@ class DuckDBExecutor:
         execution_timeout_seconds: float = 30.0,
         temp_storage_limit_mb: int = 1_024,
         population: tuple[PopulationFilter, ...] = (),
+        truncate_rows: bool = False,
     ) -> None:
-        """Initialize the executor with analytical execution guardrails."""
+        """Initialize the executor with analytical execution guardrails.
+
+        With ``truncate_rows``, a result longer than ``max_result_rows`` keeps
+        its first rows and is marked truncated instead of being rejected.
+        """
 
         if max_result_rows <= 0:
             raise ValueError("Maximum query result rows must be positive.")
@@ -70,6 +75,7 @@ class DuckDBExecutor:
             raise ValueError("Query temporary storage limit must be positive.")
 
         self._population = population
+        self._truncate_rows = truncate_rows
         self._query_validator = AnalyticalQueryValidator()
         self._max_result_rows = max_result_rows
         self._max_result_bytes = max_result_bytes
@@ -153,13 +159,15 @@ class DuckDBExecutor:
                         description[0] for description in cursor.description
                     )
 
-                    # Account for both empty arrays and the enclosing object.
-                    size = len(b'{"columns":[],"rows":[]}')
+                    # Account for both empty arrays, the truncation flag and the
+                    # enclosing object; "false" is the longer flag value.
+                    size = len(b'{"columns":[],"rows":[],"truncated":false}')
                     self._check_result_bytes(size)
                     for index, column in enumerate(columns):
                         size = self._add_result_bytes(size + int(index > 0), column)
 
                     rows: list[QueryRow] = []
+                    truncated = False
                     while True:
                         check_timeout()
                         fetched = cursor.fetchone()
@@ -167,6 +175,9 @@ class DuckDBExecutor:
                         if fetched is None:
                             break
                         if len(rows) >= self._max_result_rows:
+                            if self._truncate_rows:
+                                truncated = True
+                                break
                             raise QueryResultLimitError(
                                 "Analytical query result exceeded the maximum "
                                 f"of {self._max_result_rows} rows."
@@ -195,6 +206,7 @@ class DuckDBExecutor:
         return QueryResult(
             columns=columns,
             rows=tuple(rows),
+            truncated=truncated,
         )
 
     def _add_result_bytes(self, used: int, value: QueryScalar) -> int:

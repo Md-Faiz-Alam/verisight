@@ -166,6 +166,7 @@ All settings are environment variables in the `environment` block:
 | `VERISIGHT_WEB_TRUST_FORWARDED_FOR` | false | Read the visitor address from the load balancer's `X-Forwarded-For` entry |
 | `VERISIGHT_WEB_MAX_PREPARED_DATASETS` | 4 | Datasets kept in memory so chart filters respond at once |
 | `VERISIGHT_WEB_MAX_CONCURRENT_QUESTIONS` | 2 | Questions answered at once |
+| `VERISIGHT_WEB_MAX_CONCURRENT_UPLOADS` | 2 | Uploads read and profiled at once; others are asked to retry |
 | `VERISIGHT_WEB_PROVIDER_RETRIES` | 3 | Retries after a Gemini 503 |
 | `VERISIGHT_MAX_EXCEL_UNCOMPRESSED_MB` | 200 | Largest unpacked size of an `.xlsx` workbook |
 | `VERISIGHT_GEMINI_MODEL` | `gemini-3.1-flash-lite` | Gemini model |

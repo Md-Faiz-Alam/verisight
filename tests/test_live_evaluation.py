@@ -803,7 +803,11 @@ def test_run_case_retains_exact_synthetic_evidence_for_failed_answers(
         {
             "question": "synthetic-subquestion-for-report",
             "sql": sql,
-            "result": {"columns": ["metric"], "rows": [[str(actual)]]},
+            "result": {
+                "columns": ["metric"],
+                "rows": [[str(actual)]],
+                "truncated": False,
+            },
         }
     ]
     item = evidence["verified_claims"][0]

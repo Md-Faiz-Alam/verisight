@@ -329,6 +329,13 @@ class InvestigationStateFormatter:
         if omitted_rows:
             lines.append(f"Rows omitted: {omitted_rows} of {result.row_count}")
 
+        if result.truncated:
+            lines.append(
+                "Result truncated: the query returned more rows than the row "
+                "limit, and only the first are kept. Do not count, total or rank "
+                "these rows as if they were complete; ask for an aggregate instead."
+            )
+
         return "\n".join(lines)
 
     def _format_failed_attempts(self, state: InvestigationState) -> str:

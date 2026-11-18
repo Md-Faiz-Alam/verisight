@@ -70,6 +70,8 @@ class Answer:
     # The website refused the files, so the question never reached the model.
     upload_refused: bool = False
     calls: int = 0
+    # The provider's total token count over the calls that returned text.
+    tokens: int = 0
     seconds: float = 0.0
     details: dict[str, Any] = field(default_factory=dict)
 
@@ -216,6 +218,7 @@ def _measured(ask: Callable[[], Answer]) -> Answer:
     with capture_generation_calls() as calls:
         answer = ask()
     answer.calls = len(calls)
+    answer.tokens = sum(call.total_tokens or 0 for call in calls)
     answer.seconds = round(time.perf_counter() - started, 3)
     return answer
 
@@ -293,11 +296,13 @@ def read_website_answer(
     status: int, body: dict[str, Any], question: Question
 ) -> Answer:
     """Turn a website reply into what a visitor would actually see."""
-    calls = len(body.get("model_calls") or [])
+    reported = body.get("model_calls") or []
+    calls = len(reported)
+    tokens = sum(call.get("total_tokens") or 0 for call in reported)
     if status != 200:
         busy = body.get("code") in ("provider_unavailable", "busy", "rate_limited")
         details = {"status": status, "code": body.get("code")}
-        return Answer(provider_error=busy, calls=calls, details=details)
+        return Answer(provider_error=busy, calls=calls, tokens=tokens, details=details)
     cross = body.get("cross_check") or {}
     trust = body.get("trust") or {}
     details = {
@@ -335,7 +340,7 @@ def read_website_answer(
     }
     failure = body.get("failure") or {}
     if str(failure.get("kind", "")).startswith("provider"):
-        return Answer(provider_error=True, calls=calls, details=details)
+        return Answer(provider_error=True, calls=calls, tokens=tokens, details=details)
     operation = "value" if question.kind == "number" else "difference"
     claims = [
         item
@@ -347,13 +352,17 @@ def read_website_answer(
     accepted = verified or (isinstance(assessment, dict) and assessment.get("accepted"))
     hidden = trust.get("level") == "not_verified"
     if body.get("status") != "complete" or len(claims) != 1 or not accepted or hidden:
-        return Answer(calls=calls, details=details)
+        return Answer(calls=calls, tokens=tokens, details=details)
     check = claims[0]["verification"]
     if check["status"] != "supported" or check["actual"] is None:
-        return Answer(calls=calls, details=details)
+        return Answer(calls=calls, tokens=tokens, details=details)
     visibility = PROMINENT if verified else WARNED
     return Answer(
-        Decimal(str(check["actual"])), visibility, calls=calls, details=details
+        Decimal(str(check["actual"])),
+        visibility,
+        calls=calls,
+        tokens=tokens,
+        details=details,
     )
 
 
@@ -466,6 +475,8 @@ def summarize(
         + counts["unsafe_warned"],
         "false_warning_share": _share(warned_right, right),
         "model_calls": sum(r["calls"] for r in latest.values()),
+        # Runs saved before tokens were recorded count as zero.
+        "total_tokens": sum(r.get("tokens", 0) for r in latest.values()),
         "median_seconds": statistics.median(seconds) if seconds else None,
     }
 

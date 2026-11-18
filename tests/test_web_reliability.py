@@ -165,7 +165,10 @@ def _held_client(
 
 
 def test_simultaneous_uploads_keep_to_the_capacity(temporary: Path) -> None:
-    app = create_app(settings=_settings(), web=WebSettings(max_datasets=5))
+    app = create_app(
+        settings=_settings(),
+        web=WebSettings(max_datasets=5, max_concurrent_uploads=4),
+    )
 
     with TestClient(app) as client, ThreadPoolExecutor(4) as pool:
         ids = list(pool.map(lambda _: _upload(client), range(12)))

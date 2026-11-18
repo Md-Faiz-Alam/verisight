@@ -507,7 +507,8 @@ def main(argv: list[str] | None = None) -> int:
         assert operation.value is not None
         payload, exit_code = operation.value
     if args.command == "investigate" and not args.preview:
-        # Allowlisted call metadata only: stage, attempts, timing, returned_text.
+        # Allowlisted call metadata only: stage, attempts, timing, returned_text,
+        # model, sampling settings and the provider's token counts.
         payload["generation_calls"] = tuple(generation_calls)
     report: dict[str, object] = {
         "schema_version": 1,

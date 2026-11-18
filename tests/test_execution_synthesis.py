@@ -848,7 +848,8 @@ def test_structured_synthesis_omits_profiles_but_preserves_complete_sql_evidence
     # The previous whole-state serialization alone exceeded the default budget.
     assert len(json.dumps(to_jsonable(state), separators=(",", ":"))) > 60_000
     assert len(client.prompts) == 1
-    assert len(client.prompts[0]) < 20_000
+    # Far below the whole state: profiles are left out, not the rules or evidence.
+    assert len(client.prompts[0]) < 21_000
     payload = json.loads(client.prompts[0].split("INVESTIGATION STATE:\n", 1)[1])
     assert payload["question"] == state.question
     assert payload["analysis"] == to_jsonable(
