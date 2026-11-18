@@ -923,6 +923,63 @@ answers 1 warning of 16 remains. The first fix cannot be replayed, because a rej
 answer's text is not saved; unit tests cover it on the same SQL and wording. These
 questions found the flaws, so none of this is a C2 or C3 result.
 
+### Public benchmark, first live run (30 questions, 5 generated domains)
+
+The first run on the [public benchmark](development.md#public-benchmark): hospital
+visits (JSON), retail orders joined to customers (CSV), factory runs (Excel), school
+scores (TSV) and weather readings (JSONL), generated from a fixed seed, with 20
+answerable, 5 ambiguous and 5 unanswerable questions. Unlike every comparison above,
+the questions, data and expected answers are in the repository, so anyone can rerun
+it. The questions were written on the project's side, and the data is generated,
+cleaner than most real files.
+
+Plain Gemini and number checks ran frozen at `1a1918b`, full VeriSight at `d7b065c`,
+with identical question and data hashes; only the runner changed between them.
+`gemini-3.1-flash-lite` wrote the SQL and `gemini-3.5-flash-lite` the second query.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 20 | 20 | 19 |
+| Wrong number, of 20 answerable | 0 | 0 | 0 |
+| No number, of 20 answerable | 0 | 0 | 1 |
+| Number given where none exists, of 10 | 6 | 0 | 0 |
+| Correctly gave no number, of 10 | 4 | 10 | 10 |
+| Bad numbers shown prominently | 6 | 0 | 0 |
+| Bad numbers visible anywhere | 6 | 0 | 0 |
+| Correct answers carrying a warning | 0 of 20 | 0 of 20 | 5 of 19 |
+| Gemini calls, retried attempts included | 34 | 105 | 120 |
+| Tokens, as reported by Gemini | 74,099 | 299,663 | 354,115 |
+| Median seconds per question | 10 | 32 | 41 |
+
+Against the targets, full VeriSight showed no bad number against plain Gemini's 6
+(C1 passed) and delivered 95% of answerable questions against plain Gemini's 100%,
+within the 10 points allowed (C2 passed, for the first time). It warned on 26% of its
+correct answers where 10% is allowed (C3 failed). Plain Gemini gave a number for six
+of the ten questions without a valid answer, such as how many visits had a "long"
+wait.
+
+**All five warnings had the same cause.** The second query made the same choices as
+the first: the same table, rows and calculation, sometimes in nearly the same SQL.
+Since the change that stopped a reworded repeat from counting as independent, such
+agreement adds no evidence, so the answer stays at "Number matches SQL only". This is
+the cost of that stricter rule, and the main reason C3 still fails.
+
+**The one missed answer was a scoring gap in the runner.** For the defect rate, the
+first query returned the two totals and the answer was a `percent` claim computed
+from them, a claim type the runner did not yet count. The website finished with no
+contract violation, and the second query independently reached 1.99036 against the
+expected 1.990361. The runner counts percentage claims since; the saved record does
+not keep the claim, so this run's score is left as it was.
+
+**Two harness failures, both fixed before scoring.** Fourteen attempts (4 for plain
+Gemini, 7 for number checks and 3 for full VeriSight) hit Gemini's temporary limits
+and were asked again, as the runner does.
+Separately, the first full VeriSight pass was refused by the website for all 30
+questions: the runner did not send the owner token that uploads now require. Those
+attempts made no model call, so they say nothing about accuracy; the runner was fixed
+and full VeriSight was run again from a new freeze. Its first attempt is kept with
+the run's records.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10
@@ -1006,7 +1063,8 @@ because `NOT IN` never matches null.
 
 The comparison questions above live outside the repository. The public benchmark in
 `evaluation/benchmark/` can be rerun by anyone, data and expected answers included;
-see [Development](development.md#public-benchmark). It has no live results yet.
+see [Development](development.md#public-benchmark). Its first live run is
+reported above.
 
 ```powershell
 python evaluation\bank\run_bank_eval.py --dataset datasets\bank_marketing\bank-additional-full.csv --preflight-only

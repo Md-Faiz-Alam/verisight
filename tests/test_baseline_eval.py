@@ -709,3 +709,31 @@ def test_a_lost_dataset_stops_the_run_instead_of_counting_a_miss(
 
     with pytest.raises(SystemExit, match="lost the uploaded dataset"):
         runner.answer_on_website(_Losing(), _question(), root / "data", "")
+
+
+@pytest.mark.parametrize(
+    ("operation", "kind", "counted"),
+    [
+        ("percent", "number", True),
+        ("ratio", "number", True),
+        ("percent_change", "number", True),
+        ("difference", "number", False),
+        ("percent", "difference", False),
+        ("difference", "difference", True),
+    ],
+)
+def test_a_percentage_claim_answers_a_number_question(
+    operation: str, kind: str, counted: bool
+) -> None:
+    reply = _reply(
+        claims=[
+            {
+                "claim": {"operation": operation},
+                "verification": {"status": "supported", "actual": "300"},
+            }
+        ]
+    )
+
+    answer = runner.read_website_answer(200, reply, _question(kind=kind))
+
+    assert (answer.number == Decimal(300)) is counted

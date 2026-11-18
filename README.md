@@ -138,7 +138,9 @@ Every live run is published in [Live results](docs/results.md), failures include
   the SQL audit.
 - **A public benchmark** of 30 questions over five domains and five file formats,
   with its data and independently worked answers, is in `evaluation/benchmark` so
-  anyone can rerun it. It has no live results yet.
+  anyone can rerun it. On its first live run, VeriSight showed no bad number
+  against plain Gemini's 6 and delivered 19 of 20 correct answers against
+  Gemini's 20, but warned on 5 of them; see [Live results](docs/results.md).
 
 ## Trust levels
 

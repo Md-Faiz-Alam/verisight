@@ -43,6 +43,8 @@ from typing import Any
 
 SETUPS = ("plain", "numbers", "full")
 NO_ANSWER_LABELS = ("AMBIGUOUS", "UNANSWERABLE")
+# Claim operations that state one number, as a number question asks for.
+NUMBER_OPERATIONS = frozenset({"value", "ratio", "percent", "percent_change"})
 COLUMNS = ["id", "files", "type", "question", "expected", "tolerance"]
 MAX_PROVIDER_ERRORS_IN_A_ROW = 3
 PROMINENT = "prominent"
@@ -341,11 +343,14 @@ def read_website_answer(
     failure = body.get("failure") or {}
     if str(failure.get("kind", "")).startswith("provider"):
         return Answer(provider_error=True, calls=calls, tokens=tokens, details=details)
-    operation = "value" if question.kind == "number" else "difference"
+    # A ratio or percentage claim also answers a question for one number.
+    operations = (
+        NUMBER_OPERATIONS if question.kind == "number" else frozenset({"difference"})
+    )
     claims = [
         item
         for item in body.get("claims", [])
-        if item["claim"]["operation"] == operation
+        if item["claim"]["operation"] in operations
     ]
     assessment = body.get("assessment")
     verified = body.get("outcome") == "verified"
