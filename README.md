@@ -49,18 +49,18 @@ writing SQL alone, on the same cleaned data, prompt and model.
 
 | Across 60 questions | Plain Gemini | VeriSight |
 | --- | --- | --- |
-| Correct, of 40 answerable | 40 | 37 |
-| Wrong numbers on answerable questions | 0 | 0 |
-| Numbers given where none exists, of 20 | **12** | **0** |
-| Correct answers shown with a warning | 0 | 9 of 37 |
-| Median seconds per question | 10 to 17 | 41 to 73 |
-| Gemini tokens | 151,862 | 683,927 |
+| **Made-up or wrong numbers** | **12** | **0** |
+| Questions with no valid answer, correctly refused (of 20) | 8 | 20 |
+| Correct answers (of 40 answerable) | 40 | 37 |
+| Median time per question | 10–17 s | 41–73 s |
 
-VeriSight is safer, not smarter: it never invented a number, where plain Gemini
-invented 12. In exchange it answered 3 fewer questions, warned on a quarter of its
-correct answers, and was slower and about 4.5 times as expensive.
-[Live results](docs/results.md) has every run, including ten earlier comparisons and
-the misses.
+On these generated files, plain Gemini answered every answerable question. Its
+failure was confidence: given 20 questions the data cannot answer, it made up a
+number for 12. VeriSight made up none. In ten earlier comparisons on public
+datasets, plain Gemini gave 3 to 10 bad numbers per run, while VeriSight showed 0 to
+2 prominently. The price is speed and cost: about 4 times slower, 4.5 times the
+tokens, and a warning on 9 of its 37 correct answers.
+[Live results](docs/results.md) has every run, including the misses.
 
 ## Quickstart
 
