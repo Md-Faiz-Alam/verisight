@@ -1501,3 +1501,60 @@ def test_contract_allows_numbers_repeated_from_the_question() -> None:
 
     assert len(client.prompts) == 1
     assert result.assess_output(ClaimOutputContract((ClaimOperation.VALUE,))).accepted
+
+
+def test_rejected_answers_are_kept_only_when_a_folder_is_set(tmp_path: Path) -> None:
+    from verisight.execution.structured_synthesis import REJECTED_FILE
+
+    folder = tmp_path / "rejected"
+    bad_claim = '{"conclusion":"Done.","claims":[],"extra":1}'
+
+    with pytest.raises(InvestigationError):
+        StructuredInvestigationSynthesizer(_Client(bad_claim)).synthesize(
+            _build_state()
+        )
+    assert not folder.exists()
+
+    with pytest.raises(InvestigationError):
+        StructuredInvestigationSynthesizer(
+            _Client(bad_claim), rejected_dir=folder
+        ).synthesize(_build_state())
+
+    records = [
+        json.loads(line)
+        for line in (folder / REJECTED_FILE).read_text("utf-8").splitlines()
+    ]
+    assert [record["attempt"] for record in records] == ["first", "repair"]
+    assert {record["reason"] for record in records} == {"invalid_schema_or_claim"}
+    assert all(record["response"] == bad_claim for record in records)
+    # The exact validation message says what was wrong.
+    assert "extra" in records[0]["detail"]
+
+
+def test_a_rejection_without_an_underlying_error_keeps_no_detail(
+    tmp_path: Path,
+) -> None:
+    from verisight.execution.structured_synthesis import REJECTED_FILE
+
+    oversized = "x" * 60_001
+    with pytest.raises(InvestigationError):
+        StructuredInvestigationSynthesizer(
+            _Client(oversized), rejected_dir=tmp_path
+        ).synthesize(_build_state())
+
+    first = json.loads((tmp_path / REJECTED_FILE).read_text("utf-8").splitlines()[0])
+    assert (first["reason"], first["detail"]) == ("response_too_large", None)
+
+
+def test_the_setting_reaches_the_synthesizer(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        gemini_api_key=SecretStr("k"),
+        allow_llm_data_disclosure=True,
+        keep_rejected_responses_dir=tmp_path,
+    )
+
+    synthesizer = StructuredInvestigationSynthesizer.from_settings(settings)
+
+    assert synthesizer._rejected_dir == tmp_path
+    assert Settings(_env_file=None).keep_rejected_responses_dir is None  # type: ignore[call-arg]

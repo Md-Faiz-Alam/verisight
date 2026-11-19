@@ -554,6 +554,14 @@ answers without AI. Without it, the report shows the trust level as `not_run`.
 
 ## Partial results and safe diagnostics
 
+A rejected answer, one the model gave that failed the claim checks even after
+its repair, is never kept in a result, an API response or a log, because it can
+quote values from the data. To diagnose such a failure locally, set
+`VERISIGHT_KEEP_REJECTED_RESPONSES_DIR` to a folder: each rejected answer is then
+appended to `rejected_synthesis.jsonl` there, with the attempt (`first` or
+`repair`), the reason, the exact parser or validation message, and the model's
+text as returned. Treat that folder like the data itself.
+
 Observations retain questions, SQL, query results, and available
 `repair_history`. `InvestigationResult.failed_attempts` exposes recorded failed
 attempts with public messages and available repair history. Repair records can

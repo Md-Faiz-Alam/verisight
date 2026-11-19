@@ -1,3 +1,4 @@
+from pathlib import Path
 from threading import TIMEOUT_MAX
 from typing import Literal
 
@@ -42,6 +43,11 @@ class Settings(BaseSettings):
     # Keep the first max_query_result_rows rows of a longer result, marked as
     # truncated, instead of rejecting the query.
     truncate_query_results: bool = False
+
+    # For diagnosis only: write each answer the model gave that failed the
+    # claim checks to a JSONL file in this local folder. Off when unset. The
+    # file holds the model's text, which can quote values from the data.
+    keep_rejected_responses_dir: Path | None = None
 
     max_query_result_bytes: int = Field(
         default=1_048_576,

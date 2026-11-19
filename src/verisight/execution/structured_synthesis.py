@@ -3,7 +3,9 @@
 import json
 import re
 from collections import Counter
+from datetime import UTC, datetime
 from decimal import Decimal, DecimalException
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -39,6 +41,9 @@ from verisight.execution.prompt_budget import PromptBudget
 from verisight.execution.prompting import ANALYTICAL_SCOPE_RULES, METRIC_SCALE_RULES
 from verisight.execution.synthesis import StructuredSynthesis
 from verisight.serialization import to_jsonable
+
+# File inside ``keep_rejected_responses_dir`` that collects rejected answers.
+REJECTED_FILE = "rejected_synthesis.jsonl"
 
 
 class _Reference(BaseModel):
@@ -131,10 +136,42 @@ class StructuredInvestigationSynthesizer:
     """
 
     def __init__(
-        self, client: TextGenerationClient, *, max_prompt_chars: int = 60_000
+        self,
+        client: TextGenerationClient,
+        *,
+        max_prompt_chars: int = 60_000,
+        rejected_dir: Path | None = None,
     ) -> None:
         self._client = client
         self._budget = PromptBudget(max_prompt_chars=max_prompt_chars)
+        # Off unless asked for: a rejected answer can quote values from the data.
+        self._rejected_dir = rejected_dir
+
+    def _keep_rejected(
+        self, attempt: str, response: str, error: _SynthesisFormatError
+    ) -> None:
+        """Append one rejected answer to a local file, for diagnosis only.
+
+        Written only when a folder was configured. It never reaches a result,
+        an API response or a log, and it holds the model's text as returned,
+        which can include values from the data.
+        """
+        if self._rejected_dir is None:
+            return
+        cause = error.__cause__
+        record = {
+            "time_utc": datetime.now(UTC).isoformat(),
+            "attempt": attempt,
+            "reason": error.reason,
+            # The exact parser or validation message, when there was one.
+            "detail": None if cause is None else str(cause)[:4000],
+            "response": response,
+        }
+        self._rejected_dir.mkdir(parents=True, exist_ok=True)
+        with (self._rejected_dir / REJECTED_FILE).open(
+            "a", encoding="utf-8", newline="\n"
+        ) as handle:
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "StructuredInvestigationSynthesizer":
@@ -155,7 +192,8 @@ class StructuredInvestigationSynthesizer:
                 response_json_schema=_generation_schema(),
                 temperature=settings.gemini_temperature,
                 seed=settings.gemini_seed,
-            )
+            ),
+            rejected_dir=settings.keep_rejected_responses_dir,
         )
 
     def synthesize(self, state: InvestigationState) -> StructuredSynthesis:
@@ -302,6 +340,7 @@ class StructuredInvestigationSynthesizer:
             synthesis = self._parse_response(response)
             return self._check_response(synthesis, state)
         except _SynthesisFormatError as exc:
+            self._keep_rejected("first", response, exc)
             details: dict[str, str | int | list[str]] = {"validation_error": exc.reason}
             if (
                 synthesis is not None
@@ -374,6 +413,7 @@ class StructuredInvestigationSynthesizer:
             repaired = self._parse_response(repaired_response)
             return self._check_response(repaired, state)
         except _SynthesisFormatError as exc:
+            self._keep_rejected("repair", repaired_response, exc)
             rejected_values: tuple[str, ...] = ()
             if repaired is not None and exc.reason == "unlinked_narrative_number":
                 rejected_values = tuple(self._unlinked_numeric_values(repaired, state))

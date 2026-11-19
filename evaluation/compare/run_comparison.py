@@ -611,9 +611,14 @@ def run(root: Path, setups: list[str], pause: float) -> None:
         raise SystemExit("No Gemini key configured.")
     for setup in setups:
         results = root / "runs" / f"{setup}.jsonl"
+        # Answers that failed the claim checks are kept here, inside the run
+        # folder, so a miss can be explained later. They can quote data values.
+        rejected = root / "rejected" / setup
         if setup == "full":
             app = create_app(
-                settings=Settings(gemini_api_key=None),
+                settings=Settings(
+                    gemini_api_key=None, keep_rejected_responses_dir=rejected
+                ),
                 web=WebSettings(questions_per_hour=10_000, uploads_per_hour=10_000),
             )
             with TestClient(app) as client:
@@ -626,7 +631,16 @@ def run(root: Path, setups: list[str], pause: float) -> None:
         else:
             counts = run_setup(
                 questions,
-                partial(_model_answer, setup, VeriSight(settings=settings), data),
+                partial(
+                    _model_answer,
+                    setup,
+                    VeriSight(
+                        settings=settings.model_copy(
+                            update={"keep_rejected_responses_dir": rejected}
+                        )
+                    ),
+                    data,
+                ),
                 results,
                 pause=pause,
             )

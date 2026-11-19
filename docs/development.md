@@ -171,6 +171,9 @@ Then run each setup with `--run` and summarize with `--report`, as for the other
 comparisons. Live runs call Gemini. Because these questions are public, never
 change prompts, rules or code to pass one of them; report every run as it came,
 and treat this set as a regression check rather than an unseen held-out test.
+The runner keeps any answer that failed the claim checks in `rejected/<setup>/`
+inside the run folder, so a miss can be explained afterwards; like the run folder,
+it can hold data values and stays out of Git.
 
 ### Held-out set v4
 
