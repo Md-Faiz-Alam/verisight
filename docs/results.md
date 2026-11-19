@@ -990,6 +990,64 @@ correct answers, the two left being queries with a CTE or joined subqueries. The
 questions found the gaps, so that is not a C3 result; measuring it needs new
 questions.
 
+### Held-out v4, first live run (30 questions, 5 new domains)
+
+[Held-out set v4](development.md#held-out-set-v4) was written after the public
+benchmark's run, to measure that run's follow-up changes on questions nothing was
+tuned against: shipments with carriers and item lines (CSV), football matches (JSON),
+energy meter readings (Excel), library loans (TSV) and insurance claims (JSONL), with
+20 answerable, 5 ambiguous and 5 unanswerable questions. VeriSight never ran on them
+before this run. They were written on the project's side, on generated data.
+
+All three setups ran frozen at `a723c13`, with `gemini-3.1-flash-lite` writing the SQL
+and `gemini-3.5-flash-lite` the second query.
+
+| Across 30 questions | Plain Gemini | Number checks | Full VeriSight |
+| --- | --- | --- | --- |
+| Correct, of 20 answerable | 20 | 20 | 18 |
+| Wrong number, of 20 answerable | 0 | 0 | 0 |
+| No number, of 20 answerable | 0 | 0 | 2 |
+| Number given where none exists, of 10 | 6 | 0 | 0 |
+| Correctly gave no number, of 10 | 4 | 10 | 10 |
+| Bad numbers shown prominently | 6 | 0 | 0 |
+| Bad numbers visible anywhere | 6 | 0 | 0 |
+| Correct answers carrying a warning | 0 of 20 | 0 of 20 | 4 of 18 |
+| Gemini calls, retried attempts included | 33 | 98 | 106 |
+| Tokens, as reported by Gemini | 77,763 | 305,901 | 329,812 |
+| Median seconds per question | 17 | 22 | 73 |
+
+Against the targets, full VeriSight showed no bad number against plain Gemini's 6 (C1
+passed) and delivered 90% of answerable questions against plain Gemini's 100%,
+exactly the 10 points allowed (C2 passed). It warned on 22% of its correct answers
+where 10% is allowed (C3 failed). Plain Gemini gave a number for six of the ten
+questions without a valid answer, including an average electricity price the data
+does not hold and a count of "fraudulent" claims. VeriSight gave none, both for the
+undefined words on the SQL audit's list of vague words (heavy, frequent) and for
+those that are not (exciting, a lot, unusually costly).
+
+**The two missed answers are VeriSight's own failures.** For the number of meters on
+the Economy tariff, the SQL was right, but the investigation ran out of its 180-second
+budget; Gemini was slow throughout this run, with a median of 73 seconds per question
+for full VeriSight against 41 on the public benchmark. For the share of Home claims
+rejected, the query returned the two counts, and the final answer was rejected as an
+invalid claim twice, before and after its one repair; the rejected text is not kept,
+so the exact fault is not known.
+
+**The change this run was meant to measure did not show.** The follow-up to the
+public benchmark let a repeat from the separate second model count for three more
+query shapes: a difference returned beside its parts, `COUNT(DISTINCT x)`, and a
+`WITHIN GROUP` median. On these questions no outcome depended on it: seven answers
+earned "Verified" as repeats, none of them through the new shapes, and the answers
+that used those shapes got there because the second query took a different route.
+All four warnings came from repeats of queries that compare or combine two columns:
+draws, total goals, home against away wins, and a month-against-month difference
+built in a subquery. The rule refuses those on purpose, because two models can share
+a wrong definition of such a quantity. Lowering this rate further means either a
+second query that takes another route more often, or accepting that risk; it is not
+a gap in the rule.
+
+This set is now a regression check like the public benchmark.
+
 ### Confirmation runs
 
 Short live runs checked individual changes and are not accuracy scores. Across 10

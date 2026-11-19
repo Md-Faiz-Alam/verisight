@@ -141,6 +141,11 @@ Every live run is published in [Live results](docs/results.md), failures include
   anyone can rerun it. On its first live run, VeriSight showed no bad number
   against plain Gemini's 6 and delivered 19 of 20 correct answers against
   Gemini's 20, but warned on 5 of them; see [Live results](docs/results.md).
+- **Held-out v4**, 30 new questions over five new domains run before anything
+  was tuned on them: no bad number against plain Gemini's 6, all 10 questions
+  without a valid answer declined, and 18 of 20 correct answers against
+  Gemini's 20, warned on 4. One miss ran out of time and one failed to
+  produce a valid answer.
 
 ## Trust levels
 
