@@ -13,9 +13,8 @@ from verisight.analysis.result import AnalysisResultBuilder
 from verisight.config import Settings
 from verisight.execution.cross_check import CROSS_CHECK_REFUSAL_COLUMN
 from verisight.execution.decisions import InvestigationAction, InvestigationDecision
-from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
-from verisight.execution.investigation import InvestigationState
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.investigation_compaction import InvestigationCompaction
 from verisight.execution.investigation_parsing import (
     INVESTIGATION_DECISION_JSON_SCHEMA,
@@ -27,6 +26,7 @@ from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 from verisight.ingestion.schema import DatasetSchema
 from verisight.profiling.models import DatasetProfile

@@ -13,7 +13,6 @@ from verisight.execution.generation import TextGenerationClient
 from verisight.execution.incomplete_evidence import (
     IncompleteEvidenceError,
 )
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_compaction import (
     InvestigationCompaction,
 )
@@ -23,6 +22,7 @@ from verisight.execution.investigation_parsing import (
 from verisight.execution.investigation_prompting import (
     InvestigationPromptBuilder,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 
 

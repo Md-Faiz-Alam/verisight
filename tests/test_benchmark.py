@@ -37,8 +37,8 @@ def _module(name: str, path: Path) -> ModuleType:
 
 benchmark = _module("make_benchmark", ROOT / "make_benchmark.py")
 runner = _module(
-    "run_baseline_eval_for_benchmark",
-    ROOT.parent / "baseline" / "run_baseline_eval.py",
+    "run_comparison_for_benchmark",
+    ROOT.parent / "compare" / "run_comparison.py",
 )
 
 

@@ -14,12 +14,12 @@ from verisight.execution.claim_verification import (
     NumericalClaim,
 )
 from verisight.execution.exceptions import SynthesisValidationError
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import (
     ClaimOutputContract,
     InvestigationResult,
     SynthesisFailure,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.models import QueryResult
 from verisight.execution.narrative_audit import (
     audit_narrative_digit_coverage,

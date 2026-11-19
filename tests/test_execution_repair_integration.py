@@ -12,7 +12,7 @@ from verisight.execution.decisions import (
     InvestigationDecision,
 )
 from verisight.execution.exceptions import QueryRuntimeError
-from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.execution.repair import QueryRepairRequest

@@ -28,13 +28,13 @@ from pydantic import BaseModel, Field, SecretStr
 
 from verisight import __version__
 from verisight.analysis.result import DatasetAnalysisResult
-from verisight.analytics.dashboard import (
+from verisight.config import Settings
+from verisight.dashboards.dashboard import (
     DashboardBuilder,
     DashboardFilter,
     DashboardRequestError,
     DateRange,
 )
-from verisight.config import Settings
 from verisight.error_reporting import ErrorCode
 from verisight.execution.claim_verification import ClaimOperation, VerificationStatus
 from verisight.execution.direct import Clarification, DirectAnswer
@@ -50,10 +50,10 @@ from verisight.execution.investigation_result import (
 from verisight.execution.metric_display import summarize_advisory_reviews
 from verisight.execution.trust import CheckStatus, TrustLevel
 from verisight.execution.trust_assessment import DEFINED_CHECK, MEASURE_CHECK
+from verisight.facade import VeriSight
 from verisight.logging import configure_logging
-from verisight.public_api import run_public_operation
+from verisight.safe_operation import run_public_operation
 from verisight.serialization import to_jsonable
-from verisight.service import VeriSight
 from verisight.web.config import WebSettings
 from verisight.web.store import (
     ALLOWED_SUFFIXES,

@@ -14,12 +14,12 @@ from verisight.analysis.result import (
     AnalysisResultBuilder,
 )
 from verisight.evidence import EvidenceInput
-from verisight.execution.investigation import (
-    FailedQueryAttempt,
-    InvestigationState,
-)
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
+)
+from verisight.execution.investigation_state import (
+    FailedQueryAttempt,
+    InvestigationState,
 )
 from verisight.ingestion.schema import DatasetSchema
 from verisight.profiling.models import DatasetProfile

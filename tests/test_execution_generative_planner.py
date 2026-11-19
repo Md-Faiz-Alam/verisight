@@ -6,10 +6,10 @@ from verisight.error_reporting import ErrorCode
 from verisight.execution.context import QueryContext
 from verisight.execution.exceptions import QueryPlanningError
 from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
-from verisight.execution.generative import GenerativeQueryPlanner
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.execution.prompt_budget import PromptBudgetExceededError
-from verisight.public_api import run_public_operation
+from verisight.safe_operation import run_public_operation
 
 
 class StubTextGenerationClient:

@@ -16,11 +16,6 @@ from verisight.execution.exceptions import (
     QueryPlanningError,
     QueryRuntimeError,
 )
-from verisight.execution.execution import (
-    QueryExecution,
-    QueryRepairAttempt,
-    record_query_repair,
-)
 from verisight.execution.formatting import QueryContextFormatter
 from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.models import QueryResult
@@ -34,6 +29,11 @@ from verisight.execution.population_review import (
     review_population,
 )
 from verisight.execution.prompt_budget import PromptBudgetExceededError
+from verisight.execution.query_execution import (
+    QueryExecution,
+    QueryRepairAttempt,
+    record_query_repair,
+)
 from verisight.execution.repair import QueryRepairer, QueryRepairRequest
 from verisight.ingestion.models import LoadedDataset
 

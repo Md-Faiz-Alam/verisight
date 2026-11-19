@@ -14,8 +14,8 @@ from verisight import VeriSight
 from verisight.config import Settings
 from verisight.execution.claim_verification import VerificationStatus
 from verisight.execution.decisions import InvestigationAction, InvestigationDecision
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import InvestigationStatus
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.serialization import to_jsonable
 

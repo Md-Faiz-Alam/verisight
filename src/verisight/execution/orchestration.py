@@ -6,7 +6,6 @@ from typing import Literal, cast
 
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.error_reporting import to_public_error
-from verisight.execution.analytical import AnalyticalQueryRunner
 from verisight.execution.claim_verification import VerificationStatus
 from verisight.execution.context import PopulationFilter
 from verisight.execution.cross_check import (
@@ -26,10 +25,8 @@ from verisight.execution.exceptions import (
     QueryPlanningError,
     QueryValidationError,
 )
-from verisight.execution.execution import capture_query_repairs
 from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.incomplete_evidence import IncompleteEvidenceError
-from verisight.execution.investigation import FailedQueryAttempt, InvestigationState
 from verisight.execution.investigation_result import (
     ClaimOutputContract,
     DeclinedQuestion,
@@ -39,9 +36,15 @@ from verisight.execution.investigation_result import (
     SynthesisFailure,
     SynthesisRecovery,
 )
+from verisight.execution.investigation_state import (
+    FailedQueryAttempt,
+    InvestigationState,
+)
 from verisight.execution.investigator import Investigator
 from verisight.execution.observations import QueryObservation
 from verisight.execution.prompt_budget import PromptBudgetExceededError
+from verisight.execution.query_execution import capture_query_repairs
+from verisight.execution.query_runner import AnalyticalQueryRunner
 from verisight.execution.synthesis import InvestigationSynthesizer, StructuredSynthesis
 
 RecoveryTrigger = Literal[

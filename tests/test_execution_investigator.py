@@ -4,7 +4,7 @@ from verisight.execution.decisions import (
     InvestigationAction,
     InvestigationDecision,
 )
-from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.investigator import Investigator
 from verisight.ingestion.schema import DatasetSchema
 from verisight.profiling.models import DatasetProfile

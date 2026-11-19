@@ -1,9 +1,9 @@
 """Prompt construction for autonomous analytical investigation."""
 
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.prompt_budget import PromptBudget
 from verisight.execution.prompting import ANALYTICAL_SCOPE_RULES, METRIC_SCALE_RULES
 

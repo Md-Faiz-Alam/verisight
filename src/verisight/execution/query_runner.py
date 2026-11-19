@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from verisight.execution.execution import QueryExecution
+from verisight.execution.query_execution import QueryExecution
 
 
 class AnalyticalQueryRunner(Protocol):

@@ -10,7 +10,7 @@ from verisight.execution.generative_repair import GenerativeQueryRepairer
 from verisight.execution.planning import QueryPlan
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.repair import QueryRepairRequest
-from verisight.public_api import run_public_operation
+from verisight.safe_operation import run_public_operation
 
 
 class StubTextGenerationClient:

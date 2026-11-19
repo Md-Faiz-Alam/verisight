@@ -15,8 +15,8 @@ from verisight.error_reporting import ErrorCode
 from verisight.execution.engine import DuckDBExecutor
 from verisight.ingestion.exceptions import DataLoadError, TableValidationError
 from verisight.ingestion.models import LoadedDataset, LoadedTable, SourceMetadata
-from verisight.public_api import run_public_operation
 from verisight.quality.models import QualityIssueType, QualitySeverity
+from verisight.safe_operation import run_public_operation
 
 
 def _settings() -> Settings:

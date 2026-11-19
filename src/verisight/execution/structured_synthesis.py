@@ -29,7 +29,7 @@ from verisight.execution.gemini import (
     GeminiTransientError,
 )
 from verisight.execution.generation import TextGenerationClient
-from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.narrative_audit import (
     cardinal_words_outside,
     find_narrative_numbers,

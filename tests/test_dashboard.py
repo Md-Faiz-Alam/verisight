@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from verisight import VeriSight
-from verisight.analytics.dashboard import (
+from verisight.config import Settings
+from verisight.dashboards.dashboard import (
     Dashboard,
     DashboardBuilder,
     DashboardFilter,
@@ -15,8 +16,7 @@ from verisight.analytics.dashboard import (
     DateRange,
     TimeSpan,
 )
-from verisight.analytics.domains import detect_domain, name_tokens
-from verisight.config import Settings
+from verisight.dashboards.domains import detect_domain, name_tokens
 from verisight.execution.engine import DuckDBExecutor
 from verisight.execution.exceptions import QueryRuntimeError
 from verisight.execution.models import QueryResult

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from verisight.execution.claim_verification import NumericalClaim
-from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation_state import InvestigationState
 
 
 @dataclass(frozen=True, slots=True)

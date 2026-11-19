@@ -14,7 +14,7 @@ Run from the repository root to rebuild the committed files:
 Then score a setup with the comparison runner, which reads questions.csv and
 data/ from this folder:
 
-    python evaluation/baseline/run_baseline_eval.py --root evaluation/benchmark --freeze
+    python evaluation/compare/run_comparison.py --root evaluation/benchmark --freeze
 """
 
 import csv

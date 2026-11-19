@@ -8,10 +8,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from verisight.analysis.result import DatasetAnalysisResult
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_compaction import (
     InvestigationCompaction,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.models import QueryResult, QueryRow
 from verisight.execution.observations import QueryObservation
 from verisight.execution.prompt_budget import PromptBudgetExceededError

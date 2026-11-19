@@ -9,8 +9,8 @@ from verisight.execution.context import (
     QueryContext,
     QueryContextBuilder,
 )
-from verisight.execution.execution import QueryRepairAttempt
 from verisight.execution.observations import QueryObservation
+from verisight.execution.query_execution import QueryRepairAttempt
 
 if TYPE_CHECKING:
     from verisight.execution.investigation_result import ClaimOutputContract

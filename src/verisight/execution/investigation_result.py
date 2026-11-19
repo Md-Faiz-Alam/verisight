@@ -28,7 +28,7 @@ from verisight.execution.gemini import (
     GeminiTransientError,
     ProviderFailureDiagnostics,
 )
-from verisight.execution.investigation import FailedQueryAttempt
+from verisight.execution.investigation_state import FailedQueryAttempt
 from verisight.execution.narrative_audit import (
     NarrativeDigitCoverage,
     NarrativeNumberToken,

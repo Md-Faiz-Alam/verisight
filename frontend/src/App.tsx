@@ -2,20 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ask } from "./Ask";
 import { Explore } from "./Explore";
 import { Landing } from "./Landing";
-import { Overview, useDashboard, type Selection } from "./Overview";
-import { Model, Quality } from "./Quality";
+import { Dashboard, useDashboard, type Selection } from "./Dashboard";
+import { Model } from "./Model";
+import { Quality } from "./Quality";
 import { api, ownerHeaders, saveTheme, storedTheme } from "./lib";
 import { Icon } from "./ui";
 import type { Config, Dataset, Turn, View } from "./types";
 
 const NAV: [View, string][] = [
-  ["overview", "Dashboard"],
+  ["dashboard", "Dashboard"],
   ["ask", "Ask"],
   ["explore", "Explore"],
   ["quality", "Quality"],
   ["model", "Model"],
 ];
-const TITLES: Record<Exclude<View, "overview">, [string, string]> = {
+const TITLES: Record<Exclude<View, "dashboard">, [string, string]> = {
   ask: ["Ask", "Every answer shows how far it was checked"],
   explore: ["Explore", "Your data as VeriSight read it"],
   quality: ["Quality", "What was changed, and what to look at"],
@@ -104,7 +105,7 @@ function Workspace({
   isDemo: boolean;
   onRemove: () => void;
 }) {
-  const [view, setView] = useState<View>("overview");
+  const [view, setView] = useState<View>("dashboard");
   const [selection, setSelection] = useState<Selection>(EMPTY);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState<string | null>(null);
@@ -147,7 +148,7 @@ function Workspace({
       hint: "Table",
       run: () => {
         setSelection({ ...EMPTY, relation: relation.name });
-        setView("overview");
+        setView("dashboard");
       },
     })),
     ...suggestions.map((question) => ({ label: question, hint: "Ask", run: () => ask(question) })),
@@ -157,7 +158,7 @@ function Workspace({
     { label: "Remove data", hint: "Action", run: onRemove },
   ];
 
-  const title = view === "overview" ? [data?.domain.label ?? "Reading your data", data?.domain.focus ?? ""] : TITLES[view];
+  const title = view === "dashboard" ? [data?.domain.label ?? "Reading your data", data?.domain.focus ?? ""] : TITLES[view];
   const names = dataset.files.map((f) => f.name).join(", ");
   const findings = dataset.profile.quality_findings.filter((f) => f.issue_type !== "high_cardinality").length;
   return (
@@ -210,7 +211,7 @@ function Workspace({
             <h1>{title[0]}</h1>
             <p>
               {title[1]}
-              {view === "overview" && data && data.domain.matched.length > 0 && (
+              {view === "dashboard" && data && data.domain.matched.length > 0 && (
                 <span className="why"> · recognised from {data.domain.matched.join(", ")}</span>
               )}
             </p>
@@ -228,7 +229,7 @@ function Workspace({
             <button type="button" className="ghost-icon phone-only" onClick={onRemove} aria-label="Remove data">
               <Icon name="logout" />
             </button>
-            {view === "overview" && (
+            {view === "dashboard" && (
               <button type="button" className="btn small" onClick={() => window.print()}>
                 <Icon name="download" size={13} /> PDF
               </button>
@@ -236,8 +237,8 @@ function Workspace({
           </div>
         </header>
         <div className="content">
-          {view === "overview" && (
-            <Overview data={data} loading={loading} error={error} selection={selection} onSelect={setSelection} />
+          {view === "dashboard" && (
+            <Dashboard data={data} loading={loading} error={error} selection={selection} onSelect={setSelection} />
           )}
           <div hidden={view !== "ask"}>
             <Ask

@@ -9,8 +9,8 @@ from verisight import VeriSight
 from verisight.config import Settings
 from verisight.execution.claim_verification import ClaimOperation, VerificationStatus
 from verisight.execution.gemini import GeminiTransientError, ProviderFailureDiagnostics
-from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.generative_repair import GenerativeQueryRepairer
 from verisight.execution.investigation_result import (
     ClaimOutputContract,

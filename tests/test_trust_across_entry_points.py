@@ -10,8 +10,8 @@ from fastapi.testclient import TestClient
 from verisight import VeriSight
 from verisight.cli import main
 from verisight.config import Settings
-from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 from verisight.web import create_app
 from verisight.web.config import WebSettings

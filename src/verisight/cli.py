@@ -28,11 +28,11 @@ from verisight.execution.metric_display import (
     summarize_advisory_reviews,
 )
 from verisight.execution.trust import TrustLevel
+from verisight.facade import VeriSight
 from verisight.ingestion.exceptions import DataLoadError
 from verisight.ingestion.models import CsvReadOptions
-from verisight.public_api import run_public_operation
+from verisight.safe_operation import run_public_operation
 from verisight.serialization import to_jsonable
-from verisight.service import VeriSight
 
 
 def _positive_int(value: str) -> int:

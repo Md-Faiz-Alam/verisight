@@ -16,7 +16,7 @@ from itertools import combinations
 import pandas as pd
 from pandas.api.types import is_float_dtype
 
-from verisight.analytics.domains import (
+from verisight.dashboards.domains import (
     Domain,
     DomainMatch,
     detect_domain,

@@ -294,7 +294,7 @@ def test_dataset_builder_omits_high_cardinality_and_all_missing_columns(
 def test_planning_and_repair_share_original_categories(
     categorical_dataset: LoadedDataset,
 ) -> None:
-    from verisight.execution.generative import GenerativeQueryPlanner
+    from verisight.execution.generative_planner import GenerativeQueryPlanner
     from verisight.execution.generative_repair import GenerativeQueryRepairer
     from verisight.execution.service import AnalyticalExecutionService
 

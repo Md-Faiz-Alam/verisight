@@ -22,10 +22,9 @@ from verisight.execution.exceptions import (
     QueryResultLimitError,
     QueryValidationError,
 )
-from verisight.execution.execution import QueryExecution
 from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
-from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.investigation_result import (
     ClaimOutputContract,
     InvestigationResult,
@@ -34,6 +33,7 @@ from verisight.execution.investigation_result import (
 from verisight.execution.models import QueryResult, QueryScalar
 from verisight.execution.planning import QueryPlan
 from verisight.execution.prompt_budget import PromptBudgetExceededError
+from verisight.execution.query_execution import QueryExecution
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 
 PRIMARY = "SELECT SUM(amount) AS total FROM sales"

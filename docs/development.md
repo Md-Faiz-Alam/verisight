@@ -26,14 +26,21 @@ scripts run from the repository root and are not included by the current
 
 | Location | Responsibility |
 | --- | --- |
-| `src/verisight/ingestion/` | Validation, loaders, and schema inference |
-| `src/verisight/execution/` | SQL, generation, investigation, and verification |
-| `src/verisight/service.py` | Public Python facade |
+| `src/verisight/ingestion/` | File validation, loaders, cleaning and schema inference |
+| `src/verisight/profiling/` | Column, table and dataset statistics |
+| `src/verisight/quality/` | Data-quality findings, including total rows |
+| `src/verisight/analysis/` | The combined profile result: schema, statistics, findings, summary |
+| `src/verisight/dashboards/` | Charts, row pages and subject detection, computed without a model |
+| `src/verisight/execution/` | SQL safety and execution, generation, investigation, verification and trust |
+| `src/verisight/web/` | The website: FastAPI app, upload store and the built frontend |
+| `src/verisight/facade.py` | Public Python facade (`verisight.service` still imports it) |
 | `src/verisight/cli.py` | Local profile, preview, investigation, and export workflow |
 | `src/verisight/error_reporting.py` | Fixed public error classification |
-| `src/verisight/public_api.py` | Operation boundary |
+| `src/verisight/safe_operation.py` | Runs an operation and turns any failure into a safe public report |
 | `tests/` | Offline regression and development benchmark tests |
-| `scripts/` | Development evaluation utilities |
+| `scripts/` | Live evaluation on synthetic data, and recording or replaying model responses |
+| `evaluation/` | Evaluation runners, the public benchmark and held-out sets |
+| `evaluation/compare/` | The runner that compares plain Gemini, number checks and full VeriSight |
 | `.github/workflows/ci.yml` | Automated quality gates |
 
 ## Required gates and CI
@@ -157,7 +164,7 @@ VeriSight's loader, reaches every expected answer.
 
 ```powershell
 python evaluation\benchmark\make_benchmark.py
-python evaluation\baseline\run_baseline_eval.py --root evaluation\benchmark --freeze
+python evaluation\compare\run_comparison.py --root evaluation\benchmark --freeze
 ```
 
 Then run each setup with `--run` and summarize with `--report`, as for the other

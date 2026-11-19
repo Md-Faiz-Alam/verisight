@@ -22,8 +22,8 @@ from verisight.execution.gemini import (
     GeminiTransientError,
     ProviderFailureDiagnostics,
 )
-from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.generative_repair import GenerativeQueryRepairer
 from verisight.execution.investigation_result import (
     InvestigationFailure,
@@ -31,7 +31,7 @@ from verisight.execution.investigation_result import (
 )
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
-from verisight.public_api import run_public_operation
+from verisight.safe_operation import run_public_operation
 from verisight.serialization import to_jsonable
 
 SECRET = "synthetic-private-error-content"

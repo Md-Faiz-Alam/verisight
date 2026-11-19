@@ -72,7 +72,7 @@ function Kpis({ data }: { data: Dashboard }) {
   );
 }
 
-export function Overview({
+export function Dashboard({
   data,
   loading,
   error,

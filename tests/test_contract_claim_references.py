@@ -14,8 +14,8 @@ from verisight.analysis.result import AnalysisResultBuilder
 from verisight.cli import main
 from verisight.execution.claim_verification import ClaimOperation
 from verisight.execution.exceptions import SynthesisValidationError
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import ClaimOutputContract
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer

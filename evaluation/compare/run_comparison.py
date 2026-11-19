@@ -18,10 +18,10 @@ kept. A run stops after three provider errors in a row and later continues with 
 questions it has not answered, so quota problems never cost an attempt.
 
 Usage (PowerShell, from the repository root, venv active):
-    python evaluation\\baseline\\run_baseline_eval.py --root <dir> --freeze
-    python evaluation\\baseline\\run_baseline_eval.py --root <dir> --run plain numbers
-    python evaluation\\baseline\\run_baseline_eval.py --root <dir> --run full
-    python evaluation\\baseline\\run_baseline_eval.py --root <dir> --report
+    python evaluation\\compare\\run_comparison.py --root <dir> --freeze
+    python evaluation\\compare\\run_comparison.py --root <dir> --run plain numbers
+    python evaluation\\compare\\run_comparison.py --root <dir> --run full
+    python evaluation\\compare\\run_comparison.py --root <dir> --report
 """
 
 import argparse

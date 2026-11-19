@@ -4,10 +4,10 @@ import pytest
 
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
 from verisight.ingestion.schema import DatasetSchema

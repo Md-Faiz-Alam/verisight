@@ -185,7 +185,7 @@ export interface Answer {
   elapsed_seconds?: number;
 }
 
-export type View = "overview" | "ask" | "explore" | "quality" | "model";
+export type View = "dashboard" | "ask" | "explore" | "quality" | "model";
 
 export interface Turn {
   id: number;

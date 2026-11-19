@@ -14,8 +14,8 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
-from verisight.analytics.dashboard import DashboardBuilder
 from verisight.config import Settings
+from verisight.dashboards.dashboard import DashboardBuilder
 from verisight.exceptions import ConfigurationError
 from verisight.execution.context import PopulationFilter
 from verisight.execution.gemini import (
@@ -26,7 +26,7 @@ from verisight.execution.investigation_result import (
     ClaimOutputContract,
     InvestigationResult,
 )
-from verisight.service import VeriSight
+from verisight.facade import VeriSight
 from verisight.web import create_app
 from verisight.web.__main__ import main as serve
 from verisight.web.app import OWNER_TOKEN_HEADER, _browser_safe

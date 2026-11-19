@@ -2,7 +2,6 @@
 
 import json
 
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
@@ -12,6 +11,7 @@ from verisight.execution.investigation_prompting import (
     INVESTIGATION_REPETITION_RULES,
     INVESTIGATION_STEP_BUDGET_RULES,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.prompt_budget import (
     PromptBudget,
     PromptBudgetExceededError,

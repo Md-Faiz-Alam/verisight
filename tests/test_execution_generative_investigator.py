@@ -12,7 +12,7 @@ from verisight.execution.decisions import (
 from verisight.execution.exceptions import InvestigationError
 from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
 from verisight.execution.generative_investigator import GenerativeInvestigator
-from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.ingestion.schema import (
     ColumnSchema,
@@ -21,7 +21,7 @@ from verisight.ingestion.schema import (
     TableSchema,
 )
 from verisight.profiling.models import DatasetProfile
-from verisight.public_api import run_public_operation
+from verisight.safe_operation import run_public_operation
 
 
 class StubTextGenerationClient:

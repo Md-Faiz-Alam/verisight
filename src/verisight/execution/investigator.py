@@ -3,7 +3,7 @@
 from typing import Protocol
 
 from verisight.execution.decisions import InvestigationDecision
-from verisight.execution.investigation import InvestigationState
+from verisight.execution.investigation_state import InvestigationState
 
 
 class Investigator(Protocol):

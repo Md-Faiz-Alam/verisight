@@ -11,7 +11,7 @@ separate questions. The current verifier addresses the first.
 
 ## Facade and deterministic processing
 
-`VeriSight` in `src/verisight/service.py` exposes `analyze`, `plan`, `execute`,
+`VeriSight` in `src/verisight/facade.py` exposes `analyze`, `plan`, `execute`,
 `ask`, and `investigate`. Inputs accept a string path, a `Path`, or an iterable of
 either. Empty collections and invalid entries are rejected.
 

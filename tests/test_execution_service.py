@@ -11,8 +11,8 @@ from verisight.execution.exceptions import (
     QueryTimeoutError,
     QueryValidationError,
 )
-from verisight.execution.execution import QueryExecution
 from verisight.execution.planning import QueryPlan, QueryRequest
+from verisight.execution.query_execution import QueryExecution
 from verisight.execution.repair import QueryRepairRequest
 from verisight.execution.service import AnalyticalExecutionService
 from verisight.ingestion.models import (

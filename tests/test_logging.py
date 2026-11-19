@@ -36,15 +36,15 @@ def test_configure_logging_does_not_duplicate_handlers() -> None:
 
 
 def test_get_logger_adds_verisight_namespace() -> None:
-    logger = get_logger("analytics")
+    logger = get_logger("dashboards")
 
-    assert logger.name == "verisight.analytics"
+    assert logger.name == "verisight.dashboards"
 
 
 def test_get_logger_preserves_existing_verisight_namespace() -> None:
-    logger = get_logger("verisight.analytics")
+    logger = get_logger("verisight.dashboards")
 
-    assert logger.name == "verisight.analytics"
+    assert logger.name == "verisight.dashboards"
 
 
 def test_configured_logger_writes_message_to_stdout(

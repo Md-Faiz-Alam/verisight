@@ -11,8 +11,8 @@ from verisight.execution.generative_investigator import (
     GenerativeInvestigator,
 )
 from verisight.execution.incomplete_evidence import IncompleteEvidenceError
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import InvestigationStatus
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
 from verisight.execution.orchestration import InvestigationOrchestrator

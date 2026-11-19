@@ -17,7 +17,6 @@ from typing import Literal
 import sqlglot
 from sqlglot import exp
 
-from verisight.execution.analytical import AnalyticalQueryRunner
 from verisight.execution.claim_verification import (
     MAX_ROUNDED_PLACES,
     DecimalRoundingPolicy,
@@ -31,6 +30,7 @@ from verisight.execution.exceptions import (
 from verisight.execution.gemini import GeminiGenerationError
 from verisight.execution.models import QueryResult
 from verisight.execution.prompt_budget import PromptBudgetExceededError
+from verisight.execution.query_runner import AnalyticalQueryRunner
 from verisight.execution.question_terms import population_terms
 
 CROSS_CHECK_COLUMN = "cross_check_answer"

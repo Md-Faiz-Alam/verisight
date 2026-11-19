@@ -7,14 +7,14 @@ import pytest
 
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder
-from verisight.execution.generative import GenerativeQueryPlanner
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.generative_repair import GenerativeQueryRepairer
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_compaction import InvestigationCompaction
 from verisight.execution.investigation_prompting import (
     INVESTIGATION_RELATION_NAMING_RULE,
     InvestigationPromptBuilder,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.repair_prompting import UNKNOWN_RELATION_DIAGNOSTIC
 from verisight.execution.service import AnalyticalExecutionService
 from verisight.ingestion.models import LoadedDataset, LoadedTable, SourceMetadata

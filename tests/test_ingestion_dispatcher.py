@@ -14,7 +14,7 @@ from verisight.ingestion.exceptions import (
     UnsupportedFileTypeError,
 )
 from verisight.ingestion.models import CsvReadOptions, LoadedTable, LoadedWorkbook
-from verisight.public_api import run_public_operation
+from verisight.safe_operation import run_public_operation
 
 
 def test_file_loader_dispatches_csv(tmp_path: Path) -> None:

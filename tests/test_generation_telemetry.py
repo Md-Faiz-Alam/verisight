@@ -309,7 +309,7 @@ def test_settings_pass_sampling_to_every_client() -> None:
     from verisight.execution.structured_synthesis import (
         StructuredInvestigationSynthesizer,
     )
-    from verisight.service import VeriSight
+    from verisight.facade import VeriSight
 
     settings = Settings(
         _env_file=None,  # type: ignore[call-arg]

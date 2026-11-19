@@ -12,13 +12,13 @@ from verisight.execution.exceptions import (
     QueryExecutionError,
     QueryValidationError,
 )
-from verisight.execution.validation import (
+from verisight.execution.sql_safety import (
     AnalyticalQueryValidator,
     _mask_sql_literals_and_comments,
     validate_dataset_relations,
 )
 from verisight.ingestion.models import LoadedDataset, LoadedTable, SourceMetadata
-from verisight.public_api import run_public_operation
+from verisight.safe_operation import run_public_operation
 
 
 @pytest.mark.parametrize(
@@ -271,7 +271,7 @@ def test_dataset_relation_validation_rejects_sql_analysis_errors(
 ) -> None:
     with (
         patch(
-            "verisight.execution.validation.sqlglot.parse_one",
+            "verisight.execution.sql_safety.sqlglot.parse_one",
             side_effect=error,
         ),
         pytest.raises(
@@ -288,7 +288,7 @@ def test_dataset_relation_validation_rejects_sql_analysis_errors(
 def test_dataset_relation_validation_rejects_unresolved_scopes() -> None:
     with (
         patch(
-            "verisight.execution.validation.traverse_scope",
+            "verisight.execution.sql_safety.traverse_scope",
             return_value=[],
         ),
         pytest.raises(
@@ -308,7 +308,7 @@ def test_dataset_relation_validation_rejects_unsupported_source() -> None:
 
     with (
         patch(
-            "verisight.execution.validation.traverse_scope",
+            "verisight.execution.sql_safety.traverse_scope",
             return_value=[UnsupportedScope()],
         ),
         pytest.raises(

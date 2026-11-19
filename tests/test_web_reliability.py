@@ -18,8 +18,8 @@ from verisight import VeriSight
 from verisight.config import Settings
 from verisight.execution.deadline import InvestigationDeadlineExceeded
 from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
-from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 from verisight.web import create_app
 from verisight.web.app import OWNER_TOKEN_HEADER

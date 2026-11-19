@@ -4,10 +4,10 @@ import pytest
 
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import AnalysisResultBuilder
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_prompting import (
     InvestigationPromptBuilder,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.prompt_budget import PromptBudgetExceededError
 from verisight.ingestion.schema import DatasetSchema
 from verisight.profiling.models import DatasetProfile

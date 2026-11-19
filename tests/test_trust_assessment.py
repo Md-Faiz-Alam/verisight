@@ -25,8 +25,8 @@ from verisight.execution.direct import Clarification, DirectAnswer, DirectAnswer
 from verisight.execution.engine import DuckDBExecutor
 from verisight.execution.exceptions import QueryRuntimeError
 from verisight.execution.gemini import GeminiTransientError
-from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.investigation_result import (
     ClaimOutputContract,
     InvestigationResult,

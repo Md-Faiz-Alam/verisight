@@ -220,8 +220,8 @@ def test_the_website_hides_a_number_the_data_cannot_hold(tmp_path: Path) -> None
     from fastapi.testclient import TestClient
 
     from verisight import VeriSight
-    from verisight.execution.generative import GenerativeQueryPlanner
     from verisight.execution.generative_investigator import GenerativeInvestigator
+    from verisight.execution.generative_planner import GenerativeQueryPlanner
     from verisight.execution.structured_synthesis import (
         StructuredInvestigationSynthesizer,
     )

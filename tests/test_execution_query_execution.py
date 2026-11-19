@@ -1,6 +1,6 @@
-from verisight.execution.execution import QueryExecution
 from verisight.execution.models import QueryResult
 from verisight.execution.planning import QueryPlan
+from verisight.execution.query_execution import QueryExecution
 
 
 def test_query_execution_preserves_successful_plan_and_result() -> None:

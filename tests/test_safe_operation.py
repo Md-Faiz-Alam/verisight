@@ -23,7 +23,7 @@ from verisight.execution.gemini import (
 )
 from verisight.execution.prompt_budget import PromptBudget
 from verisight.ingestion.exceptions import FileValidationError
-from verisight.public_api import run_public_operation
+from verisight.safe_operation import run_public_operation
 from verisight.serialization import to_jsonable
 
 
@@ -216,7 +216,7 @@ def test_public_operation_logs_unexpected_error(
     def failing_operation() -> int:
         raise ZeroDivisionError("Sensitive calculation details")
 
-    with caplog.at_level(logging.ERROR, logger="verisight.public_api"):
+    with caplog.at_level(logging.ERROR, logger="verisight.safe_operation"):
         result = run_public_operation(failing_operation)
 
     assert result.succeeded is False
@@ -224,7 +224,7 @@ def test_public_operation_logs_unexpected_error(
     assert result.error.code is ErrorCode.INTERNAL_ERROR
 
     records = [
-        record for record in caplog.records if record.name == "verisight.public_api"
+        record for record in caplog.records if record.name == "verisight.safe_operation"
     ]
 
     assert len(records) == 1
@@ -242,13 +242,13 @@ def test_public_operation_does_not_log_expected_errors(
     def failing_operation() -> int:
         raise QueryValidationError("Sensitive SQL contents")
 
-    with caplog.at_level(logging.ERROR, logger="verisight.public_api"):
+    with caplog.at_level(logging.ERROR, logger="verisight.safe_operation"):
         result = run_public_operation(failing_operation)
 
     assert result.error is not None
     assert result.error.code is ErrorCode.QUERY_VALIDATION_ERROR
     assert not [
-        record for record in caplog.records if record.name == "verisight.public_api"
+        record for record in caplog.records if record.name == "verisight.safe_operation"
     ]
 
 
@@ -263,7 +263,7 @@ def test_public_operation_logs_no_exception_details(
         except ValueError as exc:
             raise RuntimeError(f"Dataset value: {secret}") from exc
 
-    with caplog.at_level(logging.ERROR, logger="verisight.public_api"):
+    with caplog.at_level(logging.ERROR, logger="verisight.safe_operation"):
         result = run_public_operation(failing_operation)
 
     assert result.error is not None

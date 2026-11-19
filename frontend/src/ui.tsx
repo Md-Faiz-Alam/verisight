@@ -3,7 +3,7 @@ import { cellText, compact, downloadCsv, toNumber } from "./lib";
 import type { Cell, TrustCheck, TrustLevel } from "./types";
 
 const PATHS: Record<string, string> = {
-  overview: "M3 13h8V3H3zM13 21h8V11h-8zM13 3v6h8V3zM3 21h8v-6H3z",
+  dashboard: "M3 13h8V3H3zM13 21h8V11h-8zM13 3v6h8V3zM3 21h8v-6H3z",
   ask: "M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12Z",
   explore: "M3 5h18M3 12h18M3 19h18M8 5v14M16 5v14",
   quality: "M12 3l8 4v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7zM9 12l2 2 4-4",

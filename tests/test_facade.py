@@ -22,8 +22,7 @@ from verisight.execution.exceptions import (
     QueryRuntimeError,
     QueryValidationError,
 )
-from verisight.execution.generative import GenerativeQueryPlanner
-from verisight.execution.investigation import InvestigationState
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.investigation_parsing import (
     INVESTIGATION_DECISION_JSON_SCHEMA,
 )
@@ -31,10 +30,11 @@ from verisight.execution.investigation_result import (
     InvestigationResult,
     InvestigationStatus,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.execution.repair import QueryRepairRequest
+from verisight.facade import VeriSight, _LazyGeminiQueryRepairer
 from verisight.ingestion.exceptions import FileValidationError
-from verisight.service import VeriSight, _LazyGeminiQueryRepairer
 
 
 class StubQueryPlanner:
@@ -427,7 +427,7 @@ def test_verisight_builds_gemini_planner_from_settings() -> None:
         allow_llm_data_disclosure=True,
     )
 
-    with patch("verisight.service.GeminiTextGenerationClient") as client_class:
+    with patch("verisight.facade.GeminiTextGenerationClient") as client_class:
         service = VeriSight(settings=settings)
 
     client_class.assert_called_once_with(
@@ -452,7 +452,7 @@ def test_explicit_planner_takes_precedence_over_gemini_settings() -> None:
         gemini_model="test-model",
     )
 
-    with patch("verisight.service.GeminiTextGenerationClient") as client_class:
+    with patch("verisight.facade.GeminiTextGenerationClient") as client_class:
         service = VeriSight(
             settings=settings,
             planner=planner,
@@ -467,7 +467,7 @@ def test_verisight_does_not_build_gemini_planner_without_api_key() -> None:
         gemini_api_key=None,
     )
 
-    with patch("verisight.service.GeminiTextGenerationClient") as client_class:
+    with patch("verisight.facade.GeminiTextGenerationClient") as client_class:
         service = VeriSight(settings=settings)
 
     client_class.assert_not_called()
@@ -498,7 +498,7 @@ def test_default_gemini_planner_can_answer_question(
     )
 
     with patch(
-        "verisight.service.GeminiTextGenerationClient",
+        "verisight.facade.GeminiTextGenerationClient",
         return_value=generated_client,
     ):
         result = VeriSight(settings=settings).ask(
@@ -842,7 +842,7 @@ def test_public_investigate_builds_default_gemini_components(
 
     with (
         patch(
-            "verisight.service.GeminiTextGenerationClient",
+            "verisight.facade.GeminiTextGenerationClient",
             return_value=investigator_client,
         ) as investigator_class,
         patch(
@@ -959,7 +959,7 @@ def test_default_gemini_investigator_can_request_observe_and_synthesize(
 
     with (
         patch(
-            "verisight.service.GeminiTextGenerationClient",
+            "verisight.facade.GeminiTextGenerationClient",
             return_value=investigator_client,
         ),
         patch(
@@ -1031,7 +1031,7 @@ def test_default_gemini_synthesis_preserves_evidence_on_plain_text(
 
     with (
         patch(
-            "verisight.service.GeminiTextGenerationClient",
+            "verisight.facade.GeminiTextGenerationClient",
             return_value=investigator_client,
         ),
         patch(
@@ -1200,7 +1200,7 @@ def test_public_ask_repairs_with_default_gemini_client(
             )
 
     with patch(
-        "verisight.service.GeminiTextGenerationClient",
+        "verisight.facade.GeminiTextGenerationClient",
         return_value=generated_client,
     ) as client_class:
         result = VeriSight(
@@ -1293,10 +1293,10 @@ def test_lazy_gemini_repairer_reuses_initialized_client() -> None:
 
     with (
         patch(
-            "verisight.service.GeminiTextGenerationClient",
+            "verisight.facade.GeminiTextGenerationClient",
             return_value=generated_client,
         ) as client_class,
-        patch("verisight.service.GenerativeQueryRepairer") as repairer_class,
+        patch("verisight.facade.GenerativeQueryRepairer") as repairer_class,
     ):
         repairer_instance = repairer_class.return_value
         repairer_instance.repair.return_value = expected_plan
@@ -1322,7 +1322,7 @@ def test_gemini_client_requires_explicit_data_disclosure_permission() -> None:
         allow_llm_data_disclosure=False,
     )
 
-    with patch("verisight.service.GeminiTextGenerationClient") as client_class:
+    with patch("verisight.facade.GeminiTextGenerationClient") as client_class:
         service = VeriSight(settings=settings)
 
         assert service._planner is None
@@ -1345,7 +1345,7 @@ def test_lazy_gemini_repairer_requires_disclosure_permission() -> None:
 
     repairer = _LazyGeminiQueryRepairer(settings)
 
-    with patch("verisight.service.GeminiTextGenerationClient") as client_class:
+    with patch("verisight.facade.GeminiTextGenerationClient") as client_class:
         with pytest.raises(
             QueryPlanningError,
             match="Gemini SQL repair requires configured credentials.",
@@ -1416,3 +1416,10 @@ def test_plan_rejects_invalid_population_before_planning(tmp_path: Path) -> None
             population=(PopulationFilter("missing", "state", ("active",)),),
         )
     planner.plan.assert_not_called()
+
+
+def test_the_old_import_path_still_gives_the_facade() -> None:
+    from verisight.facade import VeriSight as current
+    from verisight.service import VeriSight as old
+
+    assert old is current

@@ -12,7 +12,7 @@ from verisight.execution.formatting import (
     QueryContextFormatter,
     format_coded_years,
 )
-from verisight.execution.investigation import (
+from verisight.execution.investigation_state import (
     FailedQueryAttempt,
     InvestigationState,
 )

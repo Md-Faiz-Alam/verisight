@@ -12,8 +12,8 @@ from verisight.analysis.result import AnalysisResultBuilder, DatasetAnalysisResu
 from verisight.config import Settings
 from verisight.execution.exceptions import InvestigationError
 from verisight.execution.gemini import GeminiGenerationError
-from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.investigation_result import InvestigationStatus
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.planning import QueryPlan, QueryRequest

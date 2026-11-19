@@ -15,11 +15,11 @@ from verisight.execution.claim_verification import (
     NumericalClaimVerifier,
     VerificationStatus,
 )
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import (
     ClaimOutputContract,
     InvestigationResult,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer

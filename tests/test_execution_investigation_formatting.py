@@ -8,12 +8,12 @@ from verisight.analysis.insights import (
 from verisight.analysis.models import DatasetAnalysis
 from verisight.analysis.result import DatasetAnalysisResult
 from verisight.analysis.summary import AnalysisSummary
-from verisight.execution.investigation import (
-    FailedQueryAttempt,
-    InvestigationState,
-)
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
+)
+from verisight.execution.investigation_state import (
+    FailedQueryAttempt,
+    InvestigationState,
 )
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation

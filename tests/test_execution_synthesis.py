@@ -19,13 +19,13 @@ from verisight.execution.claim_verification import (
 from verisight.execution.decisions import InvestigationAction, InvestigationDecision
 from verisight.execution.exceptions import InvestigationError, SynthesisValidationError
 from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import (
     ClaimOutputContract,
     InvestigationResult,
     InvestigationStatus,
     SynthesisFailureKind,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.models import QueryResult
 from verisight.execution.narrative_audit import (
     audit_narrative_digit_coverage,
@@ -796,7 +796,7 @@ def test_structured_synthesis_omits_profiles_but_preserves_complete_sql_evidence
 ) -> None:
     from dataclasses import replace
 
-    from verisight.execution.investigation import FailedQueryAttempt
+    from verisight.execution.investigation_state import FailedQueryAttempt
     from verisight.quality.models import (
         QualityIssue,
         QualityIssueType,

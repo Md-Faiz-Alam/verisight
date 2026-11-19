@@ -19,12 +19,12 @@ from verisight.execution.claim_verification import (
     VerificationStatus,
 )
 from verisight.execution.decisions import InvestigationAction, InvestigationDecision
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import (
     ClaimOutputContract,
     InvestigationResult,
     InvestigationStatus,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.models import QueryResult
 from verisight.execution.observations import QueryObservation
 from verisight.execution.planning import QueryPlan, QueryRequest

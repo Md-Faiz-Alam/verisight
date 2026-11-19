@@ -28,7 +28,7 @@ from verisight.execution.exceptions import (
     QueryValidationError,
 )
 from verisight.execution.models import QueryResult, QueryRow, QueryScalar
-from verisight.execution.validation import (
+from verisight.execution.sql_safety import (
     AnalyticalQueryValidator,
     validate_dataset_relations,
 )

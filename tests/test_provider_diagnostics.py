@@ -24,12 +24,12 @@ from verisight.execution.gemini import (
     GeminiTransientError,
     ProviderFailureDiagnostics,
 )
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import (
     InvestigationStatus,
     SynthesisFailure,
     SynthesisFailureKind,
 )
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.planning import QueryPlan, QueryRequest
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 from verisight.serialization import to_jsonable

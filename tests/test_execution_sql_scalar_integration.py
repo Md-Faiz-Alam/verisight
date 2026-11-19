@@ -20,8 +20,8 @@ from verisight.execution.exceptions import (
     QueryRuntimeError,
     QueryValidationError,
 )
-from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.investigation_formatting import (
     InvestigationStateFormatter,
 )
@@ -39,7 +39,7 @@ from verisight.ingestion.models import (
 from verisight.ingestion.schema import SchemaInferer
 from verisight.ingestion.service import DatasetLoader
 from verisight.profiling.models import DatasetProfile
-from verisight.public_api import run_public_operation
+from verisight.safe_operation import run_public_operation
 from verisight.serialization import to_jsonable
 
 

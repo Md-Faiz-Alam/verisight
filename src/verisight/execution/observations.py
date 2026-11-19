@@ -3,8 +3,8 @@
 from dataclasses import dataclass, field
 
 from verisight.execution.context import CountingGrainReview, PopulationReview
-from verisight.execution.execution import QueryRepairAttempt
 from verisight.execution.models import QueryResult
+from verisight.execution.query_execution import QueryRepairAttempt
 
 
 @dataclass(frozen=True, slots=True)

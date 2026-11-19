@@ -15,11 +15,11 @@ from verisight.execution.decisions import (
 )
 from verisight.execution.exceptions import QueryPlanningError
 from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
-from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.generative_repair import GenerativeQueryRepairer
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import InvestigationStatus
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.orchestration import InvestigationOrchestrator
 from verisight.execution.service import AnalyticalExecutionService
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
@@ -30,7 +30,7 @@ from verisight.ingestion.models import (
 )
 from verisight.ingestion.schema import SchemaInferer
 from verisight.profiling.models import DatasetProfile
-from verisight.public_api import run_public_operation
+from verisight.safe_operation import run_public_operation
 
 
 class FailingGenerationClient:
@@ -839,8 +839,8 @@ def test_scoped_investigation_enforces_population_and_preserves_provenance(
     from verisight import VeriSight
     from verisight.config import Settings
     from verisight.execution.context import PopulationFilter
-    from verisight.execution.investigation import FailedQueryAttempt
     from verisight.execution.investigation_compaction import InvestigationCompaction
+    from verisight.execution.investigation_state import FailedQueryAttempt
     from verisight.serialization import to_jsonable
 
     case = CHALLENGE_CASES["education_entities"]

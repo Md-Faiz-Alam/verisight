@@ -13,17 +13,17 @@ import pytest
 from verisight import VeriSight
 from verisight.config import Settings
 from verisight.execution.gemini import GeminiGenerationError, GeminiTransientError
-from verisight.execution.generative import GenerativeQueryPlanner
 from verisight.execution.generative_investigator import GenerativeInvestigator
+from verisight.execution.generative_planner import GenerativeQueryPlanner
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
 
 
 def _load() -> ModuleType:
-    path = Path(__file__).parent.parent / "evaluation/baseline/run_baseline_eval.py"
-    spec = importlib.util.spec_from_file_location("run_baseline_eval", path)
+    path = Path(__file__).parent.parent / "evaluation/compare/run_comparison.py"
+    spec = importlib.util.spec_from_file_location("run_comparison", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    sys.modules["run_baseline_eval"] = module
+    sys.modules["run_comparison"] = module
     spec.loader.exec_module(module)
     return module
 

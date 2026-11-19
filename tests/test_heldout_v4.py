@@ -38,8 +38,8 @@ def _module(name: str, path: Path) -> ModuleType:
 
 heldout = _module("make_heldout_v4", ROOT / "make_heldout_v4.py")
 runner = _module(
-    "run_baseline_eval_for_heldout_v4",
-    ROOT.parent / "baseline" / "run_baseline_eval.py",
+    "run_comparison_for_heldout_v4",
+    ROOT.parent / "compare" / "run_comparison.py",
 )
 
 

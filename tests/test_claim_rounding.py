@@ -19,8 +19,8 @@ from verisight.execution.claim_verification import (
     VerificationStatus,
 )
 from verisight.execution.exceptions import InvestigationError
-from verisight.execution.investigation import InvestigationState
 from verisight.execution.investigation_result import InvestigationResult
+from verisight.execution.investigation_state import InvestigationState
 from verisight.execution.models import QueryResult, QueryScalar
 from verisight.execution.observations import QueryObservation
 from verisight.execution.structured_synthesis import StructuredInvestigationSynthesizer
