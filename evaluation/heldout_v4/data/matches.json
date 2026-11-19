@@ -1,0 +1,3242 @@
+[
+ {
+  "match_id": 1,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 7648
+ },
+ {
+  "match_id": 2,
+  "season": 2023,
+  "home_team": "Harriers",
+  "away_team": "Rangers",
+  "home_goals": 4,
+  "away_goals": 3,
+  "attendance": 36772
+ },
+ {
+  "match_id": 3,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 19759
+ },
+ {
+  "match_id": 4,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 18580
+ },
+ {
+  "match_id": 5,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 47886
+ },
+ {
+  "match_id": 6,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Town",
+  "home_goals": 4,
+  "away_goals": 0,
+  "attendance": 39677
+ },
+ {
+  "match_id": 7,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "United",
+  "home_goals": 4,
+  "away_goals": 2,
+  "attendance": 36897
+ },
+ {
+  "match_id": 8,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Celtic",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 25471
+ },
+ {
+  "match_id": 9,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Rangers",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 39645
+ },
+ {
+  "match_id": 10,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Celtic",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 39782
+ },
+ {
+  "match_id": 11,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Town",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 12231
+ },
+ {
+  "match_id": 12,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 36834
+ },
+ {
+  "match_id": 13,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": 14607
+ },
+ {
+  "match_id": 14,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 46497
+ },
+ {
+  "match_id": 15,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "Rangers",
+  "home_goals": 3,
+  "away_goals": 4,
+  "attendance": 42628
+ },
+ {
+  "match_id": 16,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Town",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 5314
+ },
+ {
+  "match_id": 17,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Harriers",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 53648
+ },
+ {
+  "match_id": 18,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Harriers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 31495
+ },
+ {
+  "match_id": 19,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Celtic",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 55554
+ },
+ {
+  "match_id": 20,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 5875
+ },
+ {
+  "match_id": 21,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Rovers",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 40278
+ },
+ {
+  "match_id": 22,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 59068
+ },
+ {
+  "match_id": 23,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Town",
+  "home_goals": 4,
+  "away_goals": 1,
+  "attendance": 39512
+ },
+ {
+  "match_id": 24,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 37850
+ },
+ {
+  "match_id": 25,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Harriers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 50572
+ },
+ {
+  "match_id": 26,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Celtic",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 11879
+ },
+ {
+  "match_id": 27,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Celtic",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 8586
+ },
+ {
+  "match_id": 28,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "City",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 34555
+ },
+ {
+  "match_id": 29,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 54189
+ },
+ {
+  "match_id": 30,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Town",
+  "home_goals": 4,
+  "away_goals": 1,
+  "attendance": 43410
+ },
+ {
+  "match_id": 31,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Albion",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 28840
+ },
+ {
+  "match_id": 32,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "Wanderers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 33412
+ },
+ {
+  "match_id": 33,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Town",
+  "home_goals": 0,
+  "away_goals": 3,
+  "attendance": 56820
+ },
+ {
+  "match_id": 34,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "City",
+  "home_goals": 5,
+  "away_goals": 2,
+  "attendance": 52102
+ },
+ {
+  "match_id": 35,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 51330
+ },
+ {
+  "match_id": 36,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 55239
+ },
+ {
+  "match_id": 37,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Athletic",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 55399
+ },
+ {
+  "match_id": 38,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "Athletic",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 53539
+ },
+ {
+  "match_id": 39,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "United",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 7724
+ },
+ {
+  "match_id": 40,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 27768
+ },
+ {
+  "match_id": 41,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Rovers",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 15856
+ },
+ {
+  "match_id": 42,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Rangers",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 22974
+ },
+ {
+  "match_id": 43,
+  "season": 2023,
+  "home_team": "Harriers",
+  "away_team": "Celtic",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 25040
+ },
+ {
+  "match_id": 44,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Celtic",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 25407
+ },
+ {
+  "match_id": 45,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Harriers",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 14124
+ },
+ {
+  "match_id": 46,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Albion",
+  "home_goals": 5,
+  "away_goals": 1,
+  "attendance": 27957
+ },
+ {
+  "match_id": 47,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "City",
+  "home_goals": 4,
+  "away_goals": 1,
+  "attendance": 16066
+ },
+ {
+  "match_id": 48,
+  "season": 2023,
+  "home_team": "Harriers",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 14697
+ },
+ {
+  "match_id": 49,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Rovers",
+  "home_goals": 0,
+  "away_goals": 3,
+  "attendance": 48781
+ },
+ {
+  "match_id": 50,
+  "season": 2023,
+  "home_team": "Harriers",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 38829
+ },
+ {
+  "match_id": 51,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Rangers",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 22718
+ },
+ {
+  "match_id": 52,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 54518
+ },
+ {
+  "match_id": 53,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 52610
+ },
+ {
+  "match_id": 54,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Rovers",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 58316
+ },
+ {
+  "match_id": 55,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "City",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 45401
+ },
+ {
+  "match_id": 56,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 24486
+ },
+ {
+  "match_id": 57,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 49010
+ },
+ {
+  "match_id": 58,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 53929
+ },
+ {
+  "match_id": 59,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 57925
+ },
+ {
+  "match_id": 60,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "Harriers",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": null
+ },
+ {
+  "match_id": 61,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "Town",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": 29193
+ },
+ {
+  "match_id": 62,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 22926
+ },
+ {
+  "match_id": 63,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Town",
+  "home_goals": 3,
+  "away_goals": 0,
+  "attendance": 45520
+ },
+ {
+  "match_id": 64,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "City",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 25542
+ },
+ {
+  "match_id": 65,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 21571
+ },
+ {
+  "match_id": 66,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Town",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 14504
+ },
+ {
+  "match_id": 67,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "City",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 29313
+ },
+ {
+  "match_id": 68,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 53765
+ },
+ {
+  "match_id": 69,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Town",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 40140
+ },
+ {
+  "match_id": 70,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "City",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 27762
+ },
+ {
+  "match_id": 71,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Rangers",
+  "home_goals": 4,
+  "away_goals": 0,
+  "attendance": 16808
+ },
+ {
+  "match_id": 72,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "Town",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 37642
+ },
+ {
+  "match_id": 73,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Wanderers",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 5434
+ },
+ {
+  "match_id": 74,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Albion",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 45563
+ },
+ {
+  "match_id": 75,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Wanderers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 12950
+ },
+ {
+  "match_id": 76,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 43646
+ },
+ {
+  "match_id": 77,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Albion",
+  "home_goals": 1,
+  "away_goals": 4,
+  "attendance": null
+ },
+ {
+  "match_id": 78,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Harriers",
+  "home_goals": 4,
+  "away_goals": 1,
+  "attendance": 43616
+ },
+ {
+  "match_id": 79,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 5,
+  "attendance": 54990
+ },
+ {
+  "match_id": 80,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "Athletic",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": null
+ },
+ {
+  "match_id": 81,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 7163
+ },
+ {
+  "match_id": 82,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 14372
+ },
+ {
+  "match_id": 83,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 36940
+ },
+ {
+  "match_id": 84,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Wanderers",
+  "home_goals": 4,
+  "away_goals": 2,
+  "attendance": 52633
+ },
+ {
+  "match_id": 85,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": null
+ },
+ {
+  "match_id": 86,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Wanderers",
+  "home_goals": 3,
+  "away_goals": 4,
+  "attendance": 46626
+ },
+ {
+  "match_id": 87,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "United",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 52768
+ },
+ {
+  "match_id": 88,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": null
+ },
+ {
+  "match_id": 89,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 29835
+ },
+ {
+  "match_id": 90,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 27898
+ },
+ {
+  "match_id": 91,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Rangers",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 50001
+ },
+ {
+  "match_id": 92,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Harriers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 56869
+ },
+ {
+  "match_id": 93,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "Rangers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": null
+ },
+ {
+  "match_id": 94,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "Rovers",
+  "home_goals": 2,
+  "away_goals": 5,
+  "attendance": 45316
+ },
+ {
+  "match_id": 95,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "United",
+  "home_goals": 4,
+  "away_goals": 3,
+  "attendance": 49442
+ },
+ {
+  "match_id": 96,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 8848
+ },
+ {
+  "match_id": 97,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "City",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 41408
+ },
+ {
+  "match_id": 98,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Wanderers",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 30537
+ },
+ {
+  "match_id": 99,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 11897
+ },
+ {
+  "match_id": 100,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "Athletic",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 9192
+ },
+ {
+  "match_id": 101,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "Athletic",
+  "home_goals": 4,
+  "away_goals": 2,
+  "attendance": 27131
+ },
+ {
+  "match_id": 102,
+  "season": 2023,
+  "home_team": "Harriers",
+  "away_team": "Athletic",
+  "home_goals": 3,
+  "away_goals": 2,
+  "attendance": 14885
+ },
+ {
+  "match_id": 103,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 44696
+ },
+ {
+  "match_id": 104,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Athletic",
+  "home_goals": 3,
+  "away_goals": 0,
+  "attendance": 53252
+ },
+ {
+  "match_id": 105,
+  "season": 2023,
+  "home_team": "Harriers",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 24936
+ },
+ {
+  "match_id": 106,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "City",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 39211
+ },
+ {
+  "match_id": 107,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "Rovers",
+  "home_goals": 3,
+  "away_goals": 0,
+  "attendance": 56367
+ },
+ {
+  "match_id": 108,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Celtic",
+  "home_goals": 5,
+  "away_goals": 4,
+  "attendance": 59021
+ },
+ {
+  "match_id": 109,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Rovers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 20036
+ },
+ {
+  "match_id": 110,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "United",
+  "home_goals": 3,
+  "away_goals": 5,
+  "attendance": 47801
+ },
+ {
+  "match_id": 111,
+  "season": 2023,
+  "home_team": "United",
+  "away_team": "Rangers",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 37557
+ },
+ {
+  "match_id": 112,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Rangers",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": null
+ },
+ {
+  "match_id": 113,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 42369
+ },
+ {
+  "match_id": 114,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Wanderers",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 53686
+ },
+ {
+  "match_id": 115,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "United",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 43133
+ },
+ {
+  "match_id": 116,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Rangers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 21028
+ },
+ {
+  "match_id": 117,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": null
+ },
+ {
+  "match_id": 118,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Town",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 12250
+ },
+ {
+  "match_id": 119,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Athletic",
+  "home_goals": 3,
+  "away_goals": 3,
+  "attendance": 38615
+ },
+ {
+  "match_id": 120,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Athletic",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 30623
+ },
+ {
+  "match_id": 121,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Albion",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 48489
+ },
+ {
+  "match_id": 122,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "Wanderers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 13739
+ },
+ {
+  "match_id": 123,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Town",
+  "home_goals": 3,
+  "away_goals": 4,
+  "attendance": 34612
+ },
+ {
+  "match_id": 124,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Albion",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 59608
+ },
+ {
+  "match_id": 125,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Town",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 25014
+ },
+ {
+  "match_id": 126,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Rangers",
+  "home_goals": 5,
+  "away_goals": 0,
+  "attendance": 6718
+ },
+ {
+  "match_id": 127,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "Town",
+  "home_goals": 1,
+  "away_goals": 4,
+  "attendance": 59903
+ },
+ {
+  "match_id": 128,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": 30783
+ },
+ {
+  "match_id": 129,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 59928
+ },
+ {
+  "match_id": 130,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 30353
+ },
+ {
+  "match_id": 131,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Athletic",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 37629
+ },
+ {
+  "match_id": 132,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 37257
+ },
+ {
+  "match_id": 133,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Harriers",
+  "home_goals": 1,
+  "away_goals": 4,
+  "attendance": 7420
+ },
+ {
+  "match_id": 134,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "United",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 43573
+ },
+ {
+  "match_id": 135,
+  "season": 2023,
+  "home_team": "Harriers",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 54255
+ },
+ {
+  "match_id": 136,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Wanderers",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 40415
+ },
+ {
+  "match_id": 137,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "Wanderers",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": null
+ },
+ {
+  "match_id": 138,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 3,
+  "attendance": 21128
+ },
+ {
+  "match_id": 139,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Harriers",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 31805
+ },
+ {
+  "match_id": 140,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Harriers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 43703
+ },
+ {
+  "match_id": 141,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Athletic",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 45487
+ },
+ {
+  "match_id": 142,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 41168
+ },
+ {
+  "match_id": 143,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 31642
+ },
+ {
+  "match_id": 144,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 4,
+  "attendance": 27804
+ },
+ {
+  "match_id": 145,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Albion",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 43719
+ },
+ {
+  "match_id": 146,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Town",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 36681
+ },
+ {
+  "match_id": 147,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 42900
+ },
+ {
+  "match_id": 148,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Athletic",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 11433
+ },
+ {
+  "match_id": 149,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Athletic",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 20547
+ },
+ {
+  "match_id": 150,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "United",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 54520
+ },
+ {
+  "match_id": 151,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "Celtic",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 13593
+ },
+ {
+  "match_id": 152,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Town",
+  "home_goals": 3,
+  "away_goals": 2,
+  "attendance": 44107
+ },
+ {
+  "match_id": 153,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Wanderers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 37953
+ },
+ {
+  "match_id": 154,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Rovers",
+  "home_goals": 3,
+  "away_goals": 2,
+  "attendance": 27235
+ },
+ {
+  "match_id": 155,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Celtic",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 38780
+ },
+ {
+  "match_id": 156,
+  "season": 2023,
+  "home_team": "Wanderers",
+  "away_team": "Rovers",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 37234
+ },
+ {
+  "match_id": 157,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 22679
+ },
+ {
+  "match_id": 158,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "Town",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 55918
+ },
+ {
+  "match_id": 159,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "Celtic",
+  "home_goals": 3,
+  "away_goals": 0,
+  "attendance": 34530
+ },
+ {
+  "match_id": 160,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Rovers",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 11187
+ },
+ {
+  "match_id": 161,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "City",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 57070
+ },
+ {
+  "match_id": 162,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "Rovers",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 49487
+ },
+ {
+  "match_id": 163,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "City",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 45820
+ },
+ {
+  "match_id": 164,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Rangers",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 28191
+ },
+ {
+  "match_id": 165,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "Wanderers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 39104
+ },
+ {
+  "match_id": 166,
+  "season": 2023,
+  "home_team": "Rovers",
+  "away_team": "Harriers",
+  "home_goals": 1,
+  "away_goals": 4,
+  "attendance": 43051
+ },
+ {
+  "match_id": 167,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Rangers",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 27322
+ },
+ {
+  "match_id": 168,
+  "season": 2023,
+  "home_team": "Harriers",
+  "away_team": "Rangers",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 10583
+ },
+ {
+  "match_id": 169,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Athletic",
+  "home_goals": 0,
+  "away_goals": 3,
+  "attendance": 13721
+ },
+ {
+  "match_id": 170,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 45534
+ },
+ {
+  "match_id": 171,
+  "season": 2023,
+  "home_team": "Celtic",
+  "away_team": "City",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 50255
+ },
+ {
+  "match_id": 172,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 48798
+ },
+ {
+  "match_id": 173,
+  "season": 2023,
+  "home_team": "Harriers",
+  "away_team": "Albion",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 20640
+ },
+ {
+  "match_id": 174,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 37863
+ },
+ {
+  "match_id": 175,
+  "season": 2023,
+  "home_team": "Town",
+  "away_team": "Wanderers",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 36481
+ },
+ {
+  "match_id": 176,
+  "season": 2023,
+  "home_team": "Albion",
+  "away_team": "Athletic",
+  "home_goals": 3,
+  "away_goals": 2,
+  "attendance": 45194
+ },
+ {
+  "match_id": 177,
+  "season": 2023,
+  "home_team": "Harriers",
+  "away_team": "Celtic",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": 22856
+ },
+ {
+  "match_id": 178,
+  "season": 2023,
+  "home_team": "Athletic",
+  "away_team": "Harriers",
+  "home_goals": 3,
+  "away_goals": 0,
+  "attendance": 17617
+ },
+ {
+  "match_id": 179,
+  "season": 2023,
+  "home_team": "City",
+  "away_team": "Celtic",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 28604
+ },
+ {
+  "match_id": 180,
+  "season": 2023,
+  "home_team": "Rangers",
+  "away_team": "Rovers",
+  "home_goals": 4,
+  "away_goals": 3,
+  "attendance": 34579
+ },
+ {
+  "match_id": 181,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 10352
+ },
+ {
+  "match_id": 182,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "Rovers",
+  "home_goals": 4,
+  "away_goals": 0,
+  "attendance": 45806
+ },
+ {
+  "match_id": 183,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Wanderers",
+  "home_goals": 4,
+  "away_goals": 1,
+  "attendance": null
+ },
+ {
+  "match_id": 184,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "Albion",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 19761
+ },
+ {
+  "match_id": 185,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 40881
+ },
+ {
+  "match_id": 186,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Rovers",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 8148
+ },
+ {
+  "match_id": 187,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Town",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 40427
+ },
+ {
+  "match_id": 188,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Rovers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 21237
+ },
+ {
+  "match_id": 189,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "City",
+  "home_goals": 3,
+  "away_goals": 2,
+  "attendance": 33508
+ },
+ {
+  "match_id": 190,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 55522
+ },
+ {
+  "match_id": 191,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "City",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": null
+ },
+ {
+  "match_id": 192,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Celtic",
+  "home_goals": 5,
+  "away_goals": 1,
+  "attendance": 8760
+ },
+ {
+  "match_id": 193,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "Rangers",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 42320
+ },
+ {
+  "match_id": 194,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Athletic",
+  "home_goals": 4,
+  "away_goals": 2,
+  "attendance": 27293
+ },
+ {
+  "match_id": 195,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "United",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 33446
+ },
+ {
+  "match_id": 196,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": null
+ },
+ {
+  "match_id": 197,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Athletic",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 59067
+ },
+ {
+  "match_id": 198,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Athletic",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 53765
+ },
+ {
+  "match_id": 199,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 52670
+ },
+ {
+  "match_id": 200,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 44174
+ },
+ {
+  "match_id": 201,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Rovers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": null
+ },
+ {
+  "match_id": 202,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 46648
+ },
+ {
+  "match_id": 203,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "Rangers",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 28767
+ },
+ {
+  "match_id": 204,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Town",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 39712
+ },
+ {
+  "match_id": 205,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Wanderers",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 31692
+ },
+ {
+  "match_id": 206,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "Albion",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 26183
+ },
+ {
+  "match_id": 207,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "United",
+  "home_goals": 5,
+  "away_goals": 0,
+  "attendance": 18530
+ },
+ {
+  "match_id": 208,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Athletic",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 7071
+ },
+ {
+  "match_id": 209,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Wanderers",
+  "home_goals": 3,
+  "away_goals": 2,
+  "attendance": 19547
+ },
+ {
+  "match_id": 210,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Celtic",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 51097
+ },
+ {
+  "match_id": 211,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "City",
+  "home_goals": 0,
+  "away_goals": 4,
+  "attendance": 39695
+ },
+ {
+  "match_id": 212,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 18325
+ },
+ {
+  "match_id": 213,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 51977
+ },
+ {
+  "match_id": 214,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Wanderers",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 37482
+ },
+ {
+  "match_id": 215,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Rovers",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 35101
+ },
+ {
+  "match_id": 216,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Harriers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 51649
+ },
+ {
+  "match_id": 217,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 3,
+  "attendance": null
+ },
+ {
+  "match_id": 218,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 21863
+ },
+ {
+  "match_id": 219,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 29988
+ },
+ {
+  "match_id": 220,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Albion",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 20934
+ },
+ {
+  "match_id": 221,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Wanderers",
+  "home_goals": 4,
+  "away_goals": 1,
+  "attendance": 19866
+ },
+ {
+  "match_id": 222,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 35708
+ },
+ {
+  "match_id": 223,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Rangers",
+  "home_goals": 4,
+  "away_goals": 1,
+  "attendance": 23731
+ },
+ {
+  "match_id": 224,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 21137
+ },
+ {
+  "match_id": 225,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Rovers",
+  "home_goals": 1,
+  "away_goals": 4,
+  "attendance": 15164
+ },
+ {
+  "match_id": 226,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 7251
+ },
+ {
+  "match_id": 227,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Rangers",
+  "home_goals": 3,
+  "away_goals": 3,
+  "attendance": 19865
+ },
+ {
+  "match_id": 228,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Rangers",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 54841
+ },
+ {
+  "match_id": 229,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 39216
+ },
+ {
+  "match_id": 230,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "United",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 51971
+ },
+ {
+  "match_id": 231,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Celtic",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 15825
+ },
+ {
+  "match_id": 232,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": 19648
+ },
+ {
+  "match_id": 233,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Harriers",
+  "home_goals": 5,
+  "away_goals": 1,
+  "attendance": 34431
+ },
+ {
+  "match_id": 234,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Rovers",
+  "home_goals": 4,
+  "away_goals": 1,
+  "attendance": 8697
+ },
+ {
+  "match_id": 235,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Wanderers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 22047
+ },
+ {
+  "match_id": 236,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Town",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 43229
+ },
+ {
+  "match_id": 237,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Celtic",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 40611
+ },
+ {
+  "match_id": 238,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "City",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 8498
+ },
+ {
+  "match_id": 239,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "City",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 49160
+ },
+ {
+  "match_id": 240,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Wanderers",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 40388
+ },
+ {
+  "match_id": 241,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 29435
+ },
+ {
+  "match_id": 242,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": 47442
+ },
+ {
+  "match_id": 243,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 7156
+ },
+ {
+  "match_id": 244,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Rangers",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 22725
+ },
+ {
+  "match_id": 245,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Albion",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 12131
+ },
+ {
+  "match_id": 246,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Rovers",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 12175
+ },
+ {
+  "match_id": 247,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Town",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": 12190
+ },
+ {
+  "match_id": 248,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Albion",
+  "home_goals": 3,
+  "away_goals": 2,
+  "attendance": 32185
+ },
+ {
+  "match_id": 249,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 43893
+ },
+ {
+  "match_id": 250,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Athletic",
+  "home_goals": 3,
+  "away_goals": 2,
+  "attendance": 27071
+ },
+ {
+  "match_id": 251,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Athletic",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 6519
+ },
+ {
+  "match_id": 252,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 16807
+ },
+ {
+  "match_id": 253,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 42429
+ },
+ {
+  "match_id": 254,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 27396
+ },
+ {
+  "match_id": 255,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "Rangers",
+  "home_goals": 5,
+  "away_goals": 0,
+  "attendance": 23956
+ },
+ {
+  "match_id": 256,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Rangers",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 5228
+ },
+ {
+  "match_id": 257,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Wanderers",
+  "home_goals": 2,
+  "away_goals": 4,
+  "attendance": 21628
+ },
+ {
+  "match_id": 258,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Rovers",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 46218
+ },
+ {
+  "match_id": 259,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Town",
+  "home_goals": 0,
+  "away_goals": 3,
+  "attendance": 28221
+ },
+ {
+  "match_id": 260,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 39353
+ },
+ {
+  "match_id": 261,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "United",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 9555
+ },
+ {
+  "match_id": 262,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 26600
+ },
+ {
+  "match_id": 263,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 47779
+ },
+ {
+  "match_id": 264,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Rovers",
+  "home_goals": 5,
+  "away_goals": 2,
+  "attendance": 37444
+ },
+ {
+  "match_id": 265,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Town",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 32137
+ },
+ {
+  "match_id": 266,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Town",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 8259
+ },
+ {
+  "match_id": 267,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "United",
+  "home_goals": 4,
+  "away_goals": 1,
+  "attendance": 26126
+ },
+ {
+  "match_id": 268,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Albion",
+  "home_goals": 4,
+  "away_goals": 2,
+  "attendance": 43686
+ },
+ {
+  "match_id": 269,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Rovers",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": 51934
+ },
+ {
+  "match_id": 270,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 54439
+ },
+ {
+  "match_id": 271,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Town",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 10438
+ },
+ {
+  "match_id": 272,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Athletic",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 11006
+ },
+ {
+  "match_id": 273,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Rovers",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 6680
+ },
+ {
+  "match_id": 274,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "City",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": 29336
+ },
+ {
+  "match_id": 275,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 44917
+ },
+ {
+  "match_id": 276,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Albion",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 20021
+ },
+ {
+  "match_id": 277,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 25030
+ },
+ {
+  "match_id": 278,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 18272
+ },
+ {
+  "match_id": 279,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 28736
+ },
+ {
+  "match_id": 280,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Harriers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 47389
+ },
+ {
+  "match_id": 281,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": null
+ },
+ {
+  "match_id": 282,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Celtic",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 10034
+ },
+ {
+  "match_id": 283,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 20769
+ },
+ {
+  "match_id": 284,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 53577
+ },
+ {
+  "match_id": 285,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 37528
+ },
+ {
+  "match_id": 286,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 12788
+ },
+ {
+  "match_id": 287,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 44520
+ },
+ {
+  "match_id": 288,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Rangers",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 52547
+ },
+ {
+  "match_id": 289,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "Harriers",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 46968
+ },
+ {
+  "match_id": 290,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Town",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 24898
+ },
+ {
+  "match_id": 291,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Athletic",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 9279
+ },
+ {
+  "match_id": 292,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Athletic",
+  "home_goals": 3,
+  "away_goals": 2,
+  "attendance": 26665
+ },
+ {
+  "match_id": 293,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "Town",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 52254
+ },
+ {
+  "match_id": 294,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Town",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 39230
+ },
+ {
+  "match_id": 295,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 7457
+ },
+ {
+  "match_id": 296,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 16734
+ },
+ {
+  "match_id": 297,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "City",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 40058
+ },
+ {
+  "match_id": 298,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 57692
+ },
+ {
+  "match_id": 299,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "City",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 45874
+ },
+ {
+  "match_id": 300,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "Rovers",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": 30692
+ },
+ {
+  "match_id": 301,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Wanderers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 41664
+ },
+ {
+  "match_id": 302,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "Town",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 18393
+ },
+ {
+  "match_id": 303,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 28929
+ },
+ {
+  "match_id": 304,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 18596
+ },
+ {
+  "match_id": 305,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "Albion",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 48341
+ },
+ {
+  "match_id": 306,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "Wanderers",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 42547
+ },
+ {
+  "match_id": 307,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "United",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": null
+ },
+ {
+  "match_id": 308,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 25529
+ },
+ {
+  "match_id": 309,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Rangers",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": null
+ },
+ {
+  "match_id": 310,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Celtic",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 39719
+ },
+ {
+  "match_id": 311,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Celtic",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": 56142
+ },
+ {
+  "match_id": 312,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 28909
+ },
+ {
+  "match_id": 313,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Town",
+  "home_goals": 4,
+  "away_goals": 3,
+  "attendance": 28369
+ },
+ {
+  "match_id": 314,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 55299
+ },
+ {
+  "match_id": 315,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Athletic",
+  "home_goals": 3,
+  "away_goals": 5,
+  "attendance": 14067
+ },
+ {
+  "match_id": 316,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Rangers",
+  "home_goals": 3,
+  "away_goals": 2,
+  "attendance": 59044
+ },
+ {
+  "match_id": 317,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "Rangers",
+  "home_goals": 4,
+  "away_goals": 2,
+  "attendance": 44850
+ },
+ {
+  "match_id": 318,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 4,
+  "attendance": 53728
+ },
+ {
+  "match_id": 319,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "City",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 46500
+ },
+ {
+  "match_id": 320,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "Rovers",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 37837
+ },
+ {
+  "match_id": 321,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 22533
+ },
+ {
+  "match_id": 322,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Celtic",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 31993
+ },
+ {
+  "match_id": 323,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "Albion",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 25011
+ },
+ {
+  "match_id": 324,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Albion",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 38029
+ },
+ {
+  "match_id": 325,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "United",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 7459
+ },
+ {
+  "match_id": 326,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "Albion",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 44651
+ },
+ {
+  "match_id": 327,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Celtic",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 56977
+ },
+ {
+  "match_id": 328,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Albion",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 49447
+ },
+ {
+  "match_id": 329,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Rangers",
+  "home_goals": 0,
+  "away_goals": 0,
+  "attendance": 40828
+ },
+ {
+  "match_id": 330,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "City",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 11774
+ },
+ {
+  "match_id": 331,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Athletic",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 34037
+ },
+ {
+  "match_id": 332,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "United",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 20828
+ },
+ {
+  "match_id": 333,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Harriers",
+  "home_goals": 4,
+  "away_goals": 1,
+  "attendance": 43647
+ },
+ {
+  "match_id": 334,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "United",
+  "home_goals": 5,
+  "away_goals": 1,
+  "attendance": 29665
+ },
+ {
+  "match_id": 335,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Rovers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 49940
+ },
+ {
+  "match_id": 336,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Athletic",
+  "home_goals": 2,
+  "away_goals": 3,
+  "attendance": 46929
+ },
+ {
+  "match_id": 337,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Athletic",
+  "home_goals": 5,
+  "away_goals": 2,
+  "attendance": 10435
+ },
+ {
+  "match_id": 338,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Rangers",
+  "home_goals": 0,
+  "away_goals": 1,
+  "attendance": 55047
+ },
+ {
+  "match_id": 339,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 35887
+ },
+ {
+  "match_id": 340,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Athletic",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 14813
+ },
+ {
+  "match_id": 341,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Wanderers",
+  "home_goals": 3,
+  "away_goals": 1,
+  "attendance": 41623
+ },
+ {
+  "match_id": 342,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Town",
+  "home_goals": 3,
+  "away_goals": 0,
+  "attendance": 20638
+ },
+ {
+  "match_id": 343,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 21265
+ },
+ {
+  "match_id": 344,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Celtic",
+  "home_goals": 1,
+  "away_goals": 3,
+  "attendance": null
+ },
+ {
+  "match_id": 345,
+  "season": 2024,
+  "home_team": "City",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 2,
+  "attendance": 11141
+ },
+ {
+  "match_id": 346,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 20999
+ },
+ {
+  "match_id": 347,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "Athletic",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 52392
+ },
+ {
+  "match_id": 348,
+  "season": 2024,
+  "home_team": "Rangers",
+  "away_team": "Albion",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 44493
+ },
+ {
+  "match_id": 349,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Celtic",
+  "home_goals": 5,
+  "away_goals": 2,
+  "attendance": 39609
+ },
+ {
+  "match_id": 350,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Athletic",
+  "home_goals": 0,
+  "away_goals": 2,
+  "attendance": 53460
+ },
+ {
+  "match_id": 351,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Albion",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 46134
+ },
+ {
+  "match_id": 352,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Wanderers",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 42642
+ },
+ {
+  "match_id": 353,
+  "season": 2024,
+  "home_team": "Celtic",
+  "away_team": "Athletic",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 49973
+ },
+ {
+  "match_id": 354,
+  "season": 2024,
+  "home_team": "Wanderers",
+  "away_team": "Rovers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 55507
+ },
+ {
+  "match_id": 355,
+  "season": 2024,
+  "home_team": "Albion",
+  "away_team": "Celtic",
+  "home_goals": 2,
+  "away_goals": 2,
+  "attendance": 39812
+ },
+ {
+  "match_id": 356,
+  "season": 2024,
+  "home_team": "Harriers",
+  "away_team": "Wanderers",
+  "home_goals": 1,
+  "away_goals": 1,
+  "attendance": 53333
+ },
+ {
+  "match_id": 357,
+  "season": 2024,
+  "home_team": "Town",
+  "away_team": "Rovers",
+  "home_goals": 2,
+  "away_goals": 0,
+  "attendance": 15678
+ },
+ {
+  "match_id": 358,
+  "season": 2024,
+  "home_team": "Athletic",
+  "away_team": "City",
+  "home_goals": 1,
+  "away_goals": 0,
+  "attendance": 53918
+ },
+ {
+  "match_id": 359,
+  "season": 2024,
+  "home_team": "Rovers",
+  "away_team": "Harriers",
+  "home_goals": 4,
+  "away_goals": 2,
+  "attendance": 45235
+ },
+ {
+  "match_id": 360,
+  "season": 2024,
+  "home_team": "United",
+  "away_team": "Harriers",
+  "home_goals": 2,
+  "away_goals": 1,
+  "attendance": 56783
+ }
+]

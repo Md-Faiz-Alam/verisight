@@ -165,6 +165,32 @@ comparisons. Live runs call Gemini. Because these questions are public, never
 change prompts, rules or code to pass one of them; report every run as it came,
 and treat this set as a regression check rather than an unseen held-out test.
 
+### Held-out set v4
+
+`evaluation/heldout_v4/` holds 30 new questions written after the public
+benchmark's first live run, to measure the changes that run led to on questions
+nothing was tuned against. Its five domains (shipments with carriers and item
+lines, football matches, energy meter readings, library loans and insurance claims)
+in CSV, JSON, Excel, TSV and JSONL share no file or question with the public
+benchmark. It has 20 answerable, 5 ambiguous and 5 unanswerable questions, and the
+answerable ones carry the usual traps: a join whose item lines repeat shipments,
+label spellings, values missing as N/A or null, month windows, a median, distinct
+counts, percentages and signed differences. Each trap was checked to change the
+number when the query falls for it.
+
+`make_heldout_v4.py` writes everything from a fixed seed and works out each answer
+in plain Python from the generated records; `tests/test_heldout_v4.py` checks that
+hand-written SQL reaches every answer through VeriSight's loader. Of the five
+undefined words in the ambiguous questions, two (heavy, frequent) are on the SQL
+audit's list of vague words and three (exciting, a lot, unusually costly) are not.
+
+The rules for this set: VeriSight is not run on these questions before the first
+live run, which is frozen and reported in full, failures included; no prompt, rule
+or code is changed to pass them; and once that run is published, the set becomes a
+regression check like the public benchmark. Run it the same way, with
+`--root evaluation\heldout_v4` copied to a folder Git ignores, as with the
+benchmark.
+
 ### Replayed model responses
 
 `tests/replays/` holds model responses replayed through the real pipeline in CI:

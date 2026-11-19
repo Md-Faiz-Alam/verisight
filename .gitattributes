@@ -1,8 +1,15 @@
-# The public benchmark is compared byte for byte by its tests and hashed by the
-# comparison runner, so its files keep LF line endings on every system.
+# The public benchmark and held-out v4 are compared byte for byte by their tests
+# and hashed by the comparison runner, so their files keep LF line endings on
+# every system.
 evaluation/benchmark/questions.csv text eol=lf
 evaluation/benchmark/data/*.csv text eol=lf
 evaluation/benchmark/data/*.tsv text eol=lf
 evaluation/benchmark/data/*.json text eol=lf
 evaluation/benchmark/data/*.jsonl text eol=lf
 evaluation/benchmark/data/*.xlsx binary
+evaluation/heldout_v4/questions.csv text eol=lf
+evaluation/heldout_v4/data/*.csv text eol=lf
+evaluation/heldout_v4/data/*.tsv text eol=lf
+evaluation/heldout_v4/data/*.json text eol=lf
+evaluation/heldout_v4/data/*.jsonl text eol=lf
+evaluation/heldout_v4/data/*.xlsx binary

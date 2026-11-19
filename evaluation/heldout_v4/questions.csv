@@ -1,0 +1,31 @@
+id,files,type,question,expected,tolerance
+l1,shipments.csv,number,"How many shipments were delivered, counting every spelling of the Delivered status?",202,0
+l2,shipments.csv;shipment_items.csv,number,What is the total shipping cost of the shipments that contain at least one item with SKU A-100?,60201.38,0.005
+l3,shipments.csv;carriers.csv,number,"What is the median weight, in kilograms, of the shipments handled by carriers based in Germany?",243.8,0.005
+l4,shipments.csv,difference,What is the average shipping cost of shipments sent in March 2024 minus the average shipping cost of shipments sent in February 2024?,-46.310436,0.005
+l5,shipments.csv,number,How many shipments were heavy?,AMBIGUOUS,0
+l6,shipments.csv,number,"What is the average delivery time of the shipments, in days?",UNANSWERABLE,0
+f1,matches.json,number,How many matches ended in a draw?,77,0
+f2,matches.json,number,"How many goals were scored in total, by both teams, in the 2024 season?",540,0
+f3,matches.json,number,"What was the average attendance in the 2023 season, over the matches with a recorded attendance?",34882.818713,0.005
+f4,matches.json,difference,"Over both seasons, what is the number of matches won by the home team minus the number won by the away team?",35,0
+f5,matches.json,number,How many matches were exciting?,AMBIGUOUS,0
+f6,matches.json,number,How many yellow cards were shown in total?,UNANSWERABLE,0
+g1,meters.xlsx,number,"What was the total electricity use, in kWh, in the North region?",50697.0,0.005
+g2,meters.xlsx,number,What percentage of the meter readings reported an outage of more than 0 minutes?,10.416667,0.05
+g3,meters.xlsx,number,How many different meters are on the Economy tariff?,30,0
+g4,meters.xlsx,difference,"What is the total electricity use, in kWh, in July 2024 minus the total in January 2024?",-9219.0,0.005
+g5,meters.xlsx,number,How many meters used a lot of electricity?,AMBIGUOUS,0
+g6,meters.xlsx,number,What was the average electricity price per kWh?,UNANSWERABLE,0
+b1,loans.tsv,number,"How many loans were of Fiction books, counting every spelling of Fiction?",159,0
+b2,loans.tsv,number,"What is the total of the late fees charged, over the loans that have a recorded fee?",1949.72,0.005
+b3,loans.tsv,number,What is the largest number of days a History book was borrowed for?,59,0
+b4,loans.tsv,number,How many different members borrowed at least one book from the Children genre?,64,0
+b5,loans.tsv,number,How many members are frequent borrowers?,AMBIGUOUS,0
+b6,loans.tsv,number,What is the average age of the library members?,UNANSWERABLE,0
+i1,claims.jsonl,number,How many claims were approved?,170,0
+i2,claims.jsonl,number,What is the average payout of the approved Auto claims?,8553.953654,0.005
+i3,claims.jsonl,number,What percentage of the Home claims were rejected?,25.210084,0.05
+i4,claims.jsonl,difference,What is the total amount claimed on Health policies minus the total amount claimed on Auto policies?,-91324.89,0.005
+i5,claims.jsonl,number,How many claims were unusually costly?,AMBIGUOUS,0
+i6,claims.jsonl,number,How many of the claims were fraudulent?,UNANSWERABLE,0

@@ -63,6 +63,7 @@ jobs:
           python -m mypy --strict src tests scripts
           evaluation/baseline/run_baseline_eval.py
           evaluation/benchmark/make_benchmark.py
+          evaluation/heldout_v4/make_heldout_v4.py
           evaluation/measure_memory.py
           evaluation/rescore.py
           evaluation/bank/run_bank_eval.py
@@ -188,7 +189,7 @@ jobs:
           & $env:SNAPSHOT_PYTHON -m ruff check .
           if ($LASTEXITCODE -ne 0) { throw "Snapshot lint failed." }
 
-          & $env:SNAPSHOT_PYTHON -m mypy --strict src tests scripts evaluation/baseline/run_baseline_eval.py evaluation/benchmark/make_benchmark.py evaluation/measure_memory.py evaluation/rescore.py evaluation/bank/run_bank_eval.py evaluation/multidomain/run_multidomain_eval.py evaluation/v2/run_v2_eval.py evaluation/heldout/run_heldout_eval.py
+          & $env:SNAPSHOT_PYTHON -m mypy --strict src tests scripts evaluation/baseline/run_baseline_eval.py evaluation/benchmark/make_benchmark.py evaluation/heldout_v4/make_heldout_v4.py evaluation/measure_memory.py evaluation/rescore.py evaluation/bank/run_bank_eval.py evaluation/multidomain/run_multidomain_eval.py evaluation/v2/run_v2_eval.py evaluation/heldout/run_heldout_eval.py
           if ($LASTEXITCODE -ne 0) { throw "Snapshot type checking failed." }
 
           & $env:SNAPSHOT_PYTHON -m mypy --strict evaluation/heldout_v2/run_heldout_eval.py
