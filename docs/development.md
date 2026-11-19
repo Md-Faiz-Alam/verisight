@@ -173,7 +173,10 @@ change prompts, rules or code to pass one of them; report every run as it came,
 and treat this set as a regression check rather than an unseen held-out test.
 The runner keeps any answer that failed the claim checks in `rejected/<setup>/`
 inside the run folder, so a miss can be explained afterwards; like the run folder,
-it can hold data values and stays out of Git.
+it can hold data values and stays out of Git. Each attempt's record also has a
+`call_log`: the stage, attempts, seconds, whether text came back and the tokens of
+every model call, with no prompt or response, so a run that hits its time limit
+shows which call stalled.
 
 ### Held-out set v4
 

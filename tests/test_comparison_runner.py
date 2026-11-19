@@ -737,3 +737,63 @@ def test_a_percentage_claim_answers_a_number_question(
     answer = runner.read_website_answer(200, reply, _question(kind=kind))
 
     assert (answer.number == Decimal(300)) is counted
+
+
+def test_each_website_call_is_logged_without_its_text() -> None:
+    reply = _reply(
+        model_calls=[
+            {
+                "stage": "investigator",
+                "attempts": 1,
+                "elapsed_seconds": 2.5,
+                "returned_text": True,
+                "total_tokens": 900,
+                "model": "m",
+            },
+            {
+                "stage": "structured_synthesis",
+                "attempts": 4,
+                "elapsed_seconds": 121.0,
+                "returned_text": False,
+                "total_tokens": None,
+            },
+        ]
+    )
+
+    answer = runner.read_website_answer(200, reply, _question())
+
+    assert answer.call_log == [
+        {
+            "stage": "investigator",
+            "attempts": 1,
+            "elapsed_seconds": 2.5,
+            "returned_text": True,
+            "total_tokens": 900,
+        },
+        {
+            "stage": "structured_synthesis",
+            "attempts": 4,
+            "elapsed_seconds": 121.0,
+            "returned_text": False,
+            "total_tokens": None,
+        },
+    ]
+
+
+def test_calls_made_in_this_process_are_logged_too() -> None:
+    from verisight.execution.generation_telemetry import track_generation_call
+
+    def ask() -> Any:
+        with track_generation_call("text_generation", 1) as call:
+            call.attempts = 2
+            call.returned_text = True
+            call.total_tokens = 40
+        return runner.Answer()
+
+    answer = runner._measured(ask)
+
+    assert answer.calls == 1
+    assert answer.call_log[0]["stage"] == "text_generation"
+    assert answer.call_log[0]["attempts"] == 2
+    assert answer.call_log[0]["total_tokens"] == 40
+    assert set(answer.call_log[0]) == set(runner.CALL_LOG_FIELDS)

@@ -76,6 +76,23 @@ class Answer:
     tokens: int = 0
     seconds: float = 0.0
     details: dict[str, Any] = field(default_factory=dict)
+    # One entry per model call, in order: which stage, how many attempts, how
+    # long, whether text came back and its tokens. No prompt or response, so
+    # a timeout shows which call stalled.
+    call_log: list[dict[str, Any]] = field(default_factory=list)
+
+
+CALL_LOG_FIELDS = (
+    "stage",
+    "attempts",
+    "elapsed_seconds",
+    "returned_text",
+    "total_tokens",
+)
+
+
+def _call_log(calls: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{name: call.get(name) for name in CALL_LOG_FIELDS} for call in calls]
 
 
 Ask = Callable[[Question], Answer]
@@ -221,6 +238,7 @@ def _measured(ask: Callable[[], Answer]) -> Answer:
         answer = ask()
     answer.calls = len(calls)
     answer.tokens = sum(call.total_tokens or 0 for call in calls)
+    answer.call_log = _call_log(asdict(call) for call in calls)
     answer.seconds = round(time.perf_counter() - started, 3)
     return answer
 
@@ -298,6 +316,14 @@ def read_website_answer(
     status: int, body: dict[str, Any], question: Question
 ) -> Answer:
     """Turn a website reply into what a visitor would actually see."""
+    answer = _read_website_reply(status, body, question)
+    answer.call_log = _call_log(body.get("model_calls") or [])
+    return answer
+
+
+def _read_website_reply(
+    status: int, body: dict[str, Any], question: Question
+) -> Answer:
     reported = body.get("model_calls") or []
     calls = len(reported)
     tokens = sum(call.get("total_tokens") or 0 for call in reported)
