@@ -545,8 +545,18 @@ not, because relating two columns defines a new concept, and two models can shar
 the same wrong definition. For a single-route query, a blind repeat written by a
 different model, recorded as `separate_model`, still shows that both models chose
 the same rows, column and calculation, so it passes the check. When one model
-writes both queries, a repeat never counts. Agreement
-between different queries is still evidence, not proof: both can make the same
+writes both queries, a repeat never counts.
+
+A repeat of a number built from two columns together, such as `COUNT(*) WHERE
+home_goals = away_goals` or `SUM(home_goals + away_goals)`, never counts either,
+because any correct query must relate the same two columns, and two models can
+share a wrong reading of what that relation means. When another model's repeat
+agrees on such a number, `relates_columns` is recorded and the check says so in
+those words instead of a generic warning; the level stays "Number matches SQL
+only". A join key compared across tables only links rows, and two aggregates of
+one column, such as two months' averages, measure one column.
+
+Agreement between different queries is still evidence, not proof: both can make the same
 mistake, and that is more likely when one model writes both. Set
 `VERISIGHT_GEMINI_CROSS_CHECK_MODEL` to a different model to reduce that risk. On the
 command line, add `--cross-check` to run this check, the SQL audit and the

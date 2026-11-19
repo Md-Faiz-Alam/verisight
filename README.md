@@ -156,7 +156,7 @@ a trust level and the checks behind it:
 | --- | --- |
 | Computed without AI | Fixed rules wrote the SQL because the question matched exact columns and values. |
 | Verified | The number equals its SQL result, the SQL audit found no known mistake, and a second query agreed after choosing different tables, row conditions, columns or structure (such as a join or grouping). Rewording the same choices, for example moving a filter into `SUM(CASE WHEN ...)`, does not count. On a simple one-table query with no other route, the same choices made by a different model also count. |
-| Number matches SQL only | The number equals its SQL result, but a check could not run, or the second query repeated the first one's choices where another route was possible. |
+| Number matches SQL only | The number equals its SQL result, but a check could not run, or the second query repeated the first one's choices. When the number is built from two columns together, such as draws (`home = away`) or total goals (`home + away`), no other query could check it independently, and the page says so: a second model agreeing shows it read the question the same way, not that the reading is right. |
 | Needs review | A check failed. The page says which one and why. |
 | Not verified | No number could be tied to an executed result, the data does not hold what was asked, or the question needs a definition, such as what counts as "large". No number is shown. |
 

@@ -143,6 +143,10 @@ class CrossCheck:
     single_route: bool | None = None
     separate_model: bool | None = None
     same_choices: bool | None = None
+    # Recorded for a repeat only: the first query builds its number from two
+    # columns, as in a = b or a + b. Then no other query can test the reading
+    # independently; any correct one relates the same two columns.
+    relates_columns: bool | None = None
 
 
 class IndependentCrossChecker:
@@ -204,6 +208,11 @@ class IndependentCrossChecker:
             if same
             else None
         )
+        relates = (
+            any(_relates_two_columns(primary) for primary in primaries)
+            if same
+            else None
+        )
         independent = _answer_cell(execution.result)
         if independent is None:
             return CrossCheck(
@@ -215,6 +224,7 @@ class IndependentCrossChecker:
                 single_route=single_route,
                 separate_model=self._separate_model,
                 same_choices=same,
+                relates_columns=relates,
             )
         agreed = _same_number(answer, independent) or _same_when_rounded(
             question, answer, independent
@@ -229,6 +239,7 @@ class IndependentCrossChecker:
             single_route=single_route,
             separate_model=self._separate_model,
             same_choices=same,
+            relates_columns=relates,
         )
 
 
@@ -552,6 +563,37 @@ def _choices(sql: str) -> _Choices:
         structures=frozenset(
             type(node).__name__ for node in tree.find_all(*_CHOICE_STRUCTURES)
         ),
+    )
+
+
+_COLUMN_COMPARISONS: tuple[type[exp.Expression], ...] = (
+    exp.EQ,
+    exp.NEQ,
+    exp.GT,
+    exp.GTE,
+    exp.LT,
+    exp.LTE,
+)
+
+
+def _relates_two_columns(sql: str) -> bool:
+    """Whether the number is built from two columns, so no route is independent.
+
+    True when the measured columns, traced through aliases, are two or more, as
+    in ``SUM(a + b)``, or a row condition compares two columns, as in
+    ``a = b``. A join key compared across tables only links rows, and two
+    aggregates of one column, as in ``AVG(x) - AVG(x)`` over two months,
+    measure one column.
+    """
+    tree = sqlglot.parse_one(sql, read="duckdb")
+    for column in tree.find_all(exp.Column):
+        column.set("table", None)
+    if len(_measures(tree)) > 1:
+        return True
+    return any(
+        node.find_ancestor(exp.Join) is None
+        and all(side.find(exp.Column) is not None for side in node.iter_expressions())
+        for node in tree.find_all(*_COLUMN_COMPARISONS)
     )
 
 

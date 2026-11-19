@@ -87,6 +87,22 @@ def _second_query_check(result: InvestigationResult) -> TrustCheck:
             "grouping or subquery, no other route could test more than those "
             "choices.",
         )
+    if (
+        check.status is CrossCheckStatus.AGREED
+        and repeat
+        and check.separate_model
+        and check.relates_columns
+    ):
+        # Not a failure: no SQL can test this reading independently.
+        return TrustCheck(
+            "second_query",
+            CheckStatus.NOT_ASSESSED,
+            "A second query, written by another model without seeing the first, "
+            "reached the same number the same way. This number is built from two "
+            "columns together, so no other query could check it independently: "
+            "the agreement shows both models read the question alike, not that "
+            "the reading is right.",
+        )
     if check.status is CrossCheckStatus.AGREED and repeat:
         return TrustCheck(
             "second_query",

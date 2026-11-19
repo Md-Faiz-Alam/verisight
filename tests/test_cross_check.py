@@ -803,3 +803,46 @@ def test_a_difference_from_two_queries_is_compared_with_both(
     assert check.identical_sql is False
     assert check.same_choices is same
     assert check.single_route is (True if same else None)
+
+
+@pytest.mark.parametrize(
+    ("first", "relates"),
+    [
+        ("SELECT COUNT(*) FROM matches WHERE home_goals = away_goals", True),
+        ("SELECT SUM(home_goals + away_goals) FROM matches", True),
+        (
+            "SELECT SUM(CASE WHEN home_goals > away_goals THEN 1 ELSE 0 END) "
+            "FROM matches",
+            True,
+        ),
+        ("SELECT SUM(amount) FROM sales WHERE region = 'E'", False),
+        # Two months of one column measure one column.
+        (
+            "SELECT m - f FROM (SELECT AVG(CASE WHEN month = 3 THEN cost END) AS m, "
+            "AVG(CASE WHEN month = 2 THEN cost END) AS f FROM shipments) AS t",
+            False,
+        ),
+        # A join key only links rows.
+        (
+            "SELECT SUM(o.amount) FROM orders AS o JOIN customers AS c "
+            "ON o.cid = c.id WHERE c.region = 'W'",
+            False,
+        ),
+    ],
+)
+def test_a_repeat_records_whether_its_number_relates_two_columns(
+    first: str, relates: bool
+) -> None:
+    check = IndependentCrossChecker(_Runner(sql=first), separate_model=True).check(
+        "How many?", ANSWER, first
+    )
+
+    assert check.same_choices is True
+    assert check.relates_columns is relates
+
+
+def test_a_different_route_records_no_relation() -> None:
+    check = _check(_Runner())
+
+    assert check.same_choices is False
+    assert check.relates_columns is None

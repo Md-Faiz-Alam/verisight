@@ -1070,3 +1070,33 @@ def test_a_subject_word_counts_against_every_loaded_table(tmp_path: Path) -> Non
     assert "named_value_not_selected" not in _codes(
         data, "How many races were held in japan?", sql
     )
+
+
+@pytest.mark.parametrize(
+    ("separate_model", "relates_columns", "wording"),
+    [
+        (True, True, "no other query could check it independently"),
+        (False, True, "adds no independent evidence"),
+        (True, False, "adds no independent evidence"),
+        (True, None, "adds no independent evidence"),
+    ],
+)
+def test_a_repeat_on_two_columns_says_why_it_cannot_be_checked(
+    separate_model: bool, relates_columns: bool | None, wording: str
+) -> None:
+    check = _second_query_check(
+        CrossCheck(
+            CrossCheckStatus.AGREED,
+            "values_match",
+            sql=REPEAT,
+            identical_sql=False,
+            same_choices=True,
+            single_route=False,
+            separate_model=separate_model,
+            relates_columns=relates_columns,
+        )
+    )
+
+    # The level is unchanged: the note explains it, it does not raise it.
+    assert check.status is CheckStatus.NOT_ASSESSED
+    assert wording in check.detail
