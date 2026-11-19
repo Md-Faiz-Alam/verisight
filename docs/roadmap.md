@@ -21,18 +21,23 @@ it can be trusted, and gives no number rather than a misleading one. The
 - Declining questions the data cannot answer or that need a definition, before any
   query. In the third comparison no answer showed a bad number, and no answerable
   question was declined.
+- A [public benchmark](development.md#public-benchmark) and
+  [held-out set v4](development.md#held-out-set-v4), 60 questions with data and
+  answers in the repository. Across both, VeriSight showed no bad number against
+  plain Gemini's 12, and passed targets C1, C2 and C4.
+- Recorded model responses replayed through the whole pipeline in CI, private owner
+  tokens for website uploads, a per-visitor upload cap, a local folder for answers
+  that failed the claim checks, per-call timing in the comparison runner, and a
+  plain-words note when a two-column number cannot be checked independently.
 
 ## Next, in order
 
-1. **Answers on wide files, and fewer false warnings.** In the tenth comparison
-   VeriSight missed 4 of 20 answerable questions, all on a workbook whose columns are
-   named by academic year: the SQL was right, but "2015-16" in the answer was read as
-   unlinked digits. That is fixed since, along with two audit readings behind 2 of its
-   3 false warnings (19%). The third came from an ID the data uses twice, and is kept.
-   An eleventh comparison must confirm C2 and C3. A repeated distinct count is still
-   kept out of the single-route rule on purpose. A second query that reaches a wrong
-   number still warns on a correct answer, which is kept on purpose too: the same
-   disagreement has kept 9 bad numbers from being verified.
+1. **Fewer warnings on correct answers (target C3).** Held-out v4 warned on 22% of
+   correct answers, all repeats of numbers built from two columns. The rule refusing
+   them stays, because two models can share a wrong definition of such a number; the
+   way forward is a second query that takes another route more often. A second query
+   that reaches a wrong number still warns on a correct answer, which is kept on
+   purpose: the same disagreement has kept 9 bad numbers from being verified.
 2. **Names and words with more than one meaning.** In the seventh comparison "the
    Vips branch" averaged several restaurants of that name and was shown as verified,
    "average score" picked one of three score columns, and "low price category" was
@@ -46,9 +51,12 @@ it can be trusted, and gives no number rather than a misleading one. The
    row of a result grouped by year is not flagged.
 5. **Answer more plain questions without AI.** In user testing every question needed
    Gemini.
-6. **Outside users.** No one outside the project has used VeriSight yet.
-7. **Deployment.** Measure memory on the target container, then add accounts,
-   monitoring and storage shared between server copies.
+6. **A public demo and outside users.** Publish the website by the
+   [deployment guide](deploy-aws.md), measure memory on that container, and let
+   people outside the project try it. Accounts, monitoring and storage shared
+   between server copies come after.
+7. **Questions in other languages.** Eight SQL audit checks read only the SQL and
+   the data; the rest read English wording.
 8. **Confidential data** needs a paid or private model, because the free tier may
    use what is sent.
 

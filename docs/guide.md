@@ -22,6 +22,53 @@ source .venv/bin/activate
 python -m pip install -e ".[dev]"
 ```
 
+## Settings
+
+Every setting is an environment variable, or a line in a `.env` file in the folder
+VeriSight runs from. `VERISIGHT_WEB_*` settings apply to the website only.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `VERISIGHT_LOG_LEVEL` | `INFO` | Log level: DEBUG, INFO, WARNING, ERROR or CRITICAL |
+| `VERISIGHT_MAX_UPLOAD_SIZE_MB` | 100 | Largest file the loader accepts |
+| `VERISIGHT_MAX_EXCEL_UNCOMPRESSED_MB` | 200 | Largest unpacked size of an `.xlsx` workbook |
+| `VERISIGHT_MAX_QUERY_RESULT_ROWS` | 10000 | Rows one query may return |
+| `VERISIGHT_TRUNCATE_QUERY_RESULTS` | false | Keep the first rows of a longer result, marked `truncated`, instead of refusing it |
+| `VERISIGHT_KEEP_REJECTED_RESPONSES_DIR` | unset | Local folder for answers that failed the claim checks; off when unset |
+| `VERISIGHT_MAX_QUERY_RESULT_BYTES` | 1048576 | Size of one query's result as compact JSON |
+| `VERISIGHT_MAX_QUERY_MEMORY_MB` | 512 | DuckDB memory per query |
+| `VERISIGHT_MAX_QUERY_EXECUTION_SECONDS` | 30 | Time one query may run |
+| `VERISIGHT_MAX_QUERY_TEMP_STORAGE_MB` | 1024 | DuckDB temporary disk per query |
+| `VERISIGHT_MAX_INVESTIGATION_SECONDS` | 300 | Time budget for one investigation, after loading |
+| `VERISIGHT_GEMINI_API_KEY` | unset | Gemini key; stored as a secret and never printed |
+| `VERISIGHT_ALLOW_LLM_DATA_DISCLOSURE` | false | Permission to send schema, profile, question and results to Gemini |
+| `VERISIGHT_GEMINI_MODEL` | `gemini-3.1-flash-lite` | Model that writes the SQL and the answer |
+| `VERISIGHT_GEMINI_CROSS_CHECK_MODEL` | unset | Model for the second query; unset uses the main model |
+| `VERISIGHT_GEMINI_TEMPERATURE` | unset | Sampling temperature, 0 to 2; unset uses the provider's default |
+| `VERISIGHT_GEMINI_SEED` | unset | Sampling seed; repeated output becomes more likely, not certain |
+| `VERISIGHT_GEMINI_REQUEST_TIMEOUT_SECONDS` | 30 | Time one Gemini request may take |
+| `VERISIGHT_GEMINI_MAX_RETRIES` | 2 | Retries after a temporary Gemini failure, 0 to 5 |
+| `VERISIGHT_GEMINI_RETRY_BASE_DELAY_SECONDS` | 1 | First retry delay; it doubles each time, up to 8 seconds |
+| `VERISIGHT_WEB_MAX_UPLOAD_MB` | 20 | Largest file a visitor may upload |
+| `VERISIGHT_WEB_MAX_FILES` | 5 | Files per upload |
+| `VERISIGHT_WEB_DATASET_TTL_SECONDS` | 3600 | How long an upload is kept |
+| `VERISIGHT_WEB_MAX_DATASETS` | 100 | Uploads kept at once; when full, new uploads are refused |
+| `VERISIGHT_WEB_MAX_DATASETS_PER_CLIENT` | 5 | Uploads one visitor address keeps; a new one replaces their own oldest |
+| `VERISIGHT_WEB_MAX_CONCURRENT_QUESTIONS` | 2 | Questions answered at once |
+| `VERISIGHT_WEB_MAX_CONCURRENT_UPLOADS` | 2 | Uploads read and profiled at once |
+| `VERISIGHT_WEB_QUESTIONS_PER_HOUR` | 30 | Questions per visitor address |
+| `VERISIGHT_WEB_UPLOADS_PER_HOUR` | 60 | Uploads per visitor address |
+| `VERISIGHT_WEB_DASHBOARDS_PER_HOUR` | 1200 | Chart updates, row pages and rule-based answer attempts per visitor address |
+| `VERISIGHT_WEB_MAX_PREPARED_DATASETS` | 4 | Uploads kept loaded in memory for fast charts |
+| `VERISIGHT_WEB_MAX_PREPARED_MB` | 60 | Total file size kept loaded in memory |
+| `VERISIGHT_WEB_MAX_QUESTION_CHARS` | 1000 | Longest question accepted |
+| `VERISIGHT_WEB_MAX_INVESTIGATION_SECONDS` | 180 | Time budget for one question on the website |
+| `VERISIGHT_WEB_PROVIDER_RETRIES` | 3 | Gemini retries for website questions |
+| `VERISIGHT_WEB_PROVIDER_RETRY_DELAY_SECONDS` | 2 | First retry delay for website questions |
+| `VERISIGHT_WEB_MAX_RESULT_ROWS` | 20 | Result rows kept and sent to Gemini per website query |
+| `VERISIGHT_WEB_CLEANUP_INTERVAL_SECONDS` | 60 | How often expired uploads are deleted |
+| `VERISIGHT_WEB_TRUST_FORWARDED_FOR` | false | Read the visitor address from a load balancer's `X-Forwarded-For`; enable only behind one |
+
 ## Local command-line workflow
 
 Install or refresh the editable package after adding the CLI entry point:
@@ -194,7 +241,9 @@ history in its return value.
 
 Text columns become datetime columns when every present value fits one clear
 format: an ISO 8601 date such as `2026-01-31`, with or without a time; a date with
-a time zone, such as `2026-01-31T10:15:00Z`, which is converted to UTC; a spelled-out
+a time zone, such as `2026-01-31T10:15:00Z`, which is converted to UTC (when the
+offsets differ from UTC, the SQL audit warns if a query reads days or months from
+that column, because a UTC date can differ from the local one); a spelled-out
 month such as `Jan 5, 2024`; or a numeric date such as `25/12/2026` when some value
 in the column proves the day and month order. If nothing proves the order, as with
 `03/04/2026`, the column stays text and an `ambiguous_dates` warning is reported.
@@ -289,7 +338,10 @@ decimals infer as `decimal` and are profiled as numbers. Decimal fallback and
 explicit SQL binding protect supported mixed numerical columns from silent
 float conversion; exact decimal
 binding has a 38-digit precision limit. Existing floating-point values do not
-recover digits already lost upstream.
+recover digits already lost upstream. CSV integers beyond 2**53 load as exact
+64-bit integers, as Excel number cells do; wider ones stay text, as identifiers.
+Excel text in ISO date form becomes a date, as it does in CSV and JSON, and a test
+loads the same rows from every format and checks that they give the same answers.
 
 Numeric profiles use stable arithmetic on finite float-converted values for
 mean, median, and sample standard deviation. If the standard deviation itself

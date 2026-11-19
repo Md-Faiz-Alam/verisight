@@ -1,14 +1,16 @@
 # VeriSight system specification
 
-Specification version 2, written against the code at commit `4690564`. It defines
+Specification version 3, written against the code at commit `42d7ce2`. It defines
 what VeriSight is built to do and how each claim is checked. A capability not
 listed here is not promised.
 
 ## Scope
 
-VeriSight is a local analytical application for one person on one computer. There
-is no deployment and there are no user accounts. Your original files stay yours
-and are never changed.
+VeriSight is an analytical application that runs on one computer: a command line,
+a Python API and a website. There are no user accounts; each website upload can
+be used only with the private token returned to whoever uploaded it. A
+[deployment guide](deploy-aws.md) exists, but no public copy is running. Your
+original files stay yours and are never changed.
 
 ## Supported input
 
@@ -16,7 +18,8 @@ and are never changed.
 | --- | --- |
 | Formats | CSV, TSV, JSON, JSONL, XLS, XLSX |
 | Website upload | 20 MB per file, up to 5 files per upload |
-| Temporary copies held at once | 100 uploads; beyond that the oldest is removed |
+| Temporary copies held at once | 100 uploads; when full, new uploads are refused |
+| Copies per visitor address | 5; a sixth replaces that visitor's own oldest |
 | Copies kept loaded for fast charts | 4 uploads, within 60 MB of files |
 
 File size alone does not bound memory, because rows and columns vary. The largest
@@ -49,11 +52,14 @@ instead of guessing.
 | Limit | Value |
 | --- | --- |
 | Questions running at once | 2 |
-| Questions per hour | 30 |
+| Uploads read at once | 2 |
+| Questions per hour, per visitor address | 30 |
+| Uploads per hour, per visitor address | 60 |
 | Investigation budget | 180 seconds on the website |
 
 The investigation budget covers the analysis steps. Loading and profiling happen
-before it starts, so it is not a guarantee of total response time.
+before it starts, so it is not a guarantee of total response time. Every limit is
+a setting; the [guide](guide.md#settings) lists them all with their defaults.
 
 ### Tested model configuration
 
@@ -103,17 +109,21 @@ not hold what was asked, or because the question depends on a word or comparison
 does not define. A declined question runs no query and gets "Not verified" with no
 number. The model's reason is shown only when it states no number.
 
-A second query that repeats the first counts as a completed check only for a
-single-route query: one table, one value built from aggregates or looked up in the
-one row its conditions pick, no join, grouping, subquery, distinct values, window,
-order or limit, and no comparison or combination of two columns. It must also come from a different model than the first query. See the
+A second query that repeats the first one's choices counts as a completed check
+only for a single-route query, and only when a different model wrote it. A
+single-route query reads one table, with no join, grouping, subquery, window,
+order or limit. Its values are aggregates of one column, a distinct count and a
+`WITHIN GROUP` median included, or one column looked up in the single row its
+conditions pick. A number built from two columns together, such as draws
+(`home = away`) or total goals (`home + away`), never has one route; its repeat is
+recorded as `relates_columns` and explained in plain words. See the
 [guide](guide.md#independent-cross-check).
 
 The second query may refuse in the same two cases. A refusal counts as a failed
-check, so the answer is "Needs review" and keeps its number with a warning. In the
-third comparison the model declined 9 of the 10 questions without a valid answer and
-none of the 20 answerable ones. The second query never refused, so that step is
-still unmeasured.
+check, so the answer is "Needs review" and keeps its number with a warning. On the
+public benchmark and held-out v4, VeriSight gave no number for all 20 questions
+without a valid answer and declined no answerable one. The second query has not
+refused in a live run, so that step is still unmeasured.
 
 An exact question answered by fixed rules uses no model, so it has no second query
 and is labelled "Computed without AI". When the SQL audit finds that the data does
@@ -135,10 +145,10 @@ result existed. A *regression* target protects a result that was already known.
 | D2 | Regression | Ambiguous damage is rejected or flagged, never guessed | passed | [`test_damaged_files.py`](../tests/test_damaged_files.py) |
 | A1 | Regression | Missed mistakes: of the 31 frozen wrong queries, at least 75% are caught | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
 | A2 | Regression | False warnings: none on the 31 frozen correct queries | passed | [`test_audit_corpus.py`](../tests/test_audit_corpus.py) |
-| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#tenth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
-| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | failed | [`results.md`](results.md#tenth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
-| C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#tenth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
-| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#tenth-comparison-with-plain-gemini-30-new-questions-4-new-files) |
+| C1 | Predeclared | Fewer wrong answers shown prominently than plain Gemini | passed | [`results.md`](results.md#held-out-v4-first-live-run-30-questions-5-new-domains) |
+| C2 | Predeclared | At most 10 percentage points fewer correct answers delivered than plain Gemini, across all submitted questions | passed | [`results.md`](results.md#held-out-v4-first-live-run-30-questions-5-new-domains) |
+| C3 | Predeclared | False warnings on at most 10% of correct answers | failed | [`results.md`](results.md#held-out-v4-first-live-run-30-questions-5-new-domains) |
+| C4 | Predeclared | Wrong numbers visible anywhere, including with a warning, are reported separately from prominent ones | passed | [`results.md`](results.md#held-out-v4-first-live-run-30-questions-5-new-domains) |
 | R1 | Predeclared | Concurrency, expiry, eviction, restart and crash-recovery tests pass | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R2 | Predeclared | A failed mandatory check can never produce "Verified"; evidence already computed stays visible with its incomplete status | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
 | R3 | Predeclared | A provider failure never produces a number that was not computed | passed | [`test_web_reliability.py`](../tests/test_web_reliability.py) |
@@ -165,8 +175,15 @@ plain Gemini's 8, delivered 80% of answerable questions against 85%, and failed 
 at 12.5%. A tenth comparison at `31f5894` showed no bad number prominently against
 plain Gemini's 6, but delivered 80% of answerable questions against 100%, failing C2
 for the first time since the first comparison, and failed C3 at 19%. All four missed
-answers came from one workbook whose columns are named by academic year. The status
-column shows the tenth comparison.
+answers came from one workbook whose columns are named by academic year.
+
+The first public benchmark run, at `d7b065c`, showed no bad number against plain
+Gemini's 6, passed C2 at 95% of answerable questions against 100%, and failed C3 at
+26%. Held-out v4, at `a723c13`, on questions nothing was tuned against, showed no
+bad number against plain Gemini's 6, passed C2 at exactly the limit (90% against
+100%), and failed C3 at 22%. All four of its warnings were repeats of numbers built
+from two columns, which the single-route rule refuses on purpose. The status column
+shows held-out v4.
 
 M1 was measured on this computer with scripted replies and generated data: five
 uploads of one 19.5 MB file with charts, two questions at once with second queries,

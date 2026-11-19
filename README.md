@@ -1,250 +1,169 @@
 # VeriSight
 
-**Ask questions about CSV, Excel and JSON files from any domain in plain English.
-VeriSight answers with the SQL it ran, and accepts a number only when it matches
-the query result.**
+**Ask questions about CSV, Excel and JSON files in plain English. An AI writes the
+SQL, a database computes the answer, and VeriSight shows a number only when it can
+trace it to the executed result.**
 
 [![CI](https://github.com/Md-Faiz-Alam/verisight/actions/workflows/ci.yml/badge.svg)](https://github.com/Md-Faiz-Alam/verisight/actions/workflows/ci.yml)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Test coverage 100%, enforced in CI](https://img.shields.io/badge/coverage-100%25-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-![VeriSight reporting data-quality findings for a messy orders file, the SQL Gemini wrote, and an answer verified against the SQL result](docs/assets/demo.svg)
+![The Ask view: a question about the sample orders, the answer 415 labelled Computed without AI, and the evidence panel with the SQL and the result cell it came from](docs/assets/ask.png)
 
-*From a live run ([evaluation v2](docs/results.md), run 3): VeriSight reports the
-messy values it found while loading, Gemini writes the SQL, and the answer is
-checked against the executed result.*
+## Why
 
-## Why VeriSight
+Ask a language model about a spreadsheet and it answers confidently, even when the
+number is wrong or the data cannot answer the question. Asked for "the average
+electricity price" when no column holds a price, it still gives a number.
 
-- **Verified, not just generated.** Gemini plans the SQL and states each number
-  as a claim on a result cell, or as a ratio, percentage or difference of two
-  cells that VeriSight computes itself. VeriSight checks the claim against the executed
-  query and refuses numbers it cannot support. On the website, a second query
-  written without seeing the first must reach the same number by a different
-  choice of tables, rows, columns or structure before an answer is marked
-  verified. When it cannot verify an answer, it says so instead of
-  guessing.
-- **Messy data handled in the open.** `N/A`, `$1,234.50`, `10%`, `Shipped ` /
-  `shipped` and padded headers are cleaned under strict rules, and every change
-  is reported as a data-quality finding.
-- **Safe SQL.** One read-only statement over the loaded tables only: no file,
-  network or settings access, with time, memory and result-size limits.
-- **Measured honestly.** Every live run is published, failures included, and so
-  are the places where Gemini writing SQL alone did better.
+VeriSight lets the model plan but never calculate. Every number must cite a cell of
+an executed SQL result, the SQL is audited against the data, and a second, blind
+query tries to reach the same number. Anything it cannot support is shown with a
+warning, or not shown at all.
+
+## How it works
+
+```mermaid
+flowchart LR
+    Q[Question] --> P[Gemini writes SQL]
+    P --> S[Safety check: one<br/>read-only SELECT]
+    S --> E[DuckDB runs it]
+    E --> C[Each number cited<br/>as a result cell]
+    C --> V[Claims checked<br/>against the cells]
+    V --> A[SQL audit]
+    A --> X[Blind second query]
+    X --> T[Trust level]
+```
+
+Plainly worded questions, such as "How many orders were shipped?", skip the model:
+fixed rules compile them to SQL. Questions the data cannot answer, or that use an
+undefined word such as "large", are declined instead of guessed.
+
+## Results
+
+Two live runs on 60 questions whose data and answers are in the repository: the
+[public benchmark](evaluation/benchmark) and [held-out set v4](evaluation/heldout_v4),
+written after the first and never tuned against. Both compare VeriSight with Gemini
+writing SQL alone, on the same cleaned data, prompt and model.
+
+| Across 60 questions | Plain Gemini | VeriSight |
+| --- | --- | --- |
+| Correct, of 40 answerable | 40 | 37 |
+| Wrong numbers on answerable questions | 0 | 0 |
+| Numbers given where none exists, of 20 | **12** | **0** |
+| Correct answers shown with a warning | 0 | 9 of 37 |
+| Median seconds per question | 10 to 17 | 41 to 73 |
+| Gemini tokens | 151,862 | 683,927 |
+
+VeriSight is safer, not smarter: it never invented a number, where plain Gemini
+invented 12. In exchange it answered 3 fewer questions, warned on a quarter of its
+correct answers, and was slower and about 4.5 times as expensive.
+[Live results](docs/results.md) has every run, including ten earlier comparisons and
+the misses.
 
 ## Quickstart
 
-Windows PowerShell (on macOS or Linux, use `source .venv/bin/activate` and
-forward slashes):
+Windows PowerShell (on macOS or Linux, use `source .venv/bin/activate` and forward
+slashes):
 
 ```powershell
 git clone https://github.com/Md-Faiz-Alam/verisight.git
 cd verisight
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e .
-
-# Create three messy demo files: no download, no AI
-python evaluation\v2\run_v2_eval.py --prepare --data-dir demo --preflight-only
-
-# Profile a file: schema, statistics and data-quality findings, no AI
-verisight profile demo\orders.csv
-
-# Ask a question: needs a free Gemini API key in .env
-Copy-Item .env.example .env   # then set VERISIGHT_GEMINI_API_KEY=your-key
-verisight investigate demo\orders.csv --question "How many orders were shipped?" --require-claim value --allow-llm-data-disclosure
-```
-
-`--allow-llm-data-disclosure` is required because the schema, profile, question
-and observed values are sent to Gemini. `profile` and `--preview` never call the
-model. Get a key from [Google AI Studio](https://aistudio.google.com/apikey).
-
-## Website
-
-VeriSight also runs as a website with five views: a Dashboard you can filter by
-clicking or by date, Ask with an evidence panel for every answer, Explore for
-browsing and searching rows, Quality for what was changed and what to check, and
-Model for how your files connect. It is a FastAPI REST API with interactive docs
-at `/docs`, plus a React app that loads nothing from outside your server.
-
-The built app is committed under `src/verisight/web/static`, so running the website
-needs only Python. To change the interface, install Node.js, then run these in
-`frontend/`:
-
-```powershell
-npm install
-npm run build
-```
-
-```powershell
 python -m pip install -e ".[web]"
 verisight-web
 ```
 
-Then open <http://127.0.0.1:8000>. Visitors can paste their own Gemini key,
-which is used for one question and never stored. Each upload can be read, asked
-about or removed only with the private token returned to the visitor who uploaded
-it. To publish it, see
-[Deploy on AWS](docs/deploy-aws.md).
+Open <http://127.0.0.1:8000> and choose **Open the sample workspace**. The dashboard,
+data-quality report and plain questions need no API key. For harder questions, paste
+a free [Gemini API key](https://aistudio.google.com/apikey) on the page; it is used for
+one question and never stored.
 
-## Live results
+![The Dashboard for the sample orders: totals, a monthly chart and findings computed without AI](docs/assets/dashboard.png)
 
-Every live run is published in [Live results](docs/results.md), failures included.
+The website has five views: **Dashboard** (filter by clicking or by date), **Ask**
+(an evidence panel for every answer), **Explore** (browse and search rows),
+**Quality** (what was cleaned and what to check) and **Model** (how your files
+connect). It is a FastAPI API, with interactive docs at `/docs`, and a React app that
+loads nothing from outside your server. Each upload can be used only with the private
+token returned to whoever uploaded it.
 
-- **Against Gemini writing SQL alone**, on 30 questions the project owner wrote for
-  4 unseen public datasets: VeriSight showed 1 bad number prominently, against 10
-  for Gemini alone, and no wrong number on any answerable question. It delivered 15
-  correct answers out of 20 against Gemini's 19, and put a warning on 4 correct
-  answers.
-- **A second comparison after fixes**, on 30 new questions and 4 new files: VeriSight
-  showed 2 bad numbers prominently against Gemini's 8, delivered 18 correct answers
-  against Gemini's 20, and warned on 6 correct answers. Both setups gave numbers on
-  most questions that had no valid answer.
-- **A third comparison**, after VeriSight could decline questions the data cannot
-  answer: on 30 new questions and 4 new files, VeriSight showed no bad number, against
-  Gemini's 5, and gave no number on all 10 questions without a valid answer. It
-  delivered 17 correct answers against Gemini's 19 and warned on 6 of them.
-- **A fourth comparison**, on 30 new questions and 4 new files: VeriSight showed no
-  bad number prominently, against Gemini's 8, and delivered 18 correct answers against
-  Gemini's 20. It warned on 8 of them, so false warnings remain the main weakness.
-- **A fifth comparison**, on 30 new questions and 4 new files: VeriSight showed no bad
-  number at all, against Gemini's 3, gave no number on all 10 questions without a
-  valid answer, and delivered 19 correct answers, the same as Gemini. It warned on 6
-  of them, 5 from unit conversions the audit has since learned to accept.
-- **A sixth comparison**, on 30 new questions and 4 new files: VeriSight showed 1 bad
-  number, against Gemini's 10, gave no number on 9 of the 10 questions without a
-  valid answer, and delivered all 20 correct answers, as Gemini did. It warned on 4
-  of them, 3 from audit readings fixed since.
-- **A seventh comparison**, on 30 new questions and 4 new files: VeriSight showed 1 bad
-  number prominently, against Gemini's 9, and delivered 17 correct answers against
-  Gemini's 18. It warned on 4 of them. A reviewer wrongly detected as a total row
-  misled all three setups; that detection is fixed since.
-- **An eighth comparison**, on 30 new questions and 3 new files: VeriSight showed 1
-  bad number prominently, against Gemini's 10, gave no number on 8 of the 10
-  questions without a valid answer, and delivered all 20 correct answers, as Gemini
-  did. It warned on 4 of them, 3 from missing-value readings fixed since.
-- **A ninth comparison**, on 30 new questions and 4 new files: VeriSight showed 1 bad
-  number prominently, against Gemini's 8, gave no number on 9 of the 10 questions
-  without a valid answer, and delivered 16 correct answers against Gemini's 17. It
-  warned on 2 of them, both one-cell lookups now counted as one route. Its first run
-  was refused at upload, because one file was over the 20 MB limit.
-- **A tenth comparison**, on 30 new questions and 4 new files: VeriSight showed no
-  bad number prominently, against Gemini's 6, but delivered 16 correct answers against
-  Gemini's 20. All four misses came from a workbook with columns named by year, such
-  as `2015-16`, which the answer check read as stray digits; that is fixed since.
-- **Earlier runs:** 150 development attempts gave 85 accepted answers, all correct.
-  Held-out sets on unseen data first exposed 3 wrong accepted answers, which led to
-  the SQL audit.
-- **A public benchmark** of 30 questions over five domains and five file formats,
-  with its data and independently worked answers, is in `evaluation/benchmark` so
-  anyone can rerun it. On its first live run, VeriSight showed no bad number
-  against plain Gemini's 6 and delivered 19 of 20 correct answers against
-  Gemini's 20, but warned on 5 of them; see [Live results](docs/results.md).
-- **Held-out v4**, 30 new questions over five new domains run before anything
-  was tuned on them: no bad number against plain Gemini's 6, all 10 questions
-  without a valid answer declined, and 18 of 20 correct answers against
-  Gemini's 20, warned on 4. One miss ran out of time and one failed to
-  produce a valid answer.
+The same engine runs from the command line, here on the sample orders:
+
+```powershell
+verisight profile src\verisight\web\demo\orders.csv
+verisight investigate src\verisight\web\demo\orders.csv --question "How many orders were shipped?" --allow-llm-data-disclosure --cross-check
+```
+
+`profile` never calls the model. `--allow-llm-data-disclosure` is required because
+the schema, profile, question and result values are sent to Gemini. Set the key as
+`VERISIGHT_GEMINI_API_KEY` in `.env`; every setting is listed in the
+[guide](docs/guide.md#settings).
 
 ## Trust levels
 
-Every website answer, and every command-line answer with `--cross-check`, carries
-a trust level and the checks behind it:
-
 | Level | Meaning |
 | --- | --- |
-| Computed without AI | Fixed rules wrote the SQL because the question matched exact columns and values. |
-| Verified | The number equals its SQL result, the SQL audit found no known mistake, and a second query agreed after choosing different tables, row conditions, columns or structure (such as a join or grouping). Rewording the same choices, for example moving a filter into `SUM(CASE WHEN ...)`, does not count. On a simple one-table query with no other route, the same choices made by a different model also count. |
-| Number matches SQL only | The number equals its SQL result, but a check could not run, or the second query repeated the first one's choices. When the number is built from two columns together, such as draws (`home = away`) or total goals (`home + away`), no other query could check it independently, and the page says so: a second model agreeing shows it read the question the same way, not that the reading is right. |
+| Computed without AI | Fixed rules wrote the SQL from exact column and value names. |
+| Verified | The number equals its SQL result, the audit found nothing, and a second query agreed by a different route: other tables, row conditions, columns or structure. |
+| Number matches SQL only | The number equals its SQL result, but a check could not run or the second query repeated the first one's choices. |
 | Needs review | A check failed. The page says which one and why. |
-| Not verified | No number could be tied to an executed result, the data does not hold what was asked, or the question needs a definition, such as what counts as "large". No number is shown. |
+| Not verified | No number could be tied to a result, or the question needs data or a definition the file lacks. No number is shown. |
 
-**Answers without AI.** Plainly worded questions, such as "What is the total amount
-for East?" or "How many orders were shipped?", are compiled directly to SQL and need
-no API key. When a value fits several columns, VeriSight asks which one you meant.
-Anything else goes to the model-backed workflow.
+The **SQL audit** checks each model-written query against the loaded rows for joins
+that copy rows into a sum, totals counted twice, filter values the data lacks,
+missing values counted as zero, the wrong column or calculation, and similar
+mistakes. Offline, after one fix, it flagged no correct query and caught 18 of 30
+held-out trap queries. The [guide](docs/guide.md#independent-cross-check) explains each check and
+what counts as a different route.
 
-**SQL audit.** Each model-written query is checked against the loaded rows, through
-CTEs and subqueries, for joins that copy rows into a sum, totals counted twice, filter
-values the column does not contain or only partly matches, values the question names
-but the query skips, the wrong column or calculation, missing values counted as zero
-or left in, a named year left out, thresholds such as "at least 5", percentages divided
-down, and subtractions in the wrong order.
+## Limits
 
-Most of those checks read the question's English wording. Eight read only the SQL and
-the loaded rows, so they work for a question in any language: an empty result, joins
-that copy rows, totals counted twice, filter values the data lacks, identifiers or years
-added up, numbers or dates stored as text and compared letter by letter, join keys that
-differ only in case, spaces or leading zeros, and dates read from times that were
-recorded in several time zones and stored in UTC.
-
-On the correct and trap queries of the evaluations, measured offline without a model,
-the audit flagged no correct query after one fix and caught 24 of 37 development traps
-and 18 of 30 held-out traps. Before that fix it wrongly flagged 1 held-out correct query.
-The rules were written after reading the development traps, so the held-out figure is
-the fairer one. Mistakes such as a wrong denominator or an unusual date boundary are not
-caught by these rules, and no level proves an answer is right.
-
-## Scope and limits
-
-VeriSight runs on one computer; the [system specification](docs/system-spec.md)
-lists its supported files, questions, limits and targets, with the status of each.
-
-- A matched number shows that it came from an executed query, not that the query
-  means what the question asked. The SQL audit and second query catch many such
-  mistakes, but not all, and a second query can share the first one's mistake.
-- On the Gemini free tier, Google can use what is sent to improve its products.
-  Questions send column names and some values. The website sends at most 20 result
-  rows per query: a longer result keeps its first 20 rows and is marked as cut, so
-  the model is told not to count or rank them as complete. The command line and Python API send whole query results, within
-  a limit of 60,000 characters per prompt; a larger result stops the investigation
-  instead of being cut. For a small file this can be all of it. Use non-sensitive
+- A matched number came from an executed query; it does not prove the query means
+  what the question asked. The audit and second query catch many such mistakes, not
+  all.
+- On the Gemini free tier, Google can use what is sent. Questions send column names
+  and some values (the website at most 20 result rows per query). Use non-sensitive
   data only.
-- So far all testing was done by the project's own side.
+- One computer, no accounts; all questions so far were written on the project's own
+  side. The [system specification](docs/system-spec.md) lists every limit and target.
 
 ## Documentation
 
 | Page | What it covers |
 | --- | --- |
-| [Guide](docs/guide.md) | Command line, Python API, cleaning rules, investigations and verification |
-| [System specification](docs/system-spec.md) | Supported input and questions, limits, data rule, targets and their status |
-| [Live results](docs/results.md) | Every live evaluation, including failures |
+| [Guide](docs/guide.md) | Settings, command line, Python API, cleaning rules and checks |
 | [Architecture](docs/architecture.md) | How the parts fit together |
+| [Live results](docs/results.md) | Every live evaluation, including failures |
+| [System specification](docs/system-spec.md) | Supported input, limits, targets and their status |
 | [Output contracts](docs/output-contracts.md) | What an accepted answer must contain |
-| [Development](docs/development.md) | Setup, checks and evaluation for contributors |
+| [Development](docs/development.md) | Checks, benchmarks and replays for contributors |
 | [Deploy on AWS](docs/deploy-aws.md) | Publishing the website |
 | [Roadmap](docs/roadmap.md) | What is done and what comes next |
 
-## Quality checks
+## Development
 
 ```powershell
-python -m ruff format --check .
+python -m pip install -e ".[dev,web]"
 python -m ruff check .
 python -m mypy --strict src tests scripts
-python -m pytest --cov=verisight --cov=scripts --cov-report=term-missing --cov-fail-under=100
-git diff --check
+python -m pytest --cov=verisight --cov=scripts --cov-fail-under=100
 ```
 
-The website has its own tests, run in `frontend/`:
-
-```powershell
-npm test
-npm run test:e2e
-```
-
-[GitHub Actions](https://github.com/Md-Faiz-Alam/verisight/actions) runs these on
-Windows and Linux with Python 3.11, without any Gemini key. Full coverage measures
-the code that tests exercise, not accuracy.
+CI runs these on Windows and Linux with no Gemini key, replays recorded model
+responses through the whole pipeline, and runs the frontend's unit and browser tests.
+See [Development](docs/development.md) for the full gate list.
 
 ## Dataset attribution
 
 Development used Bank Marketing (Moro, S., Cortez, P., and Rita, P. (2014). *A
 Data-Driven Approach to Predict the Success of Bank Telemarketing.* Decision Support
-Systems, 62, 22–31; [UCI](https://archive.ics.uci.edu/dataset/222/bank+marketing)).
-Other evaluations used public datasets from the UCI Machine Learning Repository,
-vega-datasets and seaborn-data. Check each source's citation and licence before
-redistributing. Datasets are not part of this repository.
+Systems, 62, 22–31; [UCI](https://archive.ics.uci.edu/dataset/222/bank+marketing)),
+and other evaluations used public datasets from UCI, vega-datasets and seaborn-data.
+Those are not in this repository; the public benchmark and held-out v4 data are
+generated and included.
 
 ## License
 

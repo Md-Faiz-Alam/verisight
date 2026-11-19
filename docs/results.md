@@ -1,12 +1,61 @@
 # Live results
 
-VeriSight answers questions about tabular data from any domain by writing SQL,
-running it, and accepting a number only when that number is found in the SQL
-result. This page reports every live run of its evaluations, including
-failures. No run was repeated to replace a worse one. One comparison restarted
-after a crash, as described below.
+VeriSight answers questions about tabular data by having Gemini write SQL, running
+it in DuckDB, and accepting a number only when it is found in the SQL result, then
+auditing the SQL and checking it with a second query. This page reports every live
+run of its evaluations, including failures. No run was repeated to replace a worse
+one. One comparison restarted after a crash, as described below.
 
 ## At a glance
+
+The two latest runs, on 60 questions whose data and expected answers are in the
+repository, compare full VeriSight with Gemini writing SQL alone on the same cleaned
+data, prompt and model (`gemini-3.1-flash-lite`, with `gemini-3.5-flash-lite` for the
+second query).
+
+| | Public benchmark | Held-out v4 |
+| --- | --- | --- |
+| Questions: answerable, ambiguous, unanswerable | 20, 5, 5 | 20, 5, 5 |
+| Correct: plain Gemini / VeriSight | 20 / 19 | 20 / 18 |
+| Wrong number on an answerable question | 0 / 0 | 0 / 0 |
+| Number given where none exists | **6 / 0** | **6 / 0** |
+| Correct answers carrying a warning (VeriSight) | 5 of 19 | 4 of 18 |
+| Median seconds per question | 10 / 41 | 17 / 73 |
+| Targets C1, C2, C3 | pass, pass, fail | pass, pass, fail |
+
+- [Public benchmark](#public-benchmark-first-live-run-30-questions-5-generated-domains):
+  anyone can rerun it; it is now a regression check.
+- [Held-out v4](#held-out-v4-first-live-run-30-questions-5-new-domains): written after
+  the benchmark run, on questions nothing was tuned against.
+- Ten earlier comparisons with plain Gemini, on questions outside the repository,
+  and the first development and held-out evaluations, are below in the order they
+  ran. The targets are defined in the [system specification](system-spec.md#targets).
+
+"Wrong" means a number that differs from an expected answer computed independently
+from the source data, without VeriSight, pandas or DuckDB. Attempts lost to the
+provider are listed but not counted for or against VeriSight.
+
+## How an answer is produced and checked
+
+```mermaid
+flowchart LR
+    Q[Question] --> P[Gemini writes SQL]
+    P --> S[Safety check: one<br/>read-only SELECT]
+    S --> E[DuckDB runs it]
+    E --> C[Gemini states each number<br/>as a claim on a result cell]
+    C --> V{Claim equals<br/>the cell?}
+    V -- no --> R[Repair once, or<br/>no number shown]
+    V -- yes --> A[SQL audit against<br/>the loaded rows]
+    A --> X[Second query,<br/>planned blind]
+    X --> T[Trust level]
+```
+
+Gemini never supplies a final number on its own. Each number must cite a cell of
+an executed query, and the verifier compares the two exactly (see
+[Verification and narrative audit](guide.md#verification-and-narrative-audit)).
+The earliest evaluations below predate the SQL audit and second query.
+
+### The first evaluations
 
 | | Development | Held-out v1 | Held-out v2 |
 | --- | --- | --- | --- |
@@ -18,38 +67,10 @@ after a crash, as described below.
 | Lost to the model provider | 52 | 15 | 1 |
 | Domains | 7 | 5 | 5 |
 
-- **Development** evaluations were used while building VeriSight; gaps they
-  found were fixed between runs.
-- **Held-out** questions use public datasets that played no part in
-  development and were committed to the repository before their first run.
-  Held-out v1 exposed two bugs and two semantic errors; after the fixes,
-  held-out v2 measured the engine on five more unseen datasets.
-- Model: `gemini-3.1-flash-lite` (free tier), Python 3.11.9, `google-genai`
-  2.27.0. File formats: CSV, JSON, Excel.
-
-"Wrong" means a number VeriSight accepted that differs from an expected answer
-computed independently, from the source data, without VeriSight, pandas or
-DuckDB. Attempts lost to the provider are listed but are not counted for or
-against VeriSight.
-
-## How an answer is produced and checked
-
-```mermaid
-flowchart LR
-    A[CSV / JSON / Excel] --> B[Load, clean and report<br/>messy values]
-    B --> C[Profile schema<br/>and quality]
-    C --> D[Gemini plans SQL]
-    D --> E[Validate SQL<br/>read-only, limits]
-    E --> F[DuckDB runs SQL]
-    F --> G[Gemini states the answer<br/>as a claim on a result cell]
-    G --> H{Claim equals<br/>the cell?}
-    H -- yes --> I[Accepted answer<br/>with its SQL]
-    H -- no --> J[Recovery query,<br/>or reported as incomplete]
-```
-
-Gemini never supplies a final number on its own. Each number must cite a cell of
-an executed query, and the verifier compares the two exactly (see
-[Verification and narrative audit](guide.md#verification-and-narrative-audit)).
+Development evaluations were used while building VeriSight; gaps they found were
+fixed between runs. Held-out v1 exposed two bugs and two semantic errors; after the
+fixes, held-out v2 measured the engine on five more unseen datasets. These runs
+used Python 3.11.9 and `google-genai` 2.27.0, on CSV, JSON and Excel files.
 
 ## Evaluations
 
@@ -1109,9 +1130,9 @@ because `NOT IN` never matches null.
 
 ## What these results do and do not show
 
-- Only the held-out runs at `242d4f0` used the SQL audit, trust levels and second
-  query. Every earlier run predates them, and the development evaluations go
-  through the command line, which does not run those checks.
+- The comparisons with plain Gemini, the public benchmark and held-out v4 ran
+  through the website, with the SQL audit, trust levels and second query. The
+  first development and held-out evaluations predate those checks.
 - An accepted number is proven to come from an executed SQL result. The
   verifier does not prove that the SQL means what the question asked. The
   evaluations measure that separately, against independent answers and traps.
@@ -1121,18 +1142,22 @@ because `NOT IN` never matches null.
 - Accepted answers can still be wrong when the SQL answers a different question:
   held-out v1 recorded three such answers. Review flags now catch the patterns
   seen there, but not every possible mistake.
-- v2 data is generated, not collected; it reproduces common real-world problems
-  but not every one. Formats outside the documented cleaning rules stay as text.
+- v2, public benchmark and held-out v4 data are generated, not collected; they
+  reproduce common real-world problems but not every one. Formats outside the
+  documented cleaning rules stay as text.
+- Every question was written on the project's side. No outside user has tried
+  VeriSight yet.
 - Provider errors depend on the free model tier's load and are excluded from the
   correct and wrong counts, not hidden: they appear in every table.
-- 357 scored attempts across 124 questions is evidence, not a reliability guarantee.
+- A few hundred questions is evidence, not a reliability guarantee.
 
 ## Reproduce
 
-The comparison questions above live outside the repository. The public benchmark in
-`evaluation/benchmark/` can be rerun by anyone, data and expected answers included;
-see [Development](development.md#public-benchmark). Its first live run is
-reported above.
+The ten comparisons' questions live outside the repository. The public benchmark in
+`evaluation/benchmark/` and held-out v4 in `evaluation/heldout_v4/` can be rerun by
+anyone, data and expected answers included; see
+[Development](development.md#public-benchmark). Both live runs are reported above.
+The earlier evaluations check their questions offline with:
 
 ```powershell
 python evaluation\bank\run_bank_eval.py --dataset datasets\bank_marketing\bank-additional-full.csv --preflight-only

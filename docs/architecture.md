@@ -431,7 +431,9 @@ structured claims.
 ## Numerical verification and rendered statements
 
 `NumericalClaimVerifier` resolves observation, row, and named-column references.
-Supported operations are `value` and `difference` (left minus right).
+Supported operations are `value`, `difference` (left minus right), `ratio`,
+`percent` and `percent_change`; the last three are computed exactly from two
+cells and compared at the claim's own decimal places.
 Decimal-based arithmetic avoids float coercion. Unsuitable cells, ambiguous
 columns, invalid references, and unsafe required arithmetic fail closed.
 
@@ -729,11 +731,15 @@ can be trusted. The levels and their meaning are listed in the
    nothing to compare against, numbers a calculation invented, and an average of a
    column the question never mentions.
 4. **Second query.** `execution/cross_check.py` plans a query from the question
-   alone, told to reach the number by another route. A repeat of the first query,
-   apart from aliases and order, adds no evidence, unless the query has only one
-   route: one table and one aggregate, or one column looked up in the single row its
-   conditions pick. The ninth comparison found that such lookups were warned. When
-   the question states decimal places, both numbers are compared at those places.
+   alone, told to reach the number by another route. A repeat, meaning a query that
+   makes the first one's choices of tables, row conditions, measured columns and
+   structure, however it is written, adds no evidence, unless the query has only
+   one route and another model wrote the repeat. One route means one table, values
+   built from aggregates of one column (a distinct count and a `WITHIN GROUP`
+   median included), or one column looked up in the single row its conditions
+   pick. A number built from two columns together never has one route, and the
+   check says so in plain words. When the question states decimal places, both
+   numbers are compared at those places.
 5. **Level.** `execution/trust_assessment.py` combines these: any failed check gives
    "Needs review", and only all passed checks give "Verified". A measure the data
    does not hold, a vague word the query defined by itself, or a comparison with
