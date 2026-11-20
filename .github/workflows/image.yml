@@ -1,9 +1,9 @@
-name: Publish image
+name: Publish and deploy
 
-# Builds the website's container image and publishes it to GitHub Container
-# Registry (ghcr.io), free for public images, after CI passes on main. Hosts such
-# as Azure Container Apps pull it from there, so no paid registry or local
-# Docker is needed. See docs/deploy-azure.md.
+# After CI passes on main, builds the website's container image, publishes it to
+# GitHub Container Registry (ghcr.io, free for public images), and deploys it to
+# Azure Container Apps. A deploy that does not become healthy is rolled back to
+# the image that was running before. See docs/deploy-azure.md.
 on:
   workflow_run:
     workflows: [CI]
@@ -13,11 +13,11 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
+# One run at a time, in order: a deploy is never cut off halfway.
 concurrency:
-  group: image-${{ github.ref }}
-  cancel-in-progress: true
+  group: publish-and-deploy
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -28,6 +28,11 @@ jobs:
        github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.tag.outputs.image }}
 
     steps:
       - name: Check out the commit CI passed
@@ -36,16 +41,22 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
 
+      # Image names must be lowercase. The commit tag names exactly what runs.
       - name: Name the image
+        id: tag
+        run: |
+          tag="sha-$(git rev-parse --short=7 HEAD)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/md-faiz-alam/verisight-web:$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Label the image
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          # Tags name the checked-out commit, the one CI passed. Image names
-          # must be lowercase.
           context: git
           images: ghcr.io/md-faiz-alam/verisight-web
           tags: |
-            type=sha,format=short,prefix=sha-
+            type=raw,value=${{ steps.tag.outputs.tag }}
             type=raw,value=latest
 
       - name: Set up Docker Buildx
@@ -68,14 +79,78 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Show the tags to deploy
-        env:
-          TAGS: ${{ steps.meta.outputs.tags }}
+  deploy:
+    name: Deploy to Azure
+    needs: publish
+    # Skipped, not failed, until the Azure variables are set (docs/deploy-azure.md).
+    if: vars.AZURE_CLIENT_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: azure
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      IMAGE: ${{ needs.publish.outputs.image }}
+      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'verisight-rg' }}
+      APP: ${{ vars.AZURE_CONTAINER_APP || 'verisight' }}
+
+    steps:
+      # A short-lived token from GitHub, exchanged with Azure: no stored password.
+      - name: Sign in to Azure
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy, check health, roll back on failure
+        id: deploy
         run: |
-          {
-            echo "### Published image"
-            echo
-            echo '```'
-            echo "$TAGS"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors
+
+          show() {
+            az containerapp show --name "$APP" --resource-group "$RESOURCE_GROUP" --query "$1" --output tsv
+          }
+          previous="$(show 'properties.template.containers[0].image')"
+          url="https://$(show 'properties.configuration.ingress.fqdn')"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+          if [ "$previous" = "$IMAGE" ]; then
+            echo "Already running $IMAGE."
+            exit 0
+          fi
+
+          # Ready: the new version is the one taking traffic, and it answers.
+          ready() {
+            for _ in $(seq 1 30); do
+              latest="$(show 'properties.latestRevisionName')"
+              serving="$(show 'properties.latestReadyRevisionName')"
+              if [ "$latest" = "$serving" ] \
+                && curl --fail --silent --max-time 15 "$url/api/health" > /dev/null; then
+                return 0
+              fi
+              sleep 10
+            done
+            return 1
+          }
+
+          echo "Deploying $IMAGE (was $previous)."
+          if az containerapp update --name "$APP" --resource-group "$RESOURCE_GROUP" \
+              --image "$IMAGE" --only-show-errors > /dev/null && ready; then
+            echo "### Deployed \`$IMAGE\` to $url" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "::error::$IMAGE did not become healthy; rolling back to $previous."
+          az containerapp update --name "$APP" --resource-group "$RESOURCE_GROUP" \
+            --image "$previous" --only-show-errors > /dev/null
+          if ready; then
+            echo "### Rolled back to \`$previous\`; \`$IMAGE\` was not healthy" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::The rollback to $previous is not healthy either."
+          fi
+          exit 1

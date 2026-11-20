@@ -5,16 +5,21 @@ This guide publishes the website on **Azure Container Apps** with an
 little or no cost. The site gets a free HTTPS address such as
 `https://verisight.<random>.<region>.azurecontainerapps.io`.
 
-You need neither Docker nor a paid registry. GitHub builds the image from this
-repository after CI passes, and publishes it to GitHub Container Registry
-(`ghcr.io`), which is free for public images. Azure only runs it.
+You need neither Docker nor a paid registry. After the one-time setup below,
+every push to `main` deploys itself: once CI passes, GitHub builds the image,
+publishes it to GitHub Container Registry (`ghcr.io`, free for public images) and
+updates the app on Azure. A version that does not start healthy is rolled back to
+the one that was running, so a bad change never takes the site down.
 
 ```mermaid
 flowchart LR
     P[Push to main] --> C[CI passes]
     C --> B[GitHub builds the image]
     B --> G[ghcr.io, free]
-    G --> A[Azure Container Apps<br/>runs it on demand]
+    G --> D[Deploy to Azure]
+    D --> H{Healthy?}
+    H -- yes --> L[Live]
+    H -- no --> R[Roll back to<br/>the previous image]
 ```
 
 ## What it costs
@@ -44,7 +49,8 @@ Three choices would spend your credit quickly, so this guide avoids them:
 
 The workflow `.github/workflows/image.yml` runs after each successful CI run on
 `main`. It can also be started by hand from the **Actions** tab: choose **Publish
-image**, then **Run workflow**.
+and deploy**, then **Run workflow**. Until step 5 is done, its **Deploy to Azure**
+job is skipped, not failed.
 
 When it has finished once, make the image public, so that Azure can download it
 without a password:
@@ -53,12 +59,19 @@ without a password:
 2. Choose **Package settings**.
 3. Under **Danger Zone**, choose **Change visibility**, then **Public**.
 
-The run's summary page lists the tags it published: `latest` and one per commit,
-such as `sha-1a2b3c4`.
+Each run publishes two tags: `latest`, and one naming the commit, such as
+`sha-1a2b3c4`.
 
 ## 2. Prepare the Azure CLI
 
-Install the Azure CLI with `winget install -e --id Microsoft.AzureCLI`, close and
+**Easiest: Azure Cloud Shell.** In the [Azure portal](https://portal.azure.com),
+click the `>_` icon at the top. Choose **PowerShell**, then **No storage account
+required**, so nothing is billed for it. The CLI is installed and already signed
+in: skip `winget` and `az login` below, and run the other commands. A Cloud Shell
+session ends after about 20 minutes idle and forgets its variables, so if it
+restarts, set `$rg` and `$location` again from step 3.
+
+**Or on your computer:** install the Azure CLI with `winget install -e --id Microsoft.AzureCLI`, close and
 reopen PowerShell, then:
 
 ```powershell
@@ -137,6 +150,49 @@ anything starts costing money, you hear about it within a day, long before the
 credit is gone. Your remaining credit is shown at
 [Azure for Students](https://www.microsoftazuresponsorships.com/Balance).
 
+## 5. Turn on automatic deploys
+
+This lets GitHub update the app by itself. It uses a managed identity, an Azure
+account for the workflow that can change only this resource group, and a
+federated credential, which trusts short-lived tokens that GitHub issues to this
+repository's `azure` environment. No password or key is stored anywhere. Run this
+once, in the same PowerShell window as step 3:
+
+```powershell
+az identity create --name verisight-deploy --resource-group $rg
+$clientId = az identity show --name verisight-deploy --resource-group $rg --query clientId --output tsv
+$principalId = az identity show --name verisight-deploy --resource-group $rg --query principalId --output tsv
+$scope = az group show --name $rg --query id --output tsv
+az role assignment create --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --role Contributor --scope $scope
+az identity federated-credential create --name github-azure --identity-name verisight-deploy --resource-group $rg --issuer https://token.actions.githubusercontent.com --subject "repo:Md-Faiz-Alam/verisight:environment:azure" --audiences api://AzureADTokenExchange
+"AZURE_CLIENT_ID       $clientId"
+"AZURE_TENANT_ID       $(az account show --query tenantId --output tsv)"
+"AZURE_SUBSCRIPTION_ID $(az account show --query id --output tsv)"
+```
+
+The last three lines print three values. On GitHub, open the repository's
+**Settings**, then **Secrets and variables**, then **Actions**, then the
+**Variables** tab, and add each one as a **repository variable** with that name.
+They are identifiers, not secrets. If you used names other than `verisight-rg` and
+`verisight`, also add `AZURE_RESOURCE_GROUP` and `AZURE_CONTAINER_APP`.
+
+To check it, open **Actions**, choose **Publish and deploy**, then **Run
+workflow**. Both jobs should pass, and the run shows the site's address.
+
+### What happens on each push
+
+1. CI runs. If any check fails, nothing is built or deployed.
+2. **Build and publish** builds the image and publishes it as `sha-<commit>` and
+   `latest`.
+3. **Deploy to Azure** notes the image that is running, switches the app to the new
+   one, and waits up to five minutes for the new version to take traffic and
+   answer `/api/health`.
+4. If it does not, the job switches the app back to the previous image and fails,
+   so you see a red run while visitors keep the working site.
+
+Runs go one at a time, in order, and a deploy is never cancelled halfway. The
+identity can change only resources in this resource group.
+
 ## The Gemini key
 
 By default the site has **no server key**: each visitor pastes their own Gemini
@@ -156,19 +212,20 @@ Never put the key in the Dockerfile, the image or Git.
 
 ## Update the site
 
-Push to `main`. When CI and **Publish image** have passed, take the new commit tag
-from that run's summary and deploy it:
+Push to `main`; step 5 does the rest. To run a particular version by hand, for
+example an older one, use its commit tag:
 
 ```powershell
 az containerapp update --name verisight --resource-group $rg --image ghcr.io/md-faiz-alam/verisight-web:sha-1a2b3c4
 ```
 
-Use the commit tag rather than `latest`: Azure starts a new version only when the
+Use a commit tag rather than `latest`: Azure starts a new version only when the
 image name changes.
 
 ## Stop paying
 
-Deleting the resource group removes the app and its environment:
+Deleting the resource group removes the app, its environment and the deploy
+identity:
 
 ```powershell
 az group delete --name $rg --yes --no-wait
