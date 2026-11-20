@@ -1,10 +1,19 @@
 # Weekly update pull requests, so dependencies and pinned actions do not drift.
 version: 2
 updates:
+  # Minor and patch updates come as one pull request. Major versions of pandas,
+  # DuckDB, sqlglot and the like change behaviour the SQL audit and loader rely
+  # on, so they are upgraded by hand, with the full test suite and a live run.
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
+    groups:
+      python:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5
 
   - package-ecosystem: npm
