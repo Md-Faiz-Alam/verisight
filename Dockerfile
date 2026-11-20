@@ -2,7 +2,7 @@
 # Uploaded datasets live in this container's memory and temp disk, so run a
 # single instance (scale 1). See docs/deploy-aws.md.
 # The official Python image via AWS's public registry (no Docker Hub pull limits).
-FROM public.ecr.aws/docker/library/python:3.11-slim
+FROM public.ecr.aws/docker/library/python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

@@ -4,7 +4,8 @@ Detailed use of the command line, the Python API, cleaning rules, investigations
 
 ## Installation
 
-Python 3.11 or newer is required. CI currently exercises Python 3.11.
+Python 3.11 or newer is required. CI tests Python 3.11 and 3.13; development
+uses 3.13.
 
 Windows PowerShell, from the repository root:
 

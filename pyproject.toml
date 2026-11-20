@@ -6,13 +6,22 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "verisight"
 version = "0.4.0"
-description = "Autonomous, evidence-backed AI data analyst."
+description = "Ask questions about CSV, Excel and JSON files; every number is traced to the SQL result it came from."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
+keywords = ["llm", "text-to-sql", "duckdb", "data-analysis", "verification", "gemini"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Framework :: FastAPI",
+    "Typing :: Typed",
+]
 
 authors = [
-    { name = "Faiz" }
+    { name = "Md Faiz Alam" }
 ]
 
 dependencies = [
@@ -26,6 +35,12 @@ dependencies = [
     "sqlglot>=28.10,<29.0",
     "xlrd>=2.0,<3.0",
 ]
+
+
+[project.urls]
+Homepage = "https://github.com/Md-Faiz-Alam/verisight"
+Documentation = "https://github.com/Md-Faiz-Alam/verisight/tree/main/docs"
+Issues = "https://github.com/Md-Faiz-Alam/verisight/issues"
 
 
 [project.scripts]

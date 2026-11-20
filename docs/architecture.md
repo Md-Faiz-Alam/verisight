@@ -766,7 +766,7 @@ the upload is refused instead of removing someone else's data.
 ## CI and remaining architecture work
 
 `.github/workflows/ci.yml` runs offline gates on Windows and Linux with Python
-3.11. The local CLI and the tested cancellation paths are implemented; unfamiliar
+3.11 and 3.13. The local CLI and the tested cancellation paths are implemented; unfamiliar
 data accuracy, workload limits, fresh installation, operational recovery, and
 deployment isolation still need acceptance evidence. A complete supported
 version matrix and held-out evaluation are not established. See

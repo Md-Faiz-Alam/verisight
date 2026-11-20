@@ -23,6 +23,11 @@ dist/
 .coverage.*
 htmlcov/
 
+# Profiler output, which records local paths
+/prof
+*.prof
+*.pstats
+
 # Type checking
 .mypy_cache/
 

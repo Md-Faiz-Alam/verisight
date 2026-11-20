@@ -15,16 +15,20 @@ concurrency:
 
 jobs:
   quality:
-    name: Python 3.11 / ${{ matrix.os }}
+    name: Python ${{ matrix.python }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
 
+    # 3.11 is the oldest supported version; 3.13 is the one used for development.
     strategy:
       fail-fast: false
       matrix:
         os:
           - ubuntu-latest
           - windows-latest
+        python:
+          - "3.11"
+          - "3.13"
 
     env:
       PYTHONUTF8: "1"
@@ -37,9 +41,9 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: pyproject.toml
 
@@ -98,7 +102,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # Pinned to the version the committed build was made with, so a new
           # LTS release cannot change the build output and fail the check below.
@@ -130,7 +134,7 @@ jobs:
         run: npm run test:e2e
 
   snapshot-wheel:
-    name: Windows Python 3.11.9 / snapshot and wheel
+    name: Windows Python 3.13.17 / snapshot and wheel
     runs-on: windows-latest
     timeout-minutes: 20
 
@@ -149,18 +153,18 @@ jobs:
           persist-credentials: false
 
       - name: Set up tested Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.11.9"
+          python-version: "3.13.17"
           architecture: x64
           cache: pip
           cache-dependency-path: |
             pyproject.toml
-            requirements-dev-windows-py311.txt
+            requirements-dev-windows-py313.txt
 
       - name: Create isolated snapshot environment
         run: |
-          python -c "import platform; assert platform.python_version() == '3.11.9'; assert platform.system() == 'Windows'; assert platform.machine() == 'AMD64'"
+          python -c "import platform; assert platform.python_version() == '3.13.17'; assert platform.system() == 'Windows'; assert platform.machine() == 'AMD64'"
           if ($LASTEXITCODE -ne 0) { throw "Unexpected Python or platform." }
 
           $snapshotRoot = Join-Path $env:RUNNER_TEMP "verisight-snapshot"
@@ -172,7 +176,7 @@ jobs:
 
       - name: Install snapshot and editable project
         run: |
-          & $env:SNAPSHOT_PYTHON -m pip install -r requirements-dev-windows-py311.txt
+          & $env:SNAPSHOT_PYTHON -m pip install -r requirements-dev-windows-py313.txt
           if ($LASTEXITCODE -ne 0) { throw "Snapshot installation failed." }
 
           & $env:SNAPSHOT_PYTHON -m pip install --no-deps --no-build-isolation -e .
@@ -211,7 +215,7 @@ jobs:
           $wheels = @(Get-ChildItem -LiteralPath $wheelDirectory -Filter "*.whl" -File)
           if ($wheels.Count -ne 1) { throw "Expected exactly one project wheel." }
 
-          $constraints = (Resolve-Path -LiteralPath "requirements-dev-windows-py311.txt").Path
+          $constraints = (Resolve-Path -LiteralPath "requirements-dev-windows-py313.txt").Path
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "VERISIGHT_WHEEL=$($wheels[0].FullName)" -Encoding utf8
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "SNAPSHOT_CONSTRAINTS=$constraints" -Encoding utf8
 

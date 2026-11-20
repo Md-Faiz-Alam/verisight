@@ -2,7 +2,8 @@
 
 ## Setup and repository layout
 
-Use Python 3.11 or newer. CI currently tests Python 3.11 on Windows and Linux.
+Use Python 3.11 or newer; development uses 3.13. CI tests Python 3.11 and 3.13 on
+Windows and Linux.
 
 Windows PowerShell:
 
@@ -74,12 +75,13 @@ branch coverage. Full coverage is an engineering gate, not proof of analytical
 correctness.
 
 The quality matrix runs formatting, lint, strict mypy, full offline coverage,
-and whitespace checks on Python 3.11 with `ubuntu-latest` and `windows-latest`.
+and whitespace checks on Python 3.11 and 3.13 with `ubuntu-latest` and
+`windows-latest`.
 These jobs install the editable project and resolve dependencies within the
 ranges in `pyproject.toml`. Each has a 15-minute limit.
 
-A separate Windows AMD64 job uses CPython 3.11.9 and the committed
-`requirements-dev-windows-py311.txt` snapshot. It has a 20-minute limit and:
+A separate Windows AMD64 job uses CPython 3.13.17 and the committed
+`requirements-dev-windows-py313.txt` snapshot. It has a 20-minute limit and:
 
 1. Creates a separate virtual environment and installs the snapshot.
 2. Installs the editable project without resolving dependencies or isolating the
@@ -428,19 +430,13 @@ Do not stage `datasets/`. Avoid undated test-count badges and unsupported
 completion percentages. See [Architecture](architecture.md) for current
 contracts and [Roadmap](roadmap.md) for remaining acceptance work.
 
-### Tested Windows Python 3.11 environment snapshot
+### Tested Windows Python 3.13 environment snapshot
 
-`requirements-dev-windows-py311.txt` records the installed package versions
-successfully replayed on Windows AMD64 with CPython 3.11.9 at revision
-`3cd3ea84c8c31f635803cb2cf2ca8ed4bfd0404d`.
-
-The replay used an archived source revision and a separate environment.
-Dependency checks, Ruff formatting and lint, strict mypy, and all 2,474
-tests passed with 100% statement and branch coverage.
-
-The website dependencies (FastAPI, Starlette, Uvicorn, python-multipart, httpx2
-and their requirements) were added later, resolved for Windows and CPython
-3.11.9 within the existing pins, without changing any earlier version.
+`requirements-dev-windows-py313.txt` records every package version installed by
+`pip install -e ".[dev]"` on Windows AMD64 with CPython 3.13.17, build tools
+included. With it, ruff, strict mypy and all 4,105 tests passed with 100%
+statement and branch coverage. It replaced an earlier CPython 3.11.9 snapshot with
+the same packages.
 
 This development snapshot includes transitive dependencies and build/test
 tools. It is not a minimal dependency specification, a cross-platform lock,
@@ -448,21 +444,21 @@ or a hash-verified package archive. Version pins do not guarantee continued
 package availability or artifact integrity. Supported dependency ranges
 remain in `pyproject.toml`.
 
-From the repository root, replay with Windows AMD64 and CPython 3.11.9:
+From the repository root, replay with Windows AMD64 and CPython 3.13.17:
 
     $replayEnvironment = Join-Path $env:TEMP (
         "verisight-replay-" + [guid]::NewGuid().ToString("N")
     )
 
-    py -3.11 -m venv $replayEnvironment
+    py -3.13 -m venv $replayEnvironment
     if ($LASTEXITCODE -ne 0) { throw "Environment creation failed." }
 
     $replayPython = Join-Path $replayEnvironment "Scripts/python.exe"
 
-    & $replayPython -c "import platform; assert platform.python_version() == '3.11.9'; assert platform.system() == 'Windows'; assert platform.machine() == 'AMD64'"
+    & $replayPython -c "import platform; assert platform.python_version() == '3.13.17'; assert platform.system() == 'Windows'; assert platform.machine() == 'AMD64'"
     if ($LASTEXITCODE -ne 0) { throw "Unexpected Python or platform." }
 
-    & $replayPython -m pip install -r requirements-dev-windows-py311.txt
+    & $replayPython -m pip install -r requirements-dev-windows-py313.txt
     if ($LASTEXITCODE -ne 0) { throw "Snapshot installation failed." }
 
     & $replayPython -m pip install --no-deps --no-build-isolation -e .

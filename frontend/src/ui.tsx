@@ -26,7 +26,7 @@ export function Icon({ name, size = 16 }: { name: string; size?: number }) {
   );
 }
 
-export function useWidth<T extends HTMLElement>(): [RefObject<T>, number] {
+export function useWidth<T extends HTMLElement>(): [RefObject<T | null>, number] {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
