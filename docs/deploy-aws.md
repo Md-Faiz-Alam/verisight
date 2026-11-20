@@ -1,5 +1,8 @@
 # Deploy the VeriSight website on AWS
 
+With an Azure for Students subscription, follow
+[Deploy on Azure](deploy-azure.md) instead; this guide needs your own AWS account.
+
 The website is one container: a FastAPI server with the web page, listening on
 port 8000. Uploaded files stay inside the container for at most an hour, so run
 **exactly one instance**. Two instances would not share uploads.

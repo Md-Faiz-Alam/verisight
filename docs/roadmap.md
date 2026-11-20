@@ -52,7 +52,7 @@ it can be trusted, and gives no number rather than a misleading one. The
 5. **Answer more plain questions without AI.** In user testing every question needed
    Gemini.
 6. **A public demo and outside users.** Publish the website by the
-   [deployment guide](deploy-aws.md), measure memory on that container, and let
+   [Azure guide](deploy-azure.md), measure memory on that container, and let
    people outside the project try it. Accounts, monitoring and storage shared
    between server copies come after.
 7. **Questions in other languages.** Eight SQL audit checks read only the SQL and

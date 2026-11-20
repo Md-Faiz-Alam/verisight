@@ -43,6 +43,7 @@ scripts run from the repository root and are not included by the current
 | `evaluation/` | Evaluation runners, the public benchmark and held-out sets |
 | `evaluation/compare/` | The runner that compares plain Gemini, number checks and full VeriSight |
 | `.github/workflows/ci.yml` | Automated quality gates |
+| `.github/workflows/image.yml` | Publishes the website image to `ghcr.io` after CI passes on `main` |
 
 ## Required gates and CI
 
