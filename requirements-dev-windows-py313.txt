@@ -9,7 +9,7 @@ colorama==0.4.6
 coverage==7.17.3
 cryptography==50.0.2
 distro==1.9.0
-duckdb==1.5.6
+duckdb==2.0.1
 et_xmlfile==2.0.0
 fastapi==0.165.0
 google-auth==2.62.2

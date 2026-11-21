@@ -193,17 +193,18 @@ class AnalyticalQueryValidator:
             )
 
         statement = statements[0]
+        masked_query = _mask_sql_literals_and_comments(query)
+
+        # Checked before the statement type: DuckDB 2 reports PRAGMA as its own
+        # type, where 1.x rewrote it into a SELECT.
+        if _PRAGMA_PATTERN.search(masked_query):
+            raise QueryValidationError(
+                "PRAGMA statements are not allowed in analytical queries."
+            )
 
         if statement.type != duckdb.StatementType.SELECT:
             raise QueryValidationError(
                 "Only read-only analytical SELECT queries are allowed."
-            )
-
-        masked_query = _mask_sql_literals_and_comments(query)
-
-        if _PRAGMA_PATTERN.search(masked_query):
-            raise QueryValidationError(
-                "PRAGMA statements are not allowed in analytical queries."
             )
 
         for pattern in _BLOCKED_SELECT_PATTERNS:

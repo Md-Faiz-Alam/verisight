@@ -25,7 +25,7 @@ authors = [
 ]
 
 dependencies = [
-    "duckdb>=1.4,<2.0",
+    "duckdb>=2.0,<3.0",
     "google-genai>=2.27,<3.0",
     "numpy>=2.0.2,<2.4",
     "openpyxl>=3.1,<4.0",
