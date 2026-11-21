@@ -28,7 +28,7 @@ the SQL result; only the SQL shows whether it was the right total.
 Questions go through the website's REST API, the same path a visitor uses:
 upload, then POST /api/datasets/{id}/ask with consent and a Gemini key, then
 DELETE. By default the app runs in this process; --base-url sends the same
-requests to a running server, such as the AWS deployment. The key comes from
+requests to a running server, such as the Azure deployment. The key comes from
 VERISIGHT_GEMINI_API_KEY (or your .env), is sent only with each question, and
 is never written to any output.
 

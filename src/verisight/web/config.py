@@ -50,7 +50,7 @@ class WebSettings(BaseSettings):
     cleanup_interval_seconds: float = Field(
         default=60.0, gt=0, le=3600, allow_inf_nan=False
     )
-    # Behind one load balancer (AWS Lightsail or ALB), the client address is
+    # Behind one proxy (such as Azure Container Apps' ingress), the client address is
     # the right-most X-Forwarded-For entry, which that proxy appends. Enable
     # only when such a proxy is always in front of the server.
     trust_forwarded_for: bool = False

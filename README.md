@@ -140,8 +140,7 @@ what counts as a different route.
 | [System specification](docs/system-spec.md) | Supported input, limits, targets and their status |
 | [Output contracts](docs/output-contracts.md) | What an accepted answer must contain |
 | [Development](docs/development.md) | Checks, benchmarks and replays for contributors |
-| [Deploy on Azure](docs/deploy-azure.md) | Publishing the website with Azure for Students |
-| [Deploy on AWS](docs/deploy-aws.md) | Publishing the website on Amazon Lightsail |
+| [Deploy on Azure](docs/deploy-azure.md) | Publishing the website, deployed automatically after CI |
 | [Roadmap](docs/roadmap.md) | What is done and what comes next |
 
 ## Development

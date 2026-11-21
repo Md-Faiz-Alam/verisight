@@ -8,9 +8,9 @@ listed here is not promised.
 
 VeriSight is an analytical application that runs on one computer: a command line,
 a Python API and a website. There are no user accounts; each website upload can
-be used only with the private token returned to whoever uploaded it. Deployment
-guides for [Azure](deploy-azure.md) and [AWS](deploy-aws.md) exist, but no public
-copy is running. Your original files stay yours and are never changed.
+be used only with the private token returned to whoever uploaded it. A
+[deployment guide](deploy-azure.md) publishes it on Azure Container Apps, deployed
+automatically after CI passes. Your original files stay yours and are never changed.
 
 ## Supported input
 

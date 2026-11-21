@@ -241,5 +241,5 @@ With Docker Desktop running:
 docker run --rm -p 8000:8000 ghcr.io/md-faiz-alam/verisight-web:latest
 ```
 
-Then open <http://localhost:8000>. The same image also runs on AWS; see
-[Deploy on AWS](deploy-aws.md).
+Then open <http://localhost:8000>. The image is an ordinary Linux container, so any
+host that runs containers can run it.
