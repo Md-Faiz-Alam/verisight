@@ -1,13 +1,17 @@
 """Excel loader for the VeriSight ingestion subsystem."""
 
-from collections.abc import Sequence
+import math
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from datetime import time
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Literal, cast
 from xml.etree import ElementTree
 from zipfile import ZipFile
 
 import pandas as pd
+import xlrd
+from xlrd.sheet import Sheet
 
 from verisight.config import Settings
 from verisight.ingestion.dtypes import infer_types
@@ -24,23 +28,10 @@ from verisight.ingestion.validation import validate_file
 
 EXCEL_EXTENSIONS = frozenset({".xls", ".xlsx"})
 _TOP_ROWS = 20
-# xlrd's public XL_CELL_ERROR cell type, before pandas converts it to NaN.
-_XLS_ERROR_CELL_TYPE = 5
 
-
-class _XlsSheet(Protocol):
-    """The xlrd sheet attributes used for source-cell validation."""
-
-    @property
-    def nrows(self) -> int: ...
-
-    def row_types(self, rowx: int) -> Sequence[int]: ...
-
-
-class _XlsBook(Protocol):
-    """The xlrd workbook operation used by the legacy Excel path."""
-
-    def sheet_by_name(self, sheet_name: str) -> _XlsSheet: ...
+# One worksheet: its name, its first rows as source cells, and a reader that
+# takes the header row's position and the column count and returns the data.
+_Sheet = tuple[str, pd.DataFrame, Callable[[int, int], pd.DataFrame]]
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -80,73 +71,44 @@ class ExcelLoader:
                     * 1024
                     * 1024,
                 )
-            with pd.ExcelFile(metadata.path) as workbook:
-                for sheet_name in workbook.sheet_names:
-                    if not isinstance(sheet_name, str):
-                        raise DataLoadError(
-                            "Excel workbook contains a non-string sheet name."
-                        )
+                sheets = _xlsx_sheets(metadata.path)
+            else:
+                sheets = _xls_sheets(metadata.path)
+            for sheet_name, top, read_data in sheets:
+                if _is_blank(top):
+                    blank_sheets.append(sheet_name)
+                    continue
+                skipped = _header_row(top)
+                source_columns = top.iloc[skipped].tolist()
+                named, blank_notes = CsvLoader._name_blank_headers(
+                    [str(column) for column in source_columns]
+                )
+                columns, renamed_notes = CsvLoader._rename_duplicates(named)
+                data = read_data(skipped, len(source_columns))
+                if len(data.columns) != len(source_columns):
+                    raise DataLoadError(
+                        "Excel data contains fields without source headers."
+                    )
+                data.columns = pd.Index(columns)
+                for column in data.columns:
+                    data[column] = _infer_column(_restore_cells(data[column]))
 
-                    if metadata.file_extension == ".xls":
-                        legacy_book = cast(_XlsBook, workbook.book)
-                        sheet = legacy_book.sheet_by_name(sheet_name)
-                        for row in range(sheet.nrows):
-                            if _XLS_ERROR_CELL_TYPE in sheet.row_types(row):
-                                raise DataLoadError(
-                                    "Excel worksheet contains error cells."
-                                )
-
-                    # header=None exposes source cells before pandas renames them.
-                    top = workbook.parse(
+                table = LoadedTable(
+                    name=sheet_name,
+                    data=data,
+                    source=SourceMetadata(
+                        path=metadata.path,
+                        file_name=metadata.file_name,
+                        file_extension=metadata.file_extension,
+                        file_size_bytes=metadata.file_size_bytes,
                         sheet_name=sheet_name,
-                        header=None,
-                        nrows=_TOP_ROWS,
-                        dtype=object,
-                        keep_default_na=False,
-                        na_filter=False,
-                    )
-                    if _is_blank(top):
-                        blank_sheets.append(sheet_name)
-                        continue
-                    skipped = _header_row(top)
-                    source_columns = top.iloc[skipped].tolist()
-                    named, blank_notes = CsvLoader._name_blank_headers(
-                        [str(column) for column in source_columns]
-                    )
-                    columns, renamed_notes = CsvLoader._rename_duplicates(named)
-                    data = workbook.parse(
-                        sheet_name=sheet_name,
-                        skiprows=skipped,
-                        converters={
-                            index: _ExcelCell for index in range(len(source_columns))
-                        },
-                        keep_default_na=False,
-                        na_filter=False,
-                    )
-                    if len(data.columns) != len(source_columns):
-                        raise DataLoadError(
-                            "Excel data contains fields without source headers."
-                        )
-                    data.columns = pd.Index(columns)
-                    for column in data.columns:
-                        data[column] = _infer_column(_restore_cells(data[column]))
-
-                    table = LoadedTable(
-                        name=sheet_name,
-                        data=data,
-                        source=SourceMetadata(
-                            path=metadata.path,
-                            file_name=metadata.file_name,
-                            file_extension=metadata.file_extension,
-                            file_size_bytes=metadata.file_size_bytes,
-                            sheet_name=sheet_name,
-                        ),
-                    )
-                    title_notes: tuple[ValueNote, ...] = ()
-                    if skipped:
-                        title_notes = (_title_note(top, skipped, columns[0]),)
-                    table.value_notes = (*blank_notes, *renamed_notes, *title_notes)
-                    tables.append(table)
+                    ),
+                )
+                title_notes: tuple[ValueNote, ...] = ()
+                if skipped:
+                    title_notes = (_title_note(top, skipped, columns[0]),)
+                table.value_notes = (*blank_notes, *renamed_notes, *title_notes)
+                tables.append(table)
 
         except DataLoadError:
             raise
@@ -171,6 +133,105 @@ class ExcelLoader:
             source=metadata,
             tables=tables,
         )
+
+
+def _xlsx_sheets(path: Path) -> Iterator[_Sheet]:
+    """Read ``.xlsx`` worksheets with openpyxl, named so a default cannot change."""
+    with pd.ExcelFile(path, engine="openpyxl") as workbook:
+        for sheet_name in workbook.sheet_names:
+            if not isinstance(sheet_name, str):
+                raise DataLoadError("Excel workbook contains a non-string sheet name.")
+
+            def read_data(
+                skipped: int, width: int, name: str = sheet_name
+            ) -> pd.DataFrame:
+                return pd.read_excel(
+                    workbook,
+                    sheet_name=name,
+                    skiprows=skipped,
+                    converters={index: _ExcelCell for index in range(width)},
+                    keep_default_na=False,
+                    na_filter=False,
+                )
+
+            # header=None exposes source cells before pandas renames them.
+            top = pd.read_excel(
+                workbook,
+                sheet_name=sheet_name,
+                header=None,
+                nrows=_TOP_ROWS,
+                dtype=object,
+                keep_default_na=False,
+                na_filter=False,
+            )
+            yield sheet_name, top, read_data
+
+
+def _xls_sheets(path: Path) -> Iterator[_Sheet]:
+    """Read legacy ``.xls`` worksheets with xlrd directly.
+
+    pandas is retiring its xlrd engine, and no other reader handles the oldest
+    BIFF formats, so the cells are read here and converted as that engine did.
+    Building object columns directly keeps every source type, as the converters
+    do on the ``.xlsx`` path.
+    """
+    book = xlrd.open_workbook(str(path))
+    try:
+        for sheet in book.sheets():
+            rows = _xls_rows(sheet, book.datemode)
+
+            def read_data(
+                skipped: int, width: int, rows: list[list[object]] = rows
+            ) -> pd.DataFrame:
+                return pd.DataFrame(
+                    rows[skipped + 1 :], columns=range(width), dtype=object
+                )
+
+            yield sheet.name, pd.DataFrame(rows[:_TOP_ROWS], dtype=object), read_data
+    finally:
+        book.release_resources()
+
+
+def _xls_rows(sheet: Sheet, datemode: Literal[0, 1]) -> list[list[object]]:
+    """A worksheet's cells, rejecting Excel error values such as ``#DIV/0!``."""
+    rows: list[list[object]] = []
+    for index in range(sheet.nrows):
+        types = sheet.row_types(index)
+        if xlrd.XL_CELL_ERROR in types:
+            raise DataLoadError("Excel worksheet contains error cells.")
+        values = sheet.row_values(index)
+        rows.append(
+            [
+                _xls_cell(value, cell_type, datemode)
+                for value, cell_type in zip(values, types, strict=True)
+            ]
+        )
+    return rows
+
+
+def _xls_cell(value: object, cell_type: int, datemode: Literal[0, 1]) -> object:
+    """Convert one ``.xls`` cell exactly as pandas' xlrd engine did.
+
+    Dates become datetimes, and a date on the workbook's epoch day is a time of
+    day. Booleans become ``bool``, and whole numbers become ``int``, because
+    Excel stores every number as a float. Text and empty cells are unchanged.
+    """
+    if cell_type == xlrd.XL_CELL_DATE:
+        try:
+            moment = xlrd.xldate.xldate_as_datetime(cast(float, value), datemode)
+        except OverflowError:
+            return value
+        epoch_day = (1904, 1, 1) if datemode else (1899, 12, 31)
+        if moment.timetuple()[:3] == epoch_day:
+            return time(moment.hour, moment.minute, moment.second, moment.microsecond)
+        return moment
+    if cell_type == xlrd.XL_CELL_BOOLEAN:
+        return bool(value)
+    if cell_type == xlrd.XL_CELL_NUMBER:
+        number = cast(float, value)
+        if math.isfinite(number) and int(number) == number:
+            return int(number)
+    return value
 
 
 def _is_blank(top: pd.DataFrame) -> bool:

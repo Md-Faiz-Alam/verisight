@@ -86,7 +86,13 @@ SQL processing of every nested value.
 Excel ingestion does not recalculate formulas. `.xlsx` formulas require saved
 results; missing caches and Excel error cells are rejected. Saved results may
 be stale. Legacy `.xls` validation rejects error cells exposed by xlrd but does
-not independently identify missing or stale formula caches.
+not independently identify missing or stale formula caches. `.xlsx` files are
+read through pandas with openpyxl, named explicitly so that a change of pandas
+default cannot alter them. `.xls` files are read with xlrd directly, because
+pandas is retiring its xlrd engine and no other reader handles the oldest BIFF
+formats. Their cells are converted as that engine did: whole numbers as
+integers, date cells as datetimes, a date on the workbook's epoch day as a time
+of day, and booleans as `bool`.
 
 Numeric profiling excludes source non-finite values from summary calculations.
 Mean, median, and sample standard deviation use stable arithmetic on float

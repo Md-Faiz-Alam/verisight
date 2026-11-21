@@ -5,6 +5,16 @@ Notable changes to VeriSight. The format follows
 [Semantic Versioning](https://semver.org/). Every live evaluation, including the
 failures, is in [Live results](docs/results.md).
 
+## [Unreleased]
+
+### Changed
+
+- Legacy `.xls` files are read with xlrd directly, converting cells exactly as
+  pandas' retiring xlrd engine did, and `.xlsx` files go through `pd.read_excel`
+  with openpyxl named explicitly. This removes all 264 pandas deprecation warnings,
+  keeps the rejection of Excel error cells, and prepares for pandas 4.
+- Added the `types-xlrd` type stubs, so xlrd is type-checked under strict mypy.
+
 ## [0.5.0] - 2026-11-21
 
 ### Added

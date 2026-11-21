@@ -1,12 +1,14 @@
 import re
 import struct
-from datetime import datetime
+from datetime import datetime, time
 from io import BytesIO
 from pathlib import Path
+from typing import Literal
 from zipfile import ZipFile
 
 import pandas as pd
 import pytest
+import xlrd
 
 from verisight import VeriSight
 from verisight.config import Settings
@@ -14,7 +16,7 @@ from verisight.ingestion.exceptions import (
     DataLoadError,
     FileValidationError,
 )
-from verisight.ingestion.loaders.excel import ExcelLoader
+from verisight.ingestion.loaders.excel import ExcelLoader, _xls_cell
 
 
 def test_excel_loader_loads_single_sheet_workbook(
@@ -161,28 +163,10 @@ def test_excel_loader_wraps_sheet_parse_failure(
     file_path = tmp_path / "broken.xlsx"
     pd.DataFrame({"id": [1]}).to_excel(file_path, index=False)
 
-    class FailingWorkbook:
-        sheet_names = ["Customers"]
+    def fail_to_parse(*args: object, **kwargs: object) -> pd.DataFrame:
+        raise ValueError("Could not parse the sheet")
 
-        def __enter__(self) -> "FailingWorkbook":
-            return self
-
-        def __exit__(
-            self,
-            exc_type: object,
-            exc_value: object,
-            traceback: object,
-        ) -> None:
-            return None
-
-        def parse(self, sheet_name: str, **kwargs: object) -> pd.DataFrame:
-            raise ValueError(f"Could not parse {sheet_name}")
-
-    monkeypatch.setattr(
-        pd,
-        "ExcelFile",
-        lambda *args, **kwargs: FailingWorkbook(),
-    )
+    monkeypatch.setattr(pd, "read_excel", fail_to_parse)
 
     with pytest.raises(
         DataLoadError,
@@ -196,39 +180,26 @@ def test_excel_loader_closes_workbook_after_loading(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     file_path = tmp_path / "workbook.xlsx"
-    pd.DataFrame({"id": [1]}).to_excel(file_path, index=False)
+    pd.DataFrame({"id": [1, 2]}).to_excel(
+        file_path, index=False, sheet_name="Customers"
+    )
 
     closed = False
+    close = pd.ExcelFile.close
 
-    class TrackingWorkbook:
-        sheet_names = ["Customers"]
+    def tracking_close(self: pd.ExcelFile) -> None:
+        nonlocal closed
+        closed = True
+        close(self)
 
-        def __enter__(self) -> "TrackingWorkbook":
-            return self
-
-        def __exit__(
-            self,
-            exc_type: object,
-            exc_value: object,
-            traceback: object,
-        ) -> None:
-            nonlocal closed
-            closed = True
-
-        def parse(self, sheet_name: str, **kwargs: object) -> pd.DataFrame:
-            return pd.DataFrame({"id": [1, 2]})
-
-    monkeypatch.setattr(
-        pd,
-        "ExcelFile",
-        lambda *args, **kwargs: TrackingWorkbook(),
-    )
+    monkeypatch.setattr(pd.ExcelFile, "close", tracking_close)
 
     workbook = ExcelLoader(Settings()).load(file_path)
 
     assert closed is True
     assert workbook.table_count == 1
     assert workbook.tables[0].name == "Customers"
+    assert workbook.tables[0].data["id"].tolist() == [1, 2]
 
 
 def test_excel_loader_rejects_non_string_sheet_name(
@@ -517,6 +488,45 @@ def _replace_source_cell(path: Path, cell: str) -> None:
                 )
                 assert count == 1
             target.writestr(entry, content)
+
+
+@pytest.mark.parametrize(
+    ("value", "cell_type", "datemode", "expected"),
+    [
+        (45000.5, xlrd.XL_CELL_DATE, 0, datetime(2023, 3, 15, 12, 0)),
+        (0.5, xlrd.XL_CELL_DATE, 0, time(12, 0)),
+        (0.25, xlrd.XL_CELL_DATE, 1, time(6, 0)),
+        (1e20, xlrd.XL_CELL_DATE, 0, 1e20),
+        (1, xlrd.XL_CELL_BOOLEAN, 0, True),
+        (0, xlrd.XL_CELL_BOOLEAN, 0, False),
+        (2.0, xlrd.XL_CELL_NUMBER, 0, 2),
+        (2.5, xlrd.XL_CELL_NUMBER, 0, 2.5),
+        (float("inf"), xlrd.XL_CELL_NUMBER, 0, float("inf")),
+        ("abc", xlrd.XL_CELL_TEXT, 0, "abc"),
+        ("", xlrd.XL_CELL_EMPTY, 0, ""),
+    ],
+    ids=[
+        "date",
+        "time-1900",
+        "time-1904",
+        "date-out-of-range",
+        "true",
+        "false",
+        "whole-number",
+        "fraction",
+        "infinity",
+        "text",
+        "empty",
+    ],
+)
+def test_legacy_excel_cells_convert_as_pandas_did(
+    value: object, cell_type: int, datemode: Literal[0, 1], expected: object
+) -> None:
+    """Legacy cells keep the values pandas' retired xlrd engine produced."""
+    converted = _xls_cell(value, cell_type, datemode)
+
+    assert converted == expected
+    assert type(converted) is type(expected)
 
 
 @pytest.mark.parametrize("with_error", [False, True], ids=["saved-value", "error"])
