@@ -43,6 +43,8 @@ scripts run from the repository root and are not included by the current
 | `evaluation/` | Evaluation runners, the public benchmark and held-out sets |
 | `evaluation/compare/` | The runner that compares plain Gemini, number checks and full VeriSight |
 | `.github/workflows/ci.yml` | Automated quality gates |
+| `.github/workflows/codeql.yml` | CodeQL security scanning of Python, TypeScript and the workflows |
+| `.github/dependabot.yml` | Weekly dependency update pull requests |
 | `.github/workflows/image.yml` | After CI passes on `main`, publishes the website image to `ghcr.io` and deploys it to Azure, rolling back if it is unhealthy |
 
 ## Required gates and CI

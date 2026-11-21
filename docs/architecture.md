@@ -763,11 +763,30 @@ leaked id opens nothing. One visitor address keeps at most 5 uploads, and a new
 upload only ever replaces that visitor's own oldest one; when the server is full,
 the upload is refused instead of removing someone else's data.
 
-## CI and remaining architecture work
+## CI, deployment and remaining work
 
-`.github/workflows/ci.yml` runs offline gates on Windows and Linux with Python
-3.11 and 3.13. The local CLI and the tested cancellation paths are implemented; unfamiliar
-data accuracy, workload limits, fresh installation, operational recovery, and
-deployment isolation still need acceptance evidence. A complete supported
-version matrix and held-out evaluation are not established. See
-[Roadmap](roadmap.md).
+`.github/workflows/ci.yml` runs the offline gates on Windows and Linux with Python
+3.11 and 3.13, a Windows job on a pinned CPython 3.13.17 snapshot that also builds
+and smoke-tests the wheel, and the frontend's build, unit and browser tests.
+`codeql.yml` scans Python, TypeScript and the workflows for security issues, and
+Dependabot proposes dependency updates weekly.
+
+`image.yml` deploys the website to Azure Container Apps once CI passes on `main`:
+
+1. **Build and publish:** it builds the container image with the commit tag built
+   in, as `VERISIGHT_WEB_BUILD`, and publishes it to GitHub Container Registry.
+2. **Sign in:** it signs in to Azure with a short-lived OIDC token, through a
+   managed identity whose Contributor role covers only the app's resource group.
+3. **Switch and check:** it switches the app to the new image and polls
+   `/api/health` until the response names that build.
+4. **Roll back:** if the new build does not answer within five minutes, it
+   switches back to the previous image and fails the run.
+
+The app runs one container with 0.5 CPU and 1 GB, scales to zero when idle, and
+keeps at most one copy, because uploads live in that container's memory and temp
+disk.
+
+Still to establish: accuracy on questions written outside the project, memory
+measured on the deployed container, operational recovery beyond the automatic
+rollback, and storage shared between server copies, which more than one copy
+would need. See [Roadmap](roadmap.md).

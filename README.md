@@ -5,6 +5,9 @@ SQL, a database computes the answer, and VeriSight shows a number only when it c
 trace it to the executed result.**
 
 [![CI](https://github.com/Md-Faiz-Alam/verisight/actions/workflows/ci.yml/badge.svg)](https://github.com/Md-Faiz-Alam/verisight/actions/workflows/ci.yml)
+[![Deploy](https://github.com/Md-Faiz-Alam/verisight/actions/workflows/image.yml/badge.svg)](https://github.com/Md-Faiz-Alam/verisight/actions/workflows/image.yml)
+[![CodeQL](https://github.com/Md-Faiz-Alam/verisight/actions/workflows/codeql.yml/badge.svg)](https://github.com/Md-Faiz-Alam/verisight/actions/workflows/codeql.yml)
+[![Live on Azure Container Apps](https://img.shields.io/badge/live-Azure%20Container%20Apps-0078D4?logo=microsoftazure&logoColor=white)](https://verisight.gentleglacier-2ae961c6.uaenorth.azurecontainerapps.io)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Test coverage 100%, enforced in CI](https://img.shields.io/badge/coverage-100%25-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
@@ -106,6 +109,36 @@ the schema, profile, question and result values are sent to Gemini. Set the key 
 `VERISIGHT_GEMINI_API_KEY` in `.env`; every setting is listed in the
 [guide](docs/guide.md#settings).
 
+## Deployment on Azure
+
+The live demo runs on **Azure Container Apps** and deploys itself. Every push to
+`main` that passes CI goes through this pipeline:
+
+```mermaid
+flowchart LR
+    P[Push to main] --> C[CI: tests on Windows<br/>and Linux, 3.11 and 3.13]
+    C --> B[GitHub Actions<br/>builds the image]
+    B --> G[GitHub Container<br/>Registry]
+    G --> A[Azure Container Apps]
+    A --> H{"/api/health reports<br/>the new commit?"}
+    H -- yes --> L[Live]
+    H -- no --> R[Rolled back to the<br/>previous image]
+```
+
+- **No stored cloud password:** GitHub signs in to Azure with a short-lived OIDC
+  token, through a managed identity that can change only VeriSight's resource
+  group.
+- **Proof of the new version:** each image carries its commit tag, and the deploy
+  counts as done only when `/api/health` reports that tag. Otherwise the app is
+  switched back to the previous image automatically.
+- **Low cost:** one container with 0.5 CPU and 1 GB. It scales to zero when nobody
+  visits and runs at most one copy, because uploads live in its memory. The image is
+  stored on GitHub for free, so no paid registry is needed.
+
+Frontend and backend ship as one container: FastAPI serves the built React app and
+the API from the same address, so there is no CORS setup and the two can never be
+out of step. [Deploy on Azure](docs/deploy-azure.md) has the full setup.
+
 ## Trust levels
 
 | Level | Meaning |
@@ -131,8 +164,9 @@ what counts as a different route.
 - On the Gemini free tier, Google can use what is sent. Questions send column names
   and some values (the website at most 20 result rows per query). Use non-sensitive
   data only.
-- One computer, no accounts; all questions so far were written on the project's own
-  side. The [system specification](docs/system-spec.md) lists every limit and target.
+- One server copy and no accounts, because uploads live in memory for an hour. All
+  questions so far were written on the project's own side. The
+  [system specification](docs/system-spec.md) lists every limit and target.
 
 ## Documentation
 
@@ -146,6 +180,8 @@ what counts as a different route.
 | [Development](docs/development.md) | Checks, benchmarks and replays for contributors |
 | [Deploy on Azure](docs/deploy-azure.md) | Publishing the website, deployed automatically after CI |
 | [Roadmap](docs/roadmap.md) | What is done and what comes next |
+| [Changelog](CHANGELOG.md) | What changed in each version |
+| [Security policy](SECURITY.md) | How to report a vulnerability, and how the demo is protected |
 
 ## Development
 
@@ -156,9 +192,11 @@ python -m mypy --strict src tests scripts
 python -m pytest --cov=verisight --cov=scripts --cov-fail-under=100
 ```
 
-CI runs these on Windows and Linux with no Gemini key, replays recorded model
-responses through the whole pipeline, and runs the frontend's unit and browser tests.
-See [Development](docs/development.md) for the full gate list.
+CI runs these on Windows and Linux, on Python 3.11 and 3.13, with no Gemini key. It
+replays recorded model responses through the whole pipeline and runs the frontend's
+unit and browser tests. CodeQL scans the code for security issues on every push, and
+Dependabot proposes dependency updates weekly. See
+[Development](docs/development.md) for the full gate list.
 
 ## Dataset attribution
 
