@@ -164,11 +164,23 @@ $clientId = az identity show --name verisight-deploy --resource-group $rg --quer
 $principalId = az identity show --name verisight-deploy --resource-group $rg --query principalId --output tsv
 $scope = az group show --name $rg --query id --output tsv
 az role assignment create --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --role Contributor --scope $scope
-az identity federated-credential create --name github-azure --identity-name verisight-deploy --resource-group $rg --issuer https://token.actions.githubusercontent.com --subject "repo:Md-Faiz-Alam/verisight:environment:azure" --audiences api://AzureADTokenExchange
+# GitHub names the repository by name and fixed ID in its tokens.
+$repo = Invoke-RestMethod https://api.github.com/repos/Md-Faiz-Alam/verisight
+$subject = "repo:Md-Faiz-Alam@$($repo.owner.id)/verisight@$($repo.id):environment:azure"
+az identity federated-credential create --name github-azure --identity-name verisight-deploy --resource-group $rg --issuer https://token.actions.githubusercontent.com --subject $subject --audiences api://AzureADTokenExchange
 "AZURE_CLIENT_ID       $clientId"
 "AZURE_TENANT_ID       $(az account show --query tenantId --output tsv)"
 "AZURE_SUBSCRIPTION_ID $(az account show --query id --output tsv)"
 ```
+
+If `az role assignment create` says the principal does not exist, wait 30 seconds
+and run that line again: a new identity takes a moment to appear.
+
+If the deploy later fails with `No matching federated identity record found for
+presented assertion subject '...'`, the subject differs from what GitHub sends.
+Copy the subject from that message and run `az identity federated-credential
+update` with the same options as the `create` line above and that `--subject`.
+Older repositories may use the plain form `repo:Md-Faiz-Alam/verisight:environment:azure`.
 
 The last three lines print three values. On GitHub, open the repository's
 **Settings**, then **Secrets and variables**, then **Actions**, then the

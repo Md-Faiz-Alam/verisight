@@ -11,9 +11,17 @@ updates:
     groups:
       python:
         patterns: ["*"]
+    # Dependabot also bumps the Windows snapshot file past limits that other
+    # packages set, which then fails "pip check". Remove an entry when its limit
+    # moves: numpy is capped below 2.4 in pyproject.toml, and google-genai
+    # accepts tenacity only below 9.2.
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "numpy"
+        versions: [">=2.4"]
+      - dependency-name: "tenacity"
+        versions: [">=9.2"]
     open-pull-requests-limit: 5
 
   - package-ecosystem: npm
