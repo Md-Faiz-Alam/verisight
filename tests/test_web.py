@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from verisight.config import Settings
 from verisight.dashboards.dashboard import DashboardBuilder
@@ -65,6 +65,20 @@ def _client(**web: Any) -> TestClient:
 def client() -> Iterator[TestClient]:
     with _client() as test_client:
         yield test_client
+
+
+def test_health_names_the_running_build() -> None:
+    with _client(build="sha-1a2b3c4") as test_client:
+        assert test_client.get("/api/health").json() == {
+            "status": "ok",
+            "build": "sha-1a2b3c4",
+        }
+
+
+@pytest.mark.parametrize("build", ["", "sha 1", "a/b", "x" * 65])
+def test_build_name_is_a_plain_tag(build: str) -> None:
+    with pytest.raises(ValidationError):
+        WebSettings(build=build)
 
 
 def _upload(client: TestClient, *files: tuple[str, bytes], status: int = 201) -> Any:
@@ -126,7 +140,7 @@ def test_page_config_and_security_headers(client: TestClient) -> None:
     assert "script-src 'self'" in page.headers["content-security-policy"]
     assert page.headers["x-frame-options"] == "DENY"
     assert "content-security-policy" not in docs.headers
-    assert client.get("/api/health").json() == {"status": "ok"}
+    assert client.get("/api/health").json() == {"status": "ok", "build": "dev"}
     assert client.get("/api/config").json() == {
         "server_key": False,
         "model": "gemini-3.1-flash-lite",

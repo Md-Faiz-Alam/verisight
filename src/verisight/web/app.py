@@ -680,7 +680,7 @@ def create_app(
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok"}
+        return {"status": "ok", "build": limits.build}
 
     @app.get("/api/config")
     async def config() -> dict[str, object]:

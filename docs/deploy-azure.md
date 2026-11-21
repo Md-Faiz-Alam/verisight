@@ -195,10 +195,11 @@ workflow**. Both jobs should pass, and the run shows the site's address.
 
 1. CI runs. If any check fails, nothing is built or deployed.
 2. **Build and publish** builds the image and publishes it as `sha-<commit>` and
-   `latest`.
+   `latest`. The commit tag is built into the image, and `/api/health` reports it
+   as `"build"`.
 3. **Deploy to Azure** notes the image that is running, switches the app to the new
-   one, and waits up to five minutes for the new version to take traffic and
-   answer `/api/health`.
+   one, and waits up to five minutes for `/api/health` to name the new build. That
+   proves the new version, not the old one, is the one answering.
 4. If it does not, the job switches the app back to the previous image and fails,
    so you see a red run while visitors keep the working site.
 

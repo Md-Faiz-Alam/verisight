@@ -33,6 +33,7 @@ jobs:
       packages: write
     outputs:
       image: ${{ steps.tag.outputs.image }}
+      tag: ${{ steps.tag.outputs.tag }}
 
     steps:
       - name: Check out the commit CI passed
@@ -77,6 +78,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Reported by /api/health, so the deploy can see this build answering.
+          build-args: VERISIGHT_BUILD=${{ steps.tag.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -95,6 +98,7 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
     env:
       IMAGE: ${{ needs.publish.outputs.image }}
+      BUILD: ${{ needs.publish.outputs.tag }}
       RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'verisight-rg' }}
       APP: ${{ vars.AZURE_CONTAINER_APP || 'verisight' }}
 
@@ -125,23 +129,38 @@ jobs:
             exit 0
           fi
 
-          # Ready: the new version is the one taking traffic, and it answers.
-          ready() {
+          health() { curl --fail --silent --max-time 15 "$url/api/health" || true; }
+
+          # Deployed: /api/health names the new build, which proves the new
+          # version, not the old one, is taking traffic.
+          deployed() {
             for _ in $(seq 1 30); do
-              latest="$(show 'properties.latestRevisionName')"
-              serving="$(show 'properties.latestReadyRevisionName')"
-              if [ "$latest" = "$serving" ] \
-                && curl --fail --silent --max-time 15 "$url/api/health" > /dev/null; then
-                return 0
-              fi
+              body="$(health)"
+              case "$body" in *"\"build\":\"$BUILD\""*) return 0 ;; esac
               sleep 10
             done
+            echo "Last answer from $url/api/health: ${body:-none}"
+            return 1
+          }
+
+          # Restored: a healthy answer that no longer names the failed build.
+          # Older images report no build name, so none is required here.
+          restored() {
+            for _ in $(seq 1 30); do
+              body="$(health)"
+              case "$body" in
+                *"\"build\":\"$BUILD\""*) ;;
+                *'"status":"ok"'*) return 0 ;;
+              esac
+              sleep 10
+            done
+            echo "Last answer from $url/api/health: ${body:-none}"
             return 1
           }
 
           echo "Deploying $IMAGE (was $previous)."
           if az containerapp update --name "$APP" --resource-group "$RESOURCE_GROUP" \
-              --image "$IMAGE" --only-show-errors > /dev/null && ready; then
+              --image "$IMAGE" --only-show-errors > /dev/null && deployed; then
             echo "### Deployed \`$IMAGE\` to $url" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -149,7 +168,7 @@ jobs:
           echo "::error::$IMAGE did not become healthy; rolling back to $previous."
           az containerapp update --name "$APP" --resource-group "$RESOURCE_GROUP" \
             --image "$previous" --only-show-errors > /dev/null
-          if ready; then
+          if restored; then
             echo "### Rolled back to \`$previous\`; \`$IMAGE\` was not healthy" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::error::The rollback to $previous is not healthy either."

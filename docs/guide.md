@@ -69,6 +69,7 @@ VeriSight runs from. `VERISIGHT_WEB_*` settings apply to the website only.
 | `VERISIGHT_WEB_MAX_RESULT_ROWS` | 20 | Result rows kept and sent to Gemini per website query |
 | `VERISIGHT_WEB_CLEANUP_INTERVAL_SECONDS` | 60 | How often expired uploads are deleted |
 | `VERISIGHT_WEB_TRUST_FORWARDED_FOR` | false | Read the visitor address from a load balancer's `X-Forwarded-For`; enable only behind one |
+| `VERISIGHT_WEB_BUILD` | `dev` | Build name reported by `/api/health`; the published image sets it to its commit tag |
 
 ## Local command-line workflow
 

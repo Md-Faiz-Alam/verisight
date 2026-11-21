@@ -1,7 +1,7 @@
 # VeriSight website: FastAPI + static UI, one process.
 # Uploaded datasets live in this container's memory and temp disk, so run a
-# single instance (scale 1). See docs/deploy-aws.md.
-# The official Python image via AWS's public registry (no Docker Hub pull limits).
+# single instance (scale 1). See docs/deploy-azure.md.
+# The official Python image via a public mirror (no Docker Hub pull limits).
 FROM public.ecr.aws/docker/library/python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -16,6 +16,10 @@ RUN pip install ".[web]" \
     && useradd --create-home --uid 10001 verisight
 
 USER verisight
+# /api/health reports this, so a deploy can confirm which build is answering.
+# The publish workflow passes the commit tag; set last to keep the cache above.
+ARG VERISIGHT_BUILD=dev
+ENV VERISIGHT_WEB_BUILD=$VERISIGHT_BUILD
 # Behind a load balancer that appends the visitor address, set
 # VERISIGHT_WEB_TRUST_FORWARDED_FOR=true where the container is deployed. Left
 # off here, a container run without such a proxy cannot have its rate limits

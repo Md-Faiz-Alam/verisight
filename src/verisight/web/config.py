@@ -54,3 +54,8 @@ class WebSettings(BaseSettings):
     # the right-most X-Forwarded-For entry, which that proxy appends. Enable
     # only when such a proxy is always in front of the server.
     trust_forwarded_for: bool = False
+    # Names the running build in /api/health. The published image sets it to its
+    # commit tag, so a deploy can tell when the new version is the one answering.
+    build: str = Field(
+        default="dev", min_length=1, max_length=64, pattern="^[A-Za-z0-9._-]+$"
+    )
