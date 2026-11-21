@@ -75,8 +75,19 @@ def test_redacts_configured_api_key_from_logs(
         )
     )
 
+    # The record is built directly and sent through the configured handler, so
+    # the synthetic key reaches the redacting formatter without a logging call.
     logger = get_logger("security")
-    logger.error("Gemini rejected key %s", secret)
+    record = logger.makeRecord(
+        logger.name,
+        logging.ERROR,
+        __file__,
+        0,
+        "Gemini rejected key %s",
+        (secret,),
+        None,
+    )
+    logger.handle(record)
 
     output = capfd.readouterr().out
 
