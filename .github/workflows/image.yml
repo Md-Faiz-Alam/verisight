@@ -52,8 +52,9 @@ jobs:
       - name: Label the image
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        # The tags come from the step above. "context: git" cannot be used here:
+        # checking out one commit leaves no branch for it to read.
         with:
-          context: git
           images: ghcr.io/md-faiz-alam/verisight-web
           tags: |
             type=raw,value=${{ steps.tag.outputs.tag }}
