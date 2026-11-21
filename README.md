@@ -16,7 +16,7 @@ trace it to the executed result.**
 sample workspace, no sign-up or key needed. The first visit after a quiet spell
 takes about 30 seconds while the server starts.
 
-![The Ask view: a question about the sample orders, the answer 415 labelled Computed without AI, and the evidence panel with the SQL and the result cell it came from](docs/assets/ask.png)
+![A question typed in the Ask view, answered 638,233.62 and labelled Computed without AI, with the evidence panel showing the SQL and the result cell the number came from](docs/assets/demo.gif)
 
 ## Why
 
