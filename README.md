@@ -18,10 +18,6 @@ takes about 30 seconds while the server starts.
 
 ![A question typed in the Ask view, answered 638,233.62 and labelled Computed without AI, with the evidence panel showing the SQL and the result cell the number came from](docs/assets/demo.gif)
 
-**Full walkthrough (90 seconds):**
-
-https://github.com/user-attachments/assets/4eda3a2c-0ac7-4673-a54f-779cb961d077
-
 ## Why
 
 Ask a language model about a spreadsheet and it answers confidently, even when the
