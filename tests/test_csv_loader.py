@@ -42,7 +42,8 @@ def test_csv_loader_loads_valid_csv(tmp_path: Path) -> None:
         pd.DataFrame(
             {
                 "customer_id": [1, 2],
-                "name": ["Alice", "Bob"],
+                # Loaders keep text as Python strings in object columns.
+                "name": pd.Series(["Alice", "Bob"], dtype=object),
             }
         ),
     )
@@ -58,7 +59,7 @@ def test_csv_loader_preserves_missing_values(tmp_path: Path) -> None:
     loader = CsvLoader(Settings())
     table = loader.load(file_path)
 
-    assert pd.isna(table.data.loc[1, "name"])
+    assert table.data["name"].isna().loc[1]
 
 
 @pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
@@ -148,7 +149,7 @@ def test_csv_loader_keeps_long_integers_exact_with_missing_values(
     # Read as a float, 12345678901234567 would become 12345678901234568.
     assert str(table.data["account_id"].dtype) == "Int64"
     assert table.data.loc[0, "account_id"] == 12345678901234567
-    assert pd.isna(table.data.loc[1, "account_id"])
+    assert table.data["account_id"].isna().loc[1]
     assert table.data.loc[2, "account_id"] == 12345678901234569
 
 
@@ -215,7 +216,7 @@ def test_csv_loader_infers_nullable_boolean_columns(
     table = loader.load(file_path)
 
     assert bool(table.data.loc[0, "active"]) is True
-    assert pd.isna(table.data.loc[1, "active"])
+    assert table.data["active"].isna().loc[1]
     assert bool(table.data.loc[2, "active"]) is False
     assert str(table.data["active"].dtype) == "boolean"
 
@@ -298,7 +299,7 @@ def test_csv_loader_treats_only_empty_fields_as_missing(
     table = CsvLoader(Settings()).load(file_path)
 
     assert table.data.loc[0, "note"] == "NA"
-    assert pd.isna(table.data.loc[1, "note"])
+    assert table.data["note"].isna().loc[1]
     assert table.data.loc[2, "note"] == "None"
     assert table.data.loc[3, "note"] == "null"
     assert table.data["note"].isna().sum() == 1
@@ -339,7 +340,7 @@ def test_csv_loader_infers_nullable_integer_columns(
     table = CsvLoader(Settings()).load(file_path)
 
     assert table.data.loc[0, "quantity"] == 5
-    assert pd.isna(table.data.loc[1, "quantity"])
+    assert table.data["quantity"].isna().loc[1]
     assert table.data.loc[2, "quantity"] == 7
     assert str(table.data["quantity"].dtype) == "Int64"
 
@@ -655,7 +656,7 @@ def test_csv_loader_preserves_oversized_integer_identifiers(
     assert table.row_count == 3
     assert table.data.loc[0, "account_id"] == identifier
     assert isinstance(table.data.loc[0, "account_id"], str)
-    assert pd.isna(table.data.loc[1, "account_id"])
+    assert table.data["account_id"].isna().loc[1]
     assert table.data.loc[2, "account_id"] == "42"
 
 
@@ -732,7 +733,7 @@ def test_csv_loader_keeps_safe_boundary_integers_exact(
     assert pd.api.types.is_integer_dtype(table.data["value"])
     if with_missing:
         assert str(table.data["value"].dtype) == "Int64"
-        assert pd.isna(table.data.loc[5, "value"])
+        assert table.data["value"].isna().loc[5]
 
 
 def test_csv_oversized_identifier_survives_sql_execution(tmp_path: Path) -> None:
@@ -907,7 +908,12 @@ def test_csv_loader_uses_complete_records_before_cut_quoted_field(
     pd.testing.assert_frame_equal(
         table.data,
         pd.DataFrame(
-            {"id": [1, 2, 3], "note": ["first", value.replace("\n", newline), "last"]}
+            {
+                "id": [1, 2, 3],
+                "note": pd.Series(
+                    ["first", value.replace("\n", newline), "last"], dtype=object
+                ),
+            }
         ),
     )
     assert table.source.csv_delimiter == delimiter
@@ -925,7 +931,10 @@ def test_csv_loader_rejects_multiple_consistent_delimiters_in_long_sample(
 
     table = CsvLoader(Settings()).load(path, options=CsvReadOptions(delimiter=","))
     pd.testing.assert_frame_equal(
-        table.data, pd.DataFrame({"a": [1] * 12000, "b;c": ["2;3"] * 12000})
+        table.data,
+        pd.DataFrame(
+            {"a": [1] * 12000, "b;c": pd.Series(["2;3"] * 12000, dtype=object)}
+        ),
     )
     assert table.source.csv_delimiter == ","
 

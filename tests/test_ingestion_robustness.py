@@ -120,7 +120,7 @@ def test_excel_preserves_unicode_and_missing_values(tmp_path: Path) -> None:
     assert table.data["name"].tolist() == ["José", "李明", "Faiz"]
     assert table.data.loc[0, "city"] == "São Paulo"
     assert table.data.loc[1, "city"] == "北京"
-    assert pd.isna(table.data.loc[2, "city"])
+    assert table.data["city"].isna().loc[2]
     assert columns["city"].missing_count == 1
 
 
@@ -265,8 +265,8 @@ def test_json_preserves_heterogeneous_object_keys(tmp_path: Path) -> None:
     assert table.row_count == 2
     assert list(table.data.columns) == ["id", "name", "score"]
     assert table.data.loc[0, "name"] == "Alice"
-    assert pd.isna(table.data.loc[1, "name"])
-    assert pd.isna(table.data.loc[0, "score"])
+    assert table.data["name"].isna().loc[1]
+    assert table.data["score"].isna().loc[0]
     assert table.data.loc[1, "score"] == 95
 
 

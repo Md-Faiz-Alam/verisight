@@ -53,7 +53,7 @@ def test_file_loader_dispatches_excel(tmp_path: Path) -> None:
     expected = pd.DataFrame(
         {
             "customer_id": [1, 2],
-            "name": ["Alice", "Bob"],
+            "name": pd.Series(["Alice", "Bob"], dtype=object),
         }
     )
     expected.to_excel(

@@ -25,7 +25,7 @@ def test_excel_loader_loads_single_sheet_workbook(
     expected = pd.DataFrame(
         {
             "customer_id": [1, 2],
-            "name": ["Alice", "Bob"],
+            "name": pd.Series(["Alice", "Bob"], dtype=object),
         }
     )
     expected.to_excel(file_path, index=False, sheet_name="Customers")
@@ -49,7 +49,7 @@ def test_excel_loader_loads_all_sheets(tmp_path: Path) -> None:
     customers = pd.DataFrame(
         {
             "customer_id": [1, 2],
-            "name": ["Alice", "Bob"],
+            "name": pd.Series(["Alice", "Bob"], dtype=object),
         }
     )
 
@@ -298,7 +298,9 @@ def test_excel_loader_preserves_native_cell_types(tmp_path: Path) -> None:
             "count": [1, 2],
             "amount": [1.5, 2.75],
             "active": [True, False],
-            "date": [datetime(2026, 1, 1), datetime(2026, 1, 2)],
+            "date": pd.Series(
+                [datetime(2026, 1, 1), datetime(2026, 1, 2)], dtype="datetime64[ns]"
+            ),
         }
     )
     expected.to_excel(path, index=False)

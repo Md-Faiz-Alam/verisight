@@ -40,6 +40,20 @@ _NAMED_MONTH_FORMATS = (
 _YEAR_FIRST_FORMATS = ("%Y/%m/%d", "%Y.%m.%d")
 
 
+def _nanoseconds(parsed: pd.Series, *, coerce: bool = False) -> pd.Series:
+    """Keep parsed dates at nanosecond resolution, inside its range.
+
+    pandas 3 reads text at microsecond resolution and accepts years before 1677.
+    Dates stay in nanoseconds so DuckDB, profiles and recorded prompts see the
+    same types as before. Outside that range the conversion raises, or, with
+    ``coerce``, the value becomes missing.
+    """
+    if coerce:
+        inside = parsed.between(pd.Timestamp.min, pd.Timestamp.max)
+        parsed = parsed.where(inside | parsed.isna())
+    return parsed.astype("datetime64[ns]")
+
+
 def parse_iso_datetimes(values: pd.Series) -> pd.Series | None:
     """Return a datetime column only when every present value is an ISO date.
 
@@ -57,6 +71,7 @@ def parse_iso_datetimes(values: pd.Series) -> pd.Series | None:
         return None
     try:
         parsed: Any = pd.to_datetime(values, format="ISO8601", errors="raise")
+        parsed = _nanoseconds(parsed)
     except (ValueError, OverflowError):
         return None
     return pd.Series(parsed, index=values.index, name=values.name)
@@ -88,6 +103,7 @@ def has_ambiguous_dates(values: pd.Series) -> bool:
 def _parse(values: pd.Series, date_format: str) -> pd.Series | None:
     try:
         parsed: Any = pd.to_datetime(values, format=date_format, errors="raise")
+        parsed = _nanoseconds(parsed)
     except (ValueError, OverflowError):
         return None
     return pd.Series(parsed, index=values.index, name=values.name)
@@ -108,8 +124,9 @@ def _parse_each(stripped: pd.Series) -> pd.Series | None:
     result = pd.Series(pd.NaT, index=stripped.index, dtype="datetime64[ns]")
     for date_format in ("%Y-%m-%d", *_YEAR_FIRST_FORMATS, *_NAMED_MONTH_FORMATS):
         waiting = result.isna() & stripped.notna()
-        found: Any = pd.to_datetime(
-            stripped[waiting], format=date_format, errors="coerce"
+        found: Any = _nanoseconds(
+            pd.to_datetime(stripped[waiting], format=date_format, errors="coerce"),
+            coerce=True,
         )
         result.loc[found.index] = found
     return None if (result.isna() & stripped.notna()).any() else result
@@ -131,13 +148,12 @@ def parse_flexible_dates(values: pd.Series) -> tuple[pd.Series, str] | None:
             parsed: Any = pd.to_datetime(
                 stripped, format="ISO8601", utc=True, errors="raise"
             )
+            parsed = _nanoseconds(parsed.dt.tz_localize(None))
         except (ValueError, OverflowError):
             return None
         shifted = not all(_UTC_ZONE.search(value) for value in present)
         return (
-            pd.Series(
-                parsed.dt.tz_localize(None), index=values.index, name=values.name
-            ),
+            pd.Series(parsed, index=values.index, name=values.name),
             UTC_SHIFT_DETAIL if shifted else "time zones converted to UTC",
         )
     matches = _numeric_matches(present)

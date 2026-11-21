@@ -56,7 +56,7 @@ def test_json_loader_loads_array_of_records(tmp_path: Path) -> None:
 
     pd.testing.assert_frame_equal(
         table.data,
-        pd.DataFrame(payload),
+        pd.DataFrame(payload).astype({"name": object}),
     )
 
 
@@ -80,7 +80,7 @@ def test_json_loader_loads_single_object(tmp_path: Path) -> None:
 
     pd.testing.assert_frame_equal(
         table.data,
-        pd.DataFrame([payload]),
+        pd.DataFrame([payload]).astype({"name": object}),
     )
 
 
@@ -307,16 +307,23 @@ def test_mixed_columns_preserve_large_integer(tmp_path: Path, other: Any) -> Non
     assert data["value"].iloc[2] is None
 
 
+# Text stays in an object column; pandas 3 would infer its str dtype.
 @pytest.mark.parametrize(
-    "values",
-    [[1.5, None], [1, 1.5], [True, False], [None, None], ["NA", "00123"]],
+    ("values", "dtype"),
+    [
+        ([1.5, None], None),
+        ([1, 1.5], None),
+        ([True, False], None),
+        ([None, None], None),
+        (["NA", "00123"], object),
+    ],
 )
 def test_other_column_inference_remains_compatible(
-    tmp_path: Path, values: list[Any]
+    tmp_path: Path, values: list[Any], dtype: type[object] | None
 ) -> None:
     records = [{"value": value} for value in values]
     pd.testing.assert_frame_equal(
-        _load_records(tmp_path, records), pd.DataFrame(records)
+        _load_records(tmp_path, records), pd.DataFrame(records, dtype=dtype)
     )
 
 

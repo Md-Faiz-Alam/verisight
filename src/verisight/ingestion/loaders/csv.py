@@ -101,7 +101,7 @@ class CsvLoader(BaseTableLoader):
                 encoding=encoding,
                 header=None,
                 nrows=1,
-                dtype=str,
+                dtype=object,
                 keep_default_na=False,
                 na_filter=False,
                 skiprows=skipped,
@@ -131,7 +131,7 @@ class CsvLoader(BaseTableLoader):
                 metadata.path,
                 sep=delimiter,
                 encoding=encoding,
-                dtype=str,
+                dtype=object,
                 keep_default_na=False,
                 na_values=[""],
                 skiprows=skipped,
@@ -144,7 +144,7 @@ class CsvLoader(BaseTableLoader):
                 )
 
             # A length mismatch raises ValueError and becomes a load error.
-            data.columns = pd.Index(columns, dtype=object)
+            data.columns = pd.Index(columns)
             data = self._infer_safe_column_types(data)
 
         except DataLoadError:

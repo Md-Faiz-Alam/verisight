@@ -10,6 +10,7 @@ from zipfile import ZipFile
 import pandas as pd
 
 from verisight.config import Settings
+from verisight.ingestion.dtypes import infer_types
 from verisight.ingestion.exceptions import DataLoadError
 from verisight.ingestion.loaders.csv import CsvLoader
 from verisight.ingestion.models import (
@@ -126,7 +127,7 @@ class ExcelLoader:
                         raise DataLoadError(
                             "Excel data contains fields without source headers."
                         )
-                    data.columns = pd.Index(columns, dtype=object)
+                    data.columns = pd.Index(columns)
                     for column in data.columns:
                         data[column] = _infer_column(_restore_cells(data[column]))
 
@@ -292,4 +293,4 @@ def _infer_column(series: pd.Series) -> pd.Series:
     dates = parse_iso_datetimes(series)
     if dates is not None:
         return dates
-    return series.infer_objects()
+    return infer_types(series.to_frame()).iloc[:, 0]

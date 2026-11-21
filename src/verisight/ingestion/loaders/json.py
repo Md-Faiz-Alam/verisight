@@ -313,5 +313,7 @@ class JsonLoader(BaseTableLoader):
             dates = parse_iso_datetimes(pd.Series(values, dtype=object))
             if dates is not None:
                 return dates
+            # Text stays in an object column, not pandas 3's str dtype.
+            return pd.Series(values, dtype=object)
 
         return pd.Series(values)

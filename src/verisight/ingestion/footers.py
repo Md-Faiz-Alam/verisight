@@ -14,6 +14,7 @@ from numbers import Number
 import numpy as np
 import pandas as pd
 
+from verisight.ingestion.dtypes import infer_types
 from verisight.ingestion.loaders.csv import CsvLoader
 from verisight.ingestion.models import LoadedTable, NoteRule, ValueNote
 
@@ -77,7 +78,7 @@ def _is_summary(row: pd.Series, label: tuple[str, str], body: pd.DataFrame) -> b
 def _retyped(table: LoadedTable, data: pd.DataFrame) -> pd.DataFrame:
     """Columns the summary row forced to text can be typed once it is gone."""
     if table.source.csv_delimiter is None:
-        return data.infer_objects()
+        return infer_types(data)
     objects = data.select_dtypes(include=object).copy()
     typed = CsvLoader._infer_safe_column_types(objects)
     for column in typed.columns:
