@@ -1,3 +1,10 @@
+# Text files are stored and checked out with LF on every system, so Windows and
+# Linux see identical files and Git stops warning about CRLF conversion.
+* text=auto eol=lf
+*.png binary
+*.xlsx binary
+*.woff2 binary
+
 # The public benchmark and held-out v4 are compared byte for byte by their tests
 # and hashed by the comparison runner, so their files keep LF line endings on
 # every system.

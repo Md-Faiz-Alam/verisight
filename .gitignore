@@ -49,9 +49,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Quickstart demo files (generated)
-/demo/
-
 # Lightsail deployment files (docs/deploy-aws.md)
 lightsail-*.json
 

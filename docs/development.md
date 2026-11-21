@@ -34,7 +34,7 @@ scripts run from the repository root and are not included by the current
 | `src/verisight/dashboards/` | Charts, row pages and subject detection, computed without a model |
 | `src/verisight/execution/` | SQL safety and execution, generation, investigation, verification and trust |
 | `src/verisight/web/` | The website: FastAPI app, upload store and the built frontend |
-| `src/verisight/facade.py` | Public Python facade (`verisight.service` still imports it) |
+| `src/verisight/facade.py` | Public Python facade |
 | `src/verisight/cli.py` | Local profile, preview, investigation, and export workflow |
 | `src/verisight/error_reporting.py` | Fixed public error classification |
 | `src/verisight/safe_operation.py` | Runs an operation and turns any failure into a safe public report |

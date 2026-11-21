@@ -1416,10 +1416,3 @@ def test_plan_rejects_invalid_population_before_planning(tmp_path: Path) -> None
             population=(PopulationFilter("missing", "state", ("active",)),),
         )
     planner.plan.assert_not_called()
-
-
-def test_the_old_import_path_still_gives_the_facade() -> None:
-    from verisight.facade import VeriSight as current
-    from verisight.service import VeriSight as old
-
-    assert old is current
