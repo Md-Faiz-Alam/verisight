@@ -151,7 +151,7 @@ def _review_categories(
     target_columns = [
         column for column in query.find_all(exp.Column) if is_target(column)
     ]
-    simple_terms: list[exp.Expression] = []
+    simple_terms: list[exp.Expr] = []
     for term in terms:
         predicate = term.this if isinstance(term, exp.Not) else term
         if isinstance(predicate, (exp.EQ, exp.NEQ)) and not isinstance(term, exp.Not):

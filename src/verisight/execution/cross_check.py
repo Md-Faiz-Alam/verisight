@@ -280,7 +280,7 @@ def _same_number(first: Decimal, second: Decimal) -> bool:
     return abs(first - second) <= margin
 
 
-def _number_sources(tree: exp.Expression) -> None:
+def _number_sources(tree: exp.Expr) -> None:
     """Replace table aliases with positions, so their names cannot differ.
 
     Positions keep a table joined twice as two sources, so swapping their roles
@@ -324,7 +324,7 @@ def _same_when_rounded(question: str, first: Decimal, second: Decimal) -> bool:
 # Structures where another route can expose a mistake the obvious one hides:
 # rows repeated by a join, the grain of a group, a nested population, values
 # counted once, or a row picked by order.
-_ROUTE_STRUCTURES: tuple[type[exp.Expression], ...] = (
+_ROUTE_STRUCTURES: tuple[type[exp.Expr], ...] = (
     exp.Join,
     exp.Group,
     exp.Having,
@@ -345,7 +345,7 @@ _ROUTE_STRUCTURES: tuple[type[exp.Expression], ...] = (
 
 
 # Nodes that only join conditions or carry a value along; they relate nothing.
-_COMBINERS: tuple[type[exp.Expression], ...] = (
+_COMBINERS: tuple[type[exp.Expr], ...] = (
     exp.Select,
     exp.From,
     exp.Where,
@@ -359,16 +359,16 @@ _COMBINERS: tuple[type[exp.Expression], ...] = (
 )
 
 
-def _columns(node: exp.Expression) -> frozenset[str]:
+def _columns(node: exp.Expr) -> frozenset[str]:
     return frozenset(column.name.casefold() for column in node.find_all(exp.Column))
 
 
 # Aggregates, counting an ordered-set aggregate such as
 # percentile_cont(0.5) WITHIN GROUP (ORDER BY x), which reads x like MEDIAN(x).
-_AGGREGATES: tuple[type[exp.Expression], ...] = (exp.AggFunc, exp.WithinGroup)
+_AGGREGATES: tuple[type[exp.Expr], ...] = (exp.AggFunc, exp.WithinGroup)
 
 
-def _blocking_structure(tree: exp.Expression) -> bool:
+def _blocking_structure(tree: exp.Expr) -> bool:
     """Whether the query uses a structure that another route could test.
 
     ``COUNT(DISTINCT x)`` of one column is not one: any other way to count the
@@ -387,7 +387,7 @@ def _blocking_structure(tree: exp.Expression) -> bool:
 
 
 def _relates_columns(
-    tree: exp.Select, projection: exp.Expression | Sequence[exp.Expression]
+    tree: exp.Select, projection: exp.Expr | Sequence[exp.Expr]
 ) -> bool:
     """Return whether the query builds a quantity from two different columns.
 
@@ -396,13 +396,13 @@ def _relates_columns(
     ``SUM(a) / SUM(b)``, defines a new concept, and two models can share the
     same wrong definition. Such a query is never treated as single-route.
     """
-    for node in tree.find_all(exp.Expression):
+    for node in tree.find_all(exp.Expr):
         # Arithmetic over aggregates is compared aggregate by aggregate below.
         if isinstance(node, _COMBINERS) or node.find(exp.AggFunc) is not None:
             continue
         if len(_columns(node)) > 1:
             return True
-    projections = [projection] if isinstance(projection, exp.Expression) else projection
+    projections = [projection] if isinstance(projection, exp.Expr) else projection
     outermost = [
         node
         for item in projections
@@ -447,7 +447,7 @@ def _single_route(sql: str, *, one_row: bool) -> bool:
     return not _relates_columns(tree, projections)
 
 
-def _lookup(tree: exp.Select, projection: exp.Expression) -> bool:
+def _lookup(tree: exp.Select, projection: exp.Expr) -> bool:
     """Return whether the query reads one column as it is, rows chosen by WHERE."""
     value = projection.this if isinstance(projection, exp.Alias) else projection
     if not isinstance(value, exp.Column):
@@ -460,7 +460,7 @@ def _lookup(tree: exp.Select, projection: exp.Expression) -> bool:
 
 def _canonical_sql(sql: str) -> str:
     """Render SQL without aliases, quoting or AND order, for comparison only."""
-    tree = sqlglot.parse_one(sql, read="duckdb").transform(
+    tree: exp.Expr = sqlglot.parse_one(sql, read="duckdb").transform(
         lambda node: node.this if isinstance(node, exp.Alias) else node
     )
     _number_sources(tree)
@@ -477,7 +477,7 @@ def _canonical_sql(sql: str) -> str:
 
 # Comparisons choose rows; a column used only inside one is a condition, not a
 # measure. LT and LTE are read as GT and GTE with their sides swapped.
-_COMPARISONS: tuple[type[exp.Expression], ...] = (
+_COMPARISONS: tuple[type[exp.Expr], ...] = (
     exp.EQ,
     exp.NEQ,
     exp.GT,
@@ -490,14 +490,14 @@ _COMPARISONS: tuple[type[exp.Expression], ...] = (
     exp.ILike,
     exp.Between,
 )
-_SYMMETRIC: tuple[type[exp.Expression], ...] = (exp.EQ, exp.NEQ)
-_FLIPPED: dict[type[exp.Expression], type[exp.Expression]] = {
+_SYMMETRIC: tuple[type[exp.Expr], ...] = (exp.EQ, exp.NEQ)
+_FLIPPED: dict[type[exp.Expr], type[exp.Expr]] = {
     exp.LT: exp.GT,
     exp.LTE: exp.GTE,
 }
 # Structures that change which rows or groups are combined. A subquery or CTE
 # alone only renames the same rows, so it is not one of them.
-_CHOICE_STRUCTURES: tuple[type[exp.Expression], ...] = (
+_CHOICE_STRUCTURES: tuple[type[exp.Expr], ...] = (
     exp.Join,
     exp.Group,
     exp.Having,
@@ -520,7 +520,7 @@ class _Choices:
     structures: frozenset[str]
 
 
-def _condition(node: exp.Expression) -> str:
+def _condition(node: exp.Expr) -> str:
     """Render one comparison so that equivalent spellings read the same."""
     negated = isinstance(node.parent, exp.Not)
     flipped = _FLIPPED.get(type(node))
@@ -566,7 +566,7 @@ def _choices(sql: str) -> _Choices:
     )
 
 
-_COLUMN_COMPARISONS: tuple[type[exp.Expression], ...] = (
+_COLUMN_COMPARISONS: tuple[type[exp.Expr], ...] = (
     exp.EQ,
     exp.NEQ,
     exp.GT,
@@ -597,7 +597,7 @@ def _relates_two_columns(sql: str) -> bool:
     )
 
 
-def _within(node: exp.Expression, ancestor: exp.Expression) -> bool:
+def _within(node: exp.Expr, ancestor: exp.Expr) -> bool:
     parent = node.parent
     while parent is not None:
         if parent is ancestor:
@@ -617,7 +617,7 @@ def _merged_choices(sqls: Sequence[str]) -> _Choices:
     )
 
 
-def _measures(tree: exp.Expression) -> frozenset[str]:
+def _measures(tree: exp.Expr) -> frozenset[str]:
     """Columns whose values the answer is made of.
 
     These are the columns an aggregate reads, the outer query returns, or a
@@ -632,7 +632,7 @@ def _measures(tree: exp.Expression) -> frozenset[str]:
     }
     found: set[str] = set()
 
-    def add(node: exp.Expression, depth: int = 0) -> None:
+    def add(node: exp.Expr, depth: int = 0) -> None:
         for column in node.find_all(exp.Column):
             if column.find_ancestor(*_COMPARISONS) is not None:
                 continue

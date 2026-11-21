@@ -435,7 +435,7 @@ contracts and [Roadmap](roadmap.md) for remaining acceptance work.
 
 `requirements-dev-windows-py313.txt` records every package version installed by
 `pip install -e ".[dev]"` on Windows AMD64 with CPython 3.13.17, build tools
-included. With it, ruff, strict mypy and all 4,105 tests passed with 100%
+included. With it, ruff, strict mypy and all 4,108 tests passed with 100%
 statement and branch coverage. It replaced an earlier CPython 3.11.9 snapshot with
 the same packages.
 
@@ -473,3 +473,27 @@ Editable installation imports this checkout; it does not independently
 validate an installed wheel. The historical result applies to the recorded
 revision. Later source or dependency changes require validation before
 claiming equivalent behavior. No live model calls are needed.
+
+### Behaviour changes in pandas 3, DuckDB 2 and sqlglot 30
+
+Each upgrade was made on its own, and the audit corpus, damaged-file suite,
+benchmarks and replays pass unchanged after each one.
+
+- **pandas 3** gives text its own `str` dtype from `read_csv(dtype=str)`,
+  `pd.Series` of strings and `infer_objects()`. Such columns skip every
+  `dtype == object` path (cleaning, totals, exact decimal binding) and change
+  `physical_dtype` in prompts. Loaders keep text in object columns:
+  `ingestion/dtypes.py` wraps `infer_objects`. pandas 3 also parses dates at
+  microsecond resolution and accepts years before 1677; dates stay at
+  `datetime64[ns]` with the old range, and Excel dates outside it stay as
+  objects. It needs numpy 2.0.2 or newer, and no longer needs `pytz`.
+- **DuckDB 2** reports `PRAGMA` as its own statement type, where 1.x rewrote it
+  into a `SELECT`. The PRAGMA check now runs before the statement-type check, so
+  the error stays specific. Decimals, result limits and memory settings behave
+  as before.
+- **sqlglot 30** adds `exp.Expr` as the root node class. Functions and
+  conditions no longer inherit from `exp.Expression`, so
+  `find_all(exp.Expression)` and `isinstance(node, exp.Expression)` silently
+  skip them; the code uses `exp.Expr`. `version()` now parses as
+  `exp.CurrentVersion` rather than `exp.Anonymous` and is blocked by class.
+  `parse_one` takes `ErrorLevel.RAISE` instead of the string `"RAISE"`.

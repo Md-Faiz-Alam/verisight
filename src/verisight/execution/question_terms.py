@@ -113,7 +113,7 @@ def question_assigns_category(question: str, column: str, value: str) -> bool:
     )
 
 
-def population_terms(expression: exp.Expression) -> list[exp.Expression]:
+def population_terms(expression: exp.Expr) -> list[exp.Expr]:
     """Only top-level conjunctions establish an explicit inclusion here."""
     pending = [expression]
     terms = []

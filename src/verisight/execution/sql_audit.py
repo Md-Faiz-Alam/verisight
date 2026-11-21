@@ -332,7 +332,7 @@ _CALCULATION = re.compile(
     r"(?:(?:of|the)\s+)*",
     re.IGNORECASE,
 )
-_WANTS: dict[str, tuple[type[exp.Expression], ...]] = {
+_WANTS: dict[str, tuple[type[exp.Expr], ...]] = {
     "average": (exp.Avg, exp.Div),
     "mean": (exp.Avg, exp.Div),
     "total": (exp.Sum, exp.Count),
@@ -425,7 +425,7 @@ def _empty_result(result: QueryResult | None) -> Iterator[AuditFinding]:
         )
 
 
-def _names(tree: exp.Expression) -> set[str]:
+def _names(tree: exp.Expr) -> set[str]:
     return {column.name.casefold() for column in tree.find_all(exp.Column)}
 
 
@@ -501,14 +501,14 @@ def _repeats(
         return False
 
 
-def _only_a_condition(column: exp.Column, aggregate: exp.Expression) -> bool:
+def _only_a_condition(column: exp.Column, aggregate: exp.Expr) -> bool:
     """True when the column only decides which rows count, as in ``CASE WHEN``.
 
     ``COUNT(CASE WHEN c.country = 'uk' THEN 1 END)`` measures the joined rows
     and filters them by ``c.country``, like a WHERE clause. A column in the
     THEN or ELSE part is still a measure.
     """
-    child: exp.Expression = column
+    child: exp.Expr = column
     parent = column.parent
     while parent is not None and child is not aggregate:
         if isinstance(parent, exp.If) and parent.this is child:
@@ -517,7 +517,7 @@ def _only_a_condition(column: exp.Column, aggregate: exp.Expression) -> bool:
     return False
 
 
-def _aggregated_columns(tree: exp.Expression) -> Iterator[tuple[str, exp.Column]]:
+def _aggregated_columns(tree: exp.Expr) -> Iterator[tuple[str, exp.Column]]:
     for node in tree.find_all(exp.Sum, exp.Avg, exp.Count):
         if isinstance(node.this, exp.Distinct):
             continue
@@ -526,9 +526,7 @@ def _aggregated_columns(tree: exp.Expression) -> Iterator[tuple[str, exp.Column]
                 yield type(node).__name__.upper(), column
 
 
-def _fan_out(
-    tree: exp.Expression, used: dict[str, LoadedTable]
-) -> Iterator[AuditFinding]:
+def _fan_out(tree: exp.Expr, used: dict[str, LoadedTable]) -> Iterator[AuditFinding]:
     """Find measures from rows that a join copies more than once.
 
     Summing orders joined to their items adds each order once per item. Only
@@ -548,7 +546,7 @@ def _fan_out(
 
 
 def _copied_measures(
-    tree: exp.Expression, sources: dict[str, LoadedTable], copied: str, by: str
+    tree: exp.Expr, sources: dict[str, LoadedTable], copied: str, by: str
 ) -> Iterator[AuditFinding]:
     table = sources[copied]
     other = sources[by]
@@ -569,7 +567,7 @@ def _copied_measures(
 
 
 def _uncounted_total_rows(
-    tree: exp.Expression,
+    tree: exp.Expr,
     used: dict[str, LoadedTable],
     total_rows: Sequence[ObservedTotalRows],
 ) -> Iterator[AuditFinding]:
@@ -590,7 +588,7 @@ def _uncounted_total_rows(
             )
 
 
-def _bare_column(node: exp.Expression) -> tuple[exp.Column | None, bool]:
+def _bare_column(node: exp.Expr) -> tuple[exp.Column | None, bool]:
     """Unwrap LOWER, UPPER, TRIM and CAST; true if the comparison is normalised."""
     normalised = False
     current = node
@@ -601,14 +599,14 @@ def _bare_column(node: exp.Expression) -> tuple[exp.Column | None, bool]:
 
 
 def _comparisons(
-    tree: exp.Expression, *, broad: bool = False
+    tree: exp.Expr, *, broad: bool = False
 ) -> Iterator[tuple[exp.Column, bool, str]]:
     """Yield every ``column = 'text'`` and ``column IN ('text', ...)``.
 
     With ``broad``, also yield ``<>`` and ``LIKE``: they show that a column
     was restricted, but their text need not be a stored value.
     """
-    kinds: tuple[type[exp.Expression], ...] = (exp.EQ, exp.In)
+    kinds: tuple[type[exp.Expr], ...] = (exp.EQ, exp.In)
     if broad:
         kinds += (exp.NEQ, exp.Like, exp.ILike)
     for node in tree.find_all(*kinds):
@@ -627,7 +625,7 @@ def _comparisons(
 
 
 def _resolve_text_column(
-    tree: exp.Expression, column: exp.Column, used: dict[str, LoadedTable]
+    tree: exp.Expr, column: exp.Column, used: dict[str, LoadedTable]
 ) -> tuple[LoadedTable, pd.Series] | None:
     """Find the one loaded text column a query's column refers to."""
     aliases = {
@@ -708,7 +706,7 @@ def _identifier_kind(values: pd.Series, function: str) -> str | None:
 
 
 def _identifier_aggregated(
-    tree: exp.Expression, used: dict[str, LoadedTable]
+    tree: exp.Expr, used: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
     """Find SUM or AVG over an identifier column, or SUM over years."""
     seen: set[tuple[str, str]] = set()
@@ -747,7 +745,7 @@ def _ordered_as_text(values: pd.Series) -> str | None:
 
 
 def _text_ordered(
-    tree: exp.Expression, used: dict[str, LoadedTable]
+    tree: exp.Expr, used: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
     """Find order comparisons and MIN or MAX on text that holds numbers or dates.
 
@@ -785,7 +783,7 @@ def _loose_key(value: object) -> str:
 
 
 def _join_key_format(
-    tree: exp.Expression, used: dict[str, LoadedTable]
+    tree: exp.Expr, used: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
     """Find joins whose keys differ only in case, spaces or leading zeros."""
     for select in tree.find_all(exp.Select):
@@ -816,7 +814,7 @@ def _join_key_format(
 
 
 # Wrappers that read a day, month or year out of a timestamp.
-_DATE_PARTS: tuple[type[exp.Expression], ...] = (
+_DATE_PARTS: tuple[type[exp.Expr], ...] = (
     exp.TimestampTrunc,
     exp.DateTrunc,
     exp.Year,
@@ -854,9 +852,7 @@ def _by_date(column: exp.Column) -> bool:
     return False
 
 
-def _utc_dates(
-    tree: exp.Expression, used: dict[str, LoadedTable]
-) -> Iterator[AuditFinding]:
+def _utc_dates(tree: exp.Expr, used: dict[str, LoadedTable]) -> Iterator[AuditFinding]:
     """Find days or months read from times converted from other time zones.
 
     Loading stores such times in UTC, so 01:00 at +05:30 on 2 January becomes
@@ -883,7 +879,7 @@ def _utc_dates(
 
 
 def _filter_values(
-    tree: exp.Expression, used: dict[str, LoadedTable]
+    tree: exp.Expr, used: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
     """Find filters on text values that the column lacks or only partly matches."""
     for column, normalised, literal in _comparisons(tree):
@@ -953,7 +949,7 @@ def _mentions(
 
 def _named_value(
     question: str,
-    tree: exp.Expression,
+    tree: exp.Expr,
     tables: dict[str, LoadedTable],
     categories: Sequence[ObservedCategoryValues],
 ) -> Iterator[AuditFinding]:
@@ -1017,7 +1013,7 @@ def _rows_with(values: pd.Series, text: str) -> pd.Series:
 
 def _broad_match(
     question: str,
-    tree: exp.Expression,
+    tree: exp.Expr,
     tables: dict[str, LoadedTable],
     categories: Sequence[ObservedCategoryValues],
 ) -> Iterator[AuditFinding]:
@@ -1043,7 +1039,7 @@ def _broad_match(
                 )
 
 
-def _distinct_count(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+def _distinct_count(question: str, tree: exp.Expr) -> Iterator[AuditFinding]:
     """Find a question about different things answered by adding up rows."""
     if _DISTINCT_WANTED.search(question) and tree.find(exp.Distinct, exp.Group) is None:
         yield AuditFinding(
@@ -1080,7 +1076,7 @@ def _holds_money(tables: dict[str, LoadedTable], name: str) -> bool:
     )
 
 
-def _money_only_selects(question: str, tree: exp.Expression) -> bool:
+def _money_only_selects(question: str, tree: exp.Expr) -> bool:
     """Whether every money word names a column the query only filters on.
 
     In "the mean rating at restaurants in the low price category", ``price`` picks
@@ -1104,7 +1100,7 @@ def _money_only_selects(question: str, tree: exp.Expression) -> bool:
 
 
 def _measure_not_in_data(
-    question: str, tree: exp.Expression, used: dict[str, LoadedTable]
+    question: str, tree: exp.Expr, used: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
     """Find a question about money or people answered with some other column.
 
@@ -1162,7 +1158,7 @@ def _quantities(words: set[str]) -> set[str]:
     return found
 
 
-def _unit_factors(question: str, tree: exp.Expression) -> frozenset[float]:
+def _unit_factors(question: str, tree: exp.Expr) -> frozenset[float]:
     """Conversion factors for the quantities whose units the question or a
     column names, such as minutes in the question or ``Milliseconds``."""
     words = set(re.findall(r"[a-z]+", question.casefold()))
@@ -1179,7 +1175,7 @@ def _unit_factors(question: str, tree: exp.Expression) -> frozenset[float]:
 
 def _assumed_definition(
     question: str,
-    tree: exp.Expression,
+    tree: exp.Expr,
     categories: Sequence[ObservedCategoryValues] = (),
 ) -> Iterator[AuditFinding]:
     """Find a vague word the query defined by itself, as "large" = one category.
@@ -1228,7 +1224,7 @@ def _missing_comparison(question: str) -> Iterator[AuditFinding]:
         )
 
 
-def _invented_constants(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+def _invented_constants(question: str, tree: exp.Expr) -> Iterator[AuditFinding]:
     """Find numbers in a calculation that come from neither question nor data.
 
     Factors between units, such as 60000 from milliseconds to minutes, are
@@ -1249,7 +1245,7 @@ def _invented_constants(question: str, tree: exp.Expression) -> Iterator[AuditFi
                 return
 
 
-def _measure_not_named(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+def _measure_not_named(question: str, tree: exp.Expr) -> Iterator[AuditFinding]:
     """Find an average or total of a column the question never mentions."""
     match = _MEASURE_PHRASE.search(question)
     if match is None:
@@ -1281,7 +1277,7 @@ def _measure_not_named(question: str, tree: exp.Expression) -> Iterator[AuditFin
 
 
 def _calculation(
-    question: str, tree: exp.Expression, tables: dict[str, LoadedTable]
+    question: str, tree: exp.Expr, tables: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
     """Compare ``average salary`` and the like with what the query computes."""
     columns = sorted(
@@ -1325,7 +1321,7 @@ def _calculation(
             )
 
 
-def _median(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+def _median(question: str, tree: exp.Expr) -> Iterator[AuditFinding]:
     if _MEDIAN.search(question) and tree.find(exp.Median, exp.PercentileCont) is None:
         yield AuditFinding(
             "wrong_calculation",
@@ -1334,7 +1330,7 @@ def _median(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
 
 
 def _missing_as_zero(
-    question: str, tree: exp.Expression, used: dict[str, LoadedTable]
+    question: str, tree: exp.Expr, used: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
     """Find averages that count missing values as zero without being asked."""
     if _AS_ZERO.search(question):
@@ -1360,7 +1356,7 @@ def _missing_as_zero(
                 )
 
 
-def _known_column_compared(question: str, tree: exp.Expression) -> bool:
+def _known_column_compared(question: str, tree: exp.Expr) -> bool:
     """Whether the query compares the column named after "recorded" or "known".
 
     A row whose value is missing can never satisfy such a comparison.
@@ -1374,7 +1370,7 @@ def _known_column_compared(question: str, tree: exp.Expression) -> bool:
 
 
 def _missing_values(
-    question: str, tree: exp.Expression, used: dict[str, LoadedTable]
+    question: str, tree: exp.Expr, used: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
     """Compare a question about missing or known values with the query's filters."""
     ignores = _IGNORE_MISSING.search(question) is not None
@@ -1420,7 +1416,7 @@ _KEEPS_KNOWN = (
 )
 
 
-def _missing_rows_filtered(tree: exp.Expression, used: dict[str, LoadedTable]) -> bool:
+def _missing_rows_filtered(tree: exp.Expr, used: dict[str, LoadedTable]) -> bool:
     """Whether the WHERE clause already drops every row with a missing value.
 
     A comparison such as ``date > length`` is never true for a missing date, so a
@@ -1443,12 +1439,12 @@ def _missing_rows_filtered(tree: exp.Expression, used: dict[str, LoadedTable]) -
     return bool(holding) and holding <= compared
 
 
-def _literal_texts(tree: exp.Expression) -> list[str]:
+def _literal_texts(tree: exp.Expr) -> list[str]:
     return [node.this for node in tree.find_all(exp.Literal)]
 
 
 def _coded_filter_selects_year(
-    tree: exp.Expression, tables: dict[str, LoadedTable], year: int
+    tree: exp.Expr, tables: dict[str, LoadedTable], year: int
 ) -> bool:
     """Whether a filter such as ``yr = 1`` selects only that year.
 
@@ -1476,7 +1472,7 @@ def _coded_filter_selects_year(
 
 
 def _period(
-    question: str, tree: exp.Expression, tables: dict[str, LoadedTable]
+    question: str, tree: exp.Expr, tables: dict[str, LoadedTable]
 ) -> Iterator[AuditFinding]:
     """Find a year the question names that appears nowhere in the query."""
     texts = _literal_texts(tree)
@@ -1497,13 +1493,13 @@ def _number_of(text: str) -> float:
     return float(text.replace(",", ""))
 
 
-def _numeric_literal(node: exp.Expression) -> float | None:
+def _numeric_literal(node: exp.Expr) -> float | None:
     if isinstance(node, exp.Literal) and not node.is_string:
         return float(node.this)
     return None
 
 
-def _thresholds(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+def _thresholds(question: str, tree: exp.Expr) -> Iterator[AuditFinding]:
     """Compare "at least 5" and "above 5" with the query's comparisons."""
     wrong_kinds = (
         (_AT_LEAST, exp.GT, "at least"),
@@ -1533,7 +1529,7 @@ def _thresholds(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
                 )
 
 
-def _range_ends(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+def _range_ends(question: str, tree: exp.Expr) -> Iterator[AuditFinding]:
     """Find "from 2000 to 2010" written so that either end is left out."""
     for match in _RANGE.finditer(question):
         low, high = float(match[1]), float(match[2])
@@ -1547,7 +1543,7 @@ def _range_ends(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
             )
 
 
-def _scale(question: str, tree: exp.Expression) -> Iterator[AuditFinding]:
+def _scale(question: str, tree: exp.Expr) -> Iterator[AuditFinding]:
     """Find a percentage question whose answer was divided down to a fraction."""
     if not _PERCENT.search(question) or tree.find(exp.Mul) is not None:
         return
@@ -1567,7 +1563,7 @@ def _holds(texts: set[str], anchors: set[str]) -> bool:
     )
 
 
-def _sql_words(node: exp.Expression) -> set[str]:
+def _sql_words(node: exp.Expr) -> set[str]:
     return {text.casefold() for text in _literal_texts(node)} | _names(node)
 
 
@@ -1590,7 +1586,7 @@ def _anchors(side: str, named: set[str], columns: dict[str, str]) -> set[str]:
 
 def _stated_order(
     sides: re.Match[str],
-    tree: exp.Expression,
+    tree: exp.Expr,
     tables: dict[str, LoadedTable],
     named: set[str],
 ) -> Iterator[AuditFinding]:
@@ -1626,7 +1622,7 @@ def _stated_order(
 
 def _subtraction_order(
     question: str,
-    tree: exp.Expression,
+    tree: exp.Expr,
     tables: dict[str, LoadedTable],
     categories: Sequence[ObservedCategoryValues],
 ) -> Iterator[AuditFinding]:

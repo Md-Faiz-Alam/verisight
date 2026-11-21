@@ -9,7 +9,7 @@ import re
 import duckdb
 import sqlglot
 from sqlglot import exp
-from sqlglot.errors import OptimizeError, ParseError
+from sqlglot.errors import ErrorLevel, OptimizeError, ParseError
 from sqlglot.optimizer.scope import Scope, ScopeType, traverse_scope
 
 from verisight.execution.exceptions import (
@@ -233,7 +233,7 @@ def validate_dataset_relations(
         expression = sqlglot.parse_one(
             query,
             read="duckdb",
-            error_level="RAISE",
+            error_level=ErrorLevel.RAISE,
         )
 
         scopes = list(traverse_scope(expression))
@@ -257,6 +257,8 @@ def validate_dataset_relations(
                 exp.CurrentSchema,
                 exp.CurrentSchemas,
                 exp.CurrentUser,
+                # sqlglot 30 parses version() as this, no longer as Anonymous.
+                exp.CurrentVersion,
                 exp.SessionUser,
             ),
         ):
