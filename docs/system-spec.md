@@ -9,8 +9,9 @@ listed here is not promised.
 VeriSight is an analytical application that runs on one computer: a command line,
 a Python API and a website. There are no user accounts; each website upload can
 be used only with the private token returned to whoever uploaded it. A
-[deployment guide](deploy-azure.md) publishes it on Azure Container Apps, deployed
-automatically after CI passes. Your original files stay yours and are never changed.
+[live demo](https://verisight.gentleglacier-2ae961c6.uaenorth.azurecontainerapps.io)
+runs on Azure Container Apps, deployed automatically after CI passes (see the
+[deployment guide](deploy-azure.md)). Your original files stay yours and are never changed.
 
 ## Supported input
 

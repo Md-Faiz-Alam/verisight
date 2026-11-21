@@ -9,6 +9,10 @@ trace it to the executed result.**
 ![Test coverage 100%, enforced in CI](https://img.shields.io/badge/coverage-100%25-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
+**[Try the live demo](https://verisight.gentleglacier-2ae961c6.uaenorth.azurecontainerapps.io)**: open the
+sample workspace, no sign-up or key needed. The first visit after a quiet spell
+takes about 30 seconds while the server starts.
+
 ![The Ask view: a question about the sample orders, the answer 415 labelled Computed without AI, and the evidence panel with the SQL and the result cell it came from](docs/assets/ask.png)
 
 ## Why

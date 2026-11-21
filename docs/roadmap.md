@@ -29,6 +29,9 @@ it can be trusted, and gives no number rather than a misleading one. The
   tokens for website uploads, a per-visitor upload cap, a local folder for answers
   that failed the claim checks, per-call timing in the comparison runner, and a
   plain-words note when a two-column number cannot be checked independently.
+- A [live demo](https://verisight.gentleglacier-2ae961c6.uaenorth.azurecontainerapps.io)
+  on Azure Container Apps. Each push to `main` that passes CI is built, published to
+  `ghcr.io` and deployed, and rolled back if it does not start healthy.
 
 ## Next, in order
 
@@ -51,9 +54,8 @@ it can be trusted, and gives no number rather than a misleading one. The
    row of a result grouped by year is not flagged.
 5. **Answer more plain questions without AI.** In user testing every question needed
    Gemini.
-6. **A public demo and outside users.** Publish the website by the
-   [Azure guide](deploy-azure.md), measure memory on that container, and let
-   people outside the project try it. Accounts, monitoring and storage shared
+6. **Outside users.** Let people outside the project try the live demo, and
+   measure memory on its container. Accounts, monitoring and storage shared
    between server copies come after.
 7. **Questions in other languages.** Eight SQL audit checks read only the SQL and
    the data; the rest read English wording.
